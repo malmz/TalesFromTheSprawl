@@ -152,9 +152,11 @@ async def burn_command(ctx, burner_id : str=None):
 async def create_money_command(ctx, handle : str=None, amount : int=0):
     if handle == None:
         response = 'Error, no handle specified.'
-    else:
+    elif handles.handle_exists(handle):
         handles.add_funds(handle, amount)
         response = 'Added ' + str(amount) + ' to the balance of ' + handle
+    else:
+        response = 'Error, handle \"' + handle + '\" does not exist.'
     await ctx.send(response)
 
 
@@ -188,14 +190,6 @@ async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
         user_id = str(ctx.message.author.id)
         response = try_to_pay(user_id, handle_recip, amount)
     await ctx.send(response)
-
-#@bot.command(name='balance', help='Show current balance (amount of money available) on the current handle.')
-#async def show_balance_command(ctx):
-#    user_id = str(ctx.message.author.id)
-#    current_handle = handles.get_handle(user_id)
-#    avail = handles.get_current_balance(current_handle)
-#    response = 'Current balance for ' + current_handle + ' is **¥' + str(avail) + '**.'
-#    await ctx.send(response)
 
 @bot.command(name='balance', help='Show current balance (amount of money available) on all available handles.')
 async def show_balance_command(ctx):

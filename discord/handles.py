@@ -22,10 +22,12 @@ def init_handles_for_user(user_id : str):
 
 def create_handle(user_id : str, new_handle : str):
     handles[user_id][new_handle] = 'regular'
+    init_stats_for_handle(new_handle)
     handles.write()
 
 def create_burner(user_id : str, new_burner_handle : str):
     handles[user_id][new_burner_handle] = 'burner'
+    init_stats_for_handle(new_burner_handle)
     handles.write()
 
 def destroy_burner(user_id : str, burner : str):
@@ -33,6 +35,7 @@ def destroy_burner(user_id : str, burner : str):
         handles[user_id] = {}
     if burner in handles[user_id]:
         del handles[user_id][burner]
+        deinit_stats_for_handle(burner)
         if handles[user_id]['active'] == burner:
             switch_to_handle(user_id, handles[user_id]['last_regular'])
     handles.write()
@@ -49,8 +52,8 @@ def get_handle(user_id : str):
     return handles[user_id]['active']
 
 def handle_exists(handle : str):
-    for user_handles in handles:
-        if handle in user_handles:
+    for user_id in handles:
+        if handle in handles[user_id]:
             return True
     return False
 
@@ -68,8 +71,15 @@ def init_stats():
 	for user_id in handles:
 		for handle in handles[user_id]:
 			if not handle in stats and handle != 'active' and handle != 'last_regular':
-				stats[handle] = {}
-				stats[handle]['balance'] = '0'
+				init_stats_for_handle(handle)
+
+def init_stats_for_handle(handle : str):
+	stats[handle] = {}
+	stats[handle]['balance'] = '0'
+	stats.write()
+
+def deinit_stats_for_handle(handle : str):
+	del stats[handle]
 	stats.write()
 
 def get_current_balance(handle : str):
