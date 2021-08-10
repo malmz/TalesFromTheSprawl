@@ -13,6 +13,7 @@ from collections import namedtuple
 import handles
 import channels
 import posting
+import reactions
 
 
 load_dotenv()
@@ -51,6 +52,25 @@ async def on_message(message):
     # All other channels: repost message using user's current handle
     await posting.process_message(message)
 
+
+@bot.event
+async def on_raw_reaction_add(payload):
+    channel = await bot.fetch_channel(payload.channel_id)
+    #print(f'Recorded reaction {payload.emoji} from {payload.user_id} on message {message_id} in channel {channel.name}')
+    if payload.user_id == bot.user.id:
+        # Don't act on bot's own reactions to avoid loops
+        return
+
+    if payload.channel_id == 'offline':
+        # No bot shenanigans in the off channel
+        return
+
+    await reactions.process_reaction_add(payload.message_id, payload.user_id, channel, payload.emoji)
+
+    #if message.author == bot.user:
+    #    process_reaction_add(reaction, message, user)
+    # all users who have added this particular reaction to this message:
+    #users = await reaction.users().flatten()
 
 # Commands related to handles
 
