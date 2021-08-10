@@ -1,9 +1,14 @@
 
 from configobj import ConfigObj
 
+### Module handles.py
+# This module tracks and handles state related to handles, e.g. in-game names/accounts that
+# players can create.
 
-### handles
+# 'handles' is the config object holding each user's current handles.
 handles = ConfigObj('handles.conf')
+# 'stats' holds extra information associated with each handle, unrelated to who owns it.
+# The main stat (currently the only one implemented) is 'balance', tracking the account's money.
 stats = ConfigObj('stats.conf')
 
 class HandleStatus:
@@ -99,10 +104,10 @@ def get_all_handles_balance_report(user_id : str):
 			total += balance
 			balance_str = str(balance)
 			if handle == current_handle:
-				report = report + '> **' + handle + '**: **¥' + balance_str + '**\n'
+				report = report + '> **' + handle + '**: ¥ **' + balance_str + '**\n'
 			else:
-				report = report + '> ' + handle + ': **¥' + balance_str + '**\n'
-	report = report + 'Total: **¥' + str(total) + '**'
+				report = report + '> ' + handle + ': ¥ **' + balance_str + '**\n'
+	report = report + 'Total: ¥ **' + str(total) + '**'
 	return report
 
 def transfer_funds(handle_payer : str, handle_recip : str, amount : int):
@@ -130,3 +135,42 @@ def collect_all_funds(user_id : str):
 			set_current_balance(handle, 0)
 	set_current_balance(current_handle, total)
 
+
+
+
+
+
+### Async methods, directly related to commands
+
+def try_switch_to_none_handle(user_id : str):
+    current_handle = get_handle(user_id)
+    handle_status : HandleStatus = get_handle_status(current_handle)
+    if (handle_status.handle_type == 'burner'):
+        response = 'Your current handle is **' + current_handle + '**. It\'s a burner handle – to destroy it, use \".burn ' + current_handle + '\". To switch handle, type \".handle <new_name>\" in #command_line.'
+    else:
+        response = 'Your current handle is **' + current_handle + '**. To switch handle, type \".handle <new_name>\" in #command_line.'
+    return response
+
+def switch_to_own_existing_handle(user_id : str, new_handle : str, handle_status : HandleStatus, new_shall_be_burner):
+    if (handle_status.handle_type == 'burner'):
+        # We can switch to a burner handle using both .handle and .burner
+        response = 'Switched to burner handle **' + new_handle + '**. Remember to burn it when done, using \".burn ' + new_handle + '\" in #command_line.'
+        switch_to_handle(user_id, new_handle)
+    elif new_shall_be_burner:
+        # We cannot switch to a non-burner using .burner
+        response = 'Handle **' + new_handle + '** already exists but is not a burner handle. Use \".handle ' + new_handle + '\" to switch to it.'
+    else:
+        response = 'Switched to handle **' + new_handle + '**.'
+        switch_to_handle(user_id, new_handle)
+    return response
+
+def create_handle_and_switch(user_id : str, new_handle : str, new_shall_be_burner):
+    if new_shall_be_burner:
+        # TODO: note about possibly being hacked until destroyed?
+        response = 'Switched to new burner handle **' + new_handle + '** (created now). To destroy it, use \".burn ' + new_handle + '\" in #command_line.'
+        create_burner(user_id, new_handle)
+    else:
+        response = 'Switched to new handle **' + new_handle + '** (created now).'
+        create_handle(user_id, new_handle)
+    switch_to_handle(user_id, new_handle)
+    return response

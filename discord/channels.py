@@ -1,7 +1,9 @@
 from configobj import ConfigObj
 import datetime
 
-### channel states
+### Module channels.py
+# This module tracks and handles state related to channels
+
 channel_states = ConfigObj('channel_states.conf')
 
 def init_channel(channel : str):

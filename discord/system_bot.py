@@ -2,14 +2,18 @@
 import os
 import random
 import discord
-import handles
-import channels
 
 from configobj import ConfigObj
 
 from discord.ext import commands
 from dotenv import load_dotenv
 from collections import namedtuple
+
+# Custom imports
+import handles
+import channels
+import posting
+
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -22,33 +26,6 @@ async def on_ready():
     channels.init_channels()
     handles.init_stats()
     print('Initialization complete.')
-
-
-async def repost_message(message, handle):
-    if handle == None:
-        post = message.content
-    else:
-        timestamp = message.created_at
-        timestamp_str = '(' + str(timestamp.hour) + ':' + str(timestamp.minute) + ':' + str(timestamp.second) + ')'
-        post = '**' + handle + '** ' + timestamp_str + ':\n' + message.content
-    await message.channel.send(post)
-
-async def process_message(message, anonymous=False):
-    await message.delete()
-    current_channel = str(message.channel.name)
-    user_id = str(message.author.id)
-    if anonymous:
-        current_poster_id = user_id
-        current_poster_display_name = 'Anonymous'
-    else:
-        handle = handles.get_handle(user_id)
-        current_poster_id = handle
-        current_poster_display_name = handle
-    full_post = channels.new_post(current_channel, current_poster_id, message.created_at)
-    if full_post:
-        await repost_message(message, current_poster_display_name)
-    else:
-        await repost_message(message, None)
 
 @bot.event
 async def on_message(message):
@@ -65,63 +42,30 @@ async def on_message(message):
         return
 
     if message.channel.name == 'anon':
-        await process_message(message, True)
+        await posting.process_message(message, True)
         return
 
     # All other channels: repost message using user's current handle
-    await process_message(message)
+    await posting.process_message(message)
 
 @bot.command(name='oi', help='Responds with a hearty OI CHUMMER!')
 async def oi(ctx):
     response = 'OI CHUMMER!'
     await ctx.send(response)
 
-def try_switch_to_none_handle(user_id : str):
-    current_handle = handles.get_handle(user_id)
-    handle_status : handles.HandleStatus = handles.get_handle_status(current_handle)
-    if (handle_status.handle_type == 'burner'):
-        response = 'Your current handle is **' + current_handle + '**. It\'s a burner handle – to destroy it, use \".burn ' + current_handle + '\". To switch handle, type \".handle <new_name>\" in #command_line.'
-    else:
-        response = 'Your current handle is **' + current_handle + '**. To switch handle, type \".handle <new_name>\" in #command_line.'
-    return response
-
-def switch_to_own_existing_handle(user_id : str, new_handle : str, handle_status : handles.HandleStatus, new_shall_be_burner):
-    if (handle_status.handle_type == 'burner'):
-        # We can switch to a burner handle using both .handle and .burner
-        response = 'Switched to burner handle **' + new_handle + '**. Remember to burn it when done, using \".burn ' + new_handle + '\" in #command_line.'
-        handles.switch_to_handle(user_id, new_handle)
-    elif new_shall_be_burner:
-        # We cannot switch to a non-burner using .burner
-        response = 'Handle **' + new_handle + '** already exists but is not a burner handle. Use \".handle ' + new_handle + '\" to switch to it.'
-    else:
-        response = 'Switched to handle **' + new_handle + '**.'
-        handles.switch_to_handle(user_id, new_handle)
-    return response
-
-def create_handle_and_switch(user_id : str, new_handle : str, new_shall_be_burner):
-    if new_shall_be_burner:
-        # TODO: note about possibly being hacked until destroyed?
-        response = 'Switched to new burner handle **' + new_handle + '** (created now). To destroy it, use \".burn ' + new_handle + '\" in #command_line.'
-        handles.create_burner(user_id, new_handle)
-    else:
-        response = 'Switched to new handle **' + new_handle + '** (created now).'
-        handles.create_handle(user_id, new_handle)
-    handles.switch_to_handle(user_id, new_handle)
-    return response
-
 @bot.command(name='handle', help='Switch to another handle for #open_channel and other channels. Handle must be free; once created, no-one else can use it.')
 async def switch_handle_command(ctx, new_handle : str=None, burner = False):
     user_id = str(ctx.message.author.id)
     if new_handle == None:
-        response = try_switch_to_none_handle(user_id)
+        response = handles.try_switch_to_none_handle(user_id)
     else:
         handle_status : HandleStatus = handles.get_handle_status(new_handle)
         if (handle_status.exists and handle_status.user_id == user_id):
-            response = switch_to_own_existing_handle(user_id, new_handle, handle_status, burner)
+            response = handles.switch_to_own_existing_handle(user_id, new_handle, handle_status, burner)
         elif (handle_status.exists):
             response = 'Error: the handle ' + new_handle + ' is currently registered by someone else'
         else:
-            response = create_handle_and_switch(user_id, new_handle, burner)
+            response = handles.create_handle_and_switch(user_id, new_handle, burner)
     await ctx.send(response)
 
 @bot.command(name='burner', help='Create a burner account for #open_channel and other channels')
@@ -174,9 +118,9 @@ def try_to_pay(user_id : str, handle_recip : str, amount : int):
             avail = handles.get_current_balance(current_handle)
             response = 'Error: insufficient funds. Current balance is **' + str(avail) + '**.'
         elif recip_status.user_id == user_id:
-            response = 'Successfully transferred **¥' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**. (Note: you control both accounts.)'
+            response = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**. (Note: you control both accounts.)'
         else:
-            response = 'Successfully transferred **¥' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**.'
+            response = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**.'
     return response
 
 
@@ -185,7 +129,7 @@ async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
     if handle_recip == None:
         response = 'Error: no recipient specified. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
     elif amount == 0:
-        response = 'Error: cannot transfer ¥0. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
+        response = 'Error: cannot transfer ¥ 0. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
     else:
         user_id = str(ctx.message.author.id)
         response = try_to_pay(user_id, handle_recip, amount)
