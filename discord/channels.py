@@ -23,7 +23,7 @@ def set_last_poster(channel : str, poster_id : str):
 
 def get_last_poster(channel : str):
     if not channel in channel_states:
-        return ''        
+        return ''
     if not 'last_poster' in channel_states[channel]:
         return ''
     else:
