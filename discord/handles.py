@@ -174,3 +174,23 @@ def create_handle_and_switch(user_id : str, new_handle : str, new_shall_be_burne
         create_handle(user_id, new_handle)
     switch_to_handle(user_id, new_handle)
     return response
+
+
+def try_to_pay(user_id : str, handle_recip : str, amount : int):
+    current_handle = get_handle(user_id)
+    if current_handle == handle_recip:
+        response = 'Error: cannot transfer funds from account ' + handle_recip + ' to itself.'
+        return response
+    recip_status : HandleStatus = get_handle_status(handle_recip)
+    if not recip_status.exists:
+        response = 'Error: recipient \"' + handle_recip + '\" does not exist. Check the spelling; lowercase/UPPERCASE matters.'
+    else:
+        success = transfer_funds(current_handle, handle_recip, amount)
+        if not success:
+            avail = get_current_balance(current_handle)
+            response = 'Error: insufficient funds. Current balance is **' + str(avail) + '**.'
+        elif recip_status.user_id == user_id:
+            response = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**. (Note: you control both accounts.)'
+        else:
+            response = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**.'
+    return response

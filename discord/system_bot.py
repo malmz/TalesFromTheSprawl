@@ -27,6 +27,9 @@ async def on_ready():
     handles.init_stats()
     print('Initialization complete.')
 
+
+# General message processing (reposting for anonymity/pseudonymity)
+
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
@@ -48,10 +51,8 @@ async def on_message(message):
     # All other channels: repost message using user's current handle
     await posting.process_message(message)
 
-@bot.command(name='oi', help='Responds with a hearty OI CHUMMER!')
-async def oi(ctx):
-    response = 'OI CHUMMER!'
-    await ctx.send(response)
+
+# Commands related to handles
 
 @bot.command(name='handle', help='Switch to another handle for #open_channel and other channels. Handle must be free; once created, no-one else can use it.')
 async def switch_handle_command(ctx, new_handle : str=None, burner = False):
@@ -91,6 +92,9 @@ async def burn_command(ctx, burner_id : str=None):
             response = 'Destroyed burner handle **' + burner_id + '**. If you or someone else uses that name, it may be confusing but cannot be traced to the previous use. Your current handle is **' + current_handle + '**.'
     await ctx.send(response)
 
+
+# Commands related to money
+
 @bot.command(name='create_money', help='[OFFLINE]')
 @commands.has_role('admin')
 async def create_money_command(ctx, handle : str=None, amount : int=0):
@@ -103,27 +107,6 @@ async def create_money_command(ctx, handle : str=None, amount : int=0):
         response = 'Error, handle \"' + handle + '\" does not exist.'
     await ctx.send(response)
 
-
-def try_to_pay(user_id : str, handle_recip : str, amount : int):
-    current_handle = handles.get_handle(user_id)
-    if current_handle == handle_recip:
-        response = 'Error: cannot transfer funds from account ' + handle_recip + ' to itself.'
-        return response
-    recip_status : handles.HandleStatus = handles.get_handle_status(handle_recip)
-    if not recip_status.exists:
-        response = 'Error: recipient \"' + handle_recip + '\" does not exist. Check the spelling; lowercase/UPPERCASE matters.'
-    else:
-        success = handles.transfer_funds(current_handle, handle_recip, amount)
-        if not success:
-            avail = handles.get_current_balance(current_handle)
-            response = 'Error: insufficient funds. Current balance is **' + str(avail) + '**.'
-        elif recip_status.user_id == user_id:
-            response = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**. (Note: you control both accounts.)'
-        else:
-            response = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**.'
-    return response
-
-
 @bot.command(name='pay', help='Pay money (nuyen) to the owner of another handle')
 async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
     if handle_recip == None:
@@ -132,7 +115,7 @@ async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
         response = 'Error: cannot transfer ¥ 0. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
     else:
         user_id = str(ctx.message.author.id)
-        response = try_to_pay(user_id, handle_recip, amount)
+        response = handles.try_to_pay(user_id, handle_recip, amount)
     await ctx.send(response)
 
 @bot.command(name='balance', help='Show current balance (amount of money available) on all available handles.')
