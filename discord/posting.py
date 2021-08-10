@@ -1,11 +1,22 @@
 import channels
 import handles
+import re
 
 ### Module posting.py
 # General message processing (non-command) for system bot.
 # Mainly implements pseudonymous and anonymous message sending
 # by deleting all messages and reposting them with custom
 # handles.
+
+post_header_regex = re.compile('^[*][*](.*)[*][*]')
+
+def read_handle_from_post(post : str):
+    matches = re.search(post_header_regex, post)
+    if matches != None:
+        return matches.group(1)
+    else:
+        return None
+
 
 async def repost_message(message, handle):
     if handle == None:

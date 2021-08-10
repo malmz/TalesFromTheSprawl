@@ -17,6 +17,10 @@ class HandleStatus:
     user_id = 0
     handle_type = ''
 
+class ReactionPaymentResult:
+    success = False
+    report = None
+
 def init_handles_for_user(user_id : str):
     handles[user_id] = {}
     #user = await bot.get_user(user_id)
@@ -57,6 +61,7 @@ def get_handle(user_id : str):
     return handles[user_id]['active']
 
 def handle_exists(handle : str):
+    result = HandleStatus()
     for user_id in handles:
         if handle in handles[user_id]:
             return True
@@ -194,3 +199,25 @@ def try_to_pay(user_id : str, handle_recip : str, amount : int):
         else:
             response = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**.'
     return response
+
+def try_to_pay_with_reaction(user_id : str, handle_recip : str, amount : int):
+    current_handle = get_handle(user_id)
+    result = ReactionPaymentResult()
+    if current_handle == handle_recip:
+        # Cannot tip yourself
+        result.success = False
+        result.report = None
+    recip_status : HandleStatus = get_handle_status(handle_recip)
+    if not recip_status.exists:
+        result.success = False
+        result.report = 'Failed to transfer ¥ **' + str(amount) + '** from ' + current_handle + ' to ' + handle_recip + '; recipient does not exist.'
+    else:
+        result.success = transfer_funds(current_handle, handle_recip, amount)
+        if not result.success:
+            avail = get_current_balance(current_handle)
+            result.report = 'Failed to transfer ¥ **' + str(amount) + '** from ' + current_handle + ' to ' + handle_recip + '; current balance is ¥ **' + str(avail) + '**.'
+        elif recip_status.user_id == user_id:
+            result.report = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**. (Note: you control both accounts.)'
+        else:
+            result.report = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**.'
+    return result

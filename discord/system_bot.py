@@ -28,6 +28,16 @@ async def on_ready():
     handles.init_stats()
     print('Initialization complete.')
 
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.errors.BadArgument) and 'Converting to "int" failed for parameter "amount"' in str(error):
+        await ctx.send("Error: amount must be an integer greater than 0.")
+    elif isinstance(error, commands.errors.CommandNotFound):
+        await ctx.send("Error: that is not a known command.")
+    else:
+        await ctx.send("Error: unknown system error. Contact administrator.")
+        print(str(error))
+
 
 # General message processing (reposting for anonymity/pseudonymity)
 
@@ -56,7 +66,6 @@ async def on_message(message):
 @bot.event
 async def on_raw_reaction_add(payload):
     channel = await bot.fetch_channel(payload.channel_id)
-    #print(f'Recorded reaction {payload.emoji} from {payload.user_id} on message {message_id} in channel {channel.name}')
     if payload.user_id == bot.user.id:
         # Don't act on bot's own reactions to avoid loops
         return
@@ -66,11 +75,6 @@ async def on_raw_reaction_add(payload):
         return
 
     await reactions.process_reaction_add(payload.message_id, payload.user_id, channel, payload.emoji)
-
-    #if message.author == bot.user:
-    #    process_reaction_add(reaction, message, user)
-    # all users who have added this particular reaction to this message:
-    #users = await reaction.users().flatten()
 
 # Commands related to handles
 
@@ -93,6 +97,8 @@ async def switch_handle_command(ctx, new_handle : str=None, burner = False):
 async def create_burner_command(ctx, new_id : str=None):
     await switch_handle_command(ctx, new_id, True)
 
+
+# TODO: improve handling of burning a burner with money
 @bot.command(name='burn', help='Destroy a burner account forever')
 async def burn_command(ctx, burner_id : str=None):
     if burner_id == None:
@@ -115,24 +121,40 @@ async def burn_command(ctx, burner_id : str=None):
 
 # Commands related to money
 
-@bot.command(name='create_money', help='[OFFLINE]')
-@commands.has_role('admin')
+@bot.command(name='create_money', help='Use \".create_money <handle> <amount>\" to create new money (will be admin-only during the game)')
+#@commands.has_role('admin')  TODO: require admin to create money
 async def create_money_command(ctx, handle : str=None, amount : int=0):
     if handle == None:
-        response = 'Error, no handle specified.'
+        response = 'Error: no handle specified.'
+    elif amount <= 0:
+        response = 'Error: cannot create less than ¥ 1.'
     elif handles.handle_exists(handle):
         handles.add_funds(handle, amount)
         response = 'Added ' + str(amount) + ' to the balance of ' + handle
     else:
-        response = 'Error, handle \"' + handle + '\" does not exist.'
+        response = 'Error: handle \"' + handle + '\" does not exist.'
+    await ctx.send(response)
+
+@bot.command(name='set_money', help='Use \".set_money <handle> <amount>\" to set the balance of an account (will be admin-only during the game)')
+#@commands.has_role('admin')  TODO: require admin to create money
+async def create_money_command(ctx, handle : str=None, amount : int=-1):
+    if handle == None:
+        response = 'Error: no handle specified.'
+    elif amount < 0:
+        response = 'Error: you must set a new balance.'
+    elif handles.handle_exists(handle):
+        handles.set_current_balance(handle, amount)
+        response = 'Set the balance of ' + handle + ' to ' + str(amount)
+    else:
+        response = 'Error: handle \"' + handle + '\" does not exist.'
     await ctx.send(response)
 
 @bot.command(name='pay', help='Pay money (nuyen) to the owner of another handle')
 async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
     if handle_recip == None:
         response = 'Error: no recipient specified. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
-    elif amount == 0:
-        response = 'Error: cannot transfer ¥ 0. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
+    elif amount <= 0:
+        response = 'Error: cannot transfer less than ¥ 1. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
     else:
         user_id = str(ctx.message.author.id)
         response = handles.try_to_pay(user_id, handle_recip, amount)

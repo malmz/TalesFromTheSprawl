@@ -16,6 +16,10 @@ def init_channel(channel : str):
 def init_channels():
     init_channel('anon')
     init_channel('open_channel')
+    init_channel('general')
+
+def is_anonymous_channel(channel):
+    return channel.name == 'anon'
 
 def set_last_poster(channel : str, poster_id : str):
     if not channel in channel_states:
