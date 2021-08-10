@@ -14,6 +14,7 @@ import handles
 import common_channels
 import posting
 import reactions
+import players
 
 
 load_dotenv()
@@ -24,8 +25,9 @@ bot = commands.Bot(command_prefix='.')
 @bot.event
 async def on_ready():
     print(f'{bot.user} has connected to Discord!')
-    channels.init_channels()
+    common_channels.init_channels(bot)
     handles.init_stats()
+    players.init(bot)
     print('Initialization complete.')
 
 @bot.event
@@ -63,6 +65,8 @@ async def on_message(message):
     await posting.process_message(message)
 
 
+# General reaction handling
+
 @bot.event
 async def on_raw_reaction_add(payload):
     channel = await bot.fetch_channel(payload.channel_id)
@@ -76,10 +80,17 @@ async def on_raw_reaction_add(payload):
 
     await reactions.process_reaction_add(payload.message_id, payload.user_id, channel, payload.emoji)
 
+# New players
+
+@bot.event
+async def on_member_join(member):
+    await players.create_player(member)
+
+
 # Commands related to handles
 
 @bot.command(name='handle', help='Switch to another handle for #open_channel and other channels. Handle must be free; once created, no-one else can use it.')
-async def switch_handle_command(ctx, new_handle : str=None, burner = False):
+async def switch_handle_command(ctx, new_handle : str=None, burner=False):
     user_id = str(ctx.message.author.id)
     if new_handle == None:
         response = handles.try_switch_to_none_handle(user_id)
@@ -174,5 +185,10 @@ async def collect_command(ctx):
     await ctx.send(response)
     handles.collect_all_funds(user_id)
     await show_balance_command(ctx)
+
+@bot.command(name='fake_join', help='Admin-only function to test run the new member mechanics')
+async def fake_join_command(ctx, user_id):
+    member_to_fake_join = await ctx.guild.fetch_member(user_id)
+    await on_member_join(member_to_fake_join)
 
 bot.run(TOKEN)

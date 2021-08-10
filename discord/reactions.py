@@ -14,7 +14,7 @@ async def remove_reaction(message, emoji, user_id : int):
 			await message_with_reaction.remove_reaction(emoji, member)
 
 async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
-	if channels.is_anonymous_channel(channel):
+	if common_channels.is_anonymous_channel(channel):
 		# No point in acting on reactions when we can't determine the receiver
 		return
 

@@ -10,17 +10,24 @@ import datetime
 
 channel_states = ConfigObj('channel_states.conf')
 
-def init_channel(channel : str):
-    channel_states[channel] = {}
-    set_last_poster(channel, '')
+def init_channel(channel):
+    channel_name = channel.name
+    channel_states[channel_name] = {}
+    set_last_poster(channel_name, '')
     timestamp = datetime.datetime.today()
-    set_last_full_post(channel, timestamp)
-    reset_post_counter(channel)
+    set_last_full_post(channel_name, timestamp)
+    reset_post_counter(channel_name)
+    set_channel_id(channel)
 
-def init_channels():
-    init_channel('anon')
-    init_channel('open_channel')
-    init_channel('general')
+def init_channels(bot):
+    for channel in bot.get_all_channels():
+        init_channel(channel)
+
+def set_channel_id(channel):
+    channel_states[channel.name]['id'] = channel.id
+
+def get_channel_id(channel_name : str):
+    return channel_states[channel.name]['id']
 
 def is_anonymous_channel(channel):
     return channel.name == 'anon'

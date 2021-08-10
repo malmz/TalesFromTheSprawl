@@ -20,13 +20,14 @@ class ReactionPaymentResult:
     success = False
     report = None
 
-def init_handles_for_user(user_id : str):
+def init_handles_for_user(user_id : str, player_id : str = None ):
     handles[user_id] = {}
-    #user = await bot.get_user(user_id)
-    #create_handle(user_id, user.display_name)
-    create_handle(user_id, user_id)
-    handles[user_id]['active'] = user.display_name
-    handles[user_id]['last_regular'] = user.display_name
+    if player_id == None:
+    	first_handle = user_id    	
+    else:
+    	first_handle = player_id
+    create_handle(user_id, first_handle)
+    switch_to_handle(user_id, first_handle)
 
 def create_handle(user_id : str, new_handle : str):
     handles[user_id][new_handle] = 'regular'
