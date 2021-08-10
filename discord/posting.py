@@ -1,18 +1,30 @@
 import channels
 import handles
 
-
-### General message processing (non-command) for system bot
+### Module posting.py
+# General message processing (non-command) for system bot.
 # Mainly implements pseudonymous and anonymous message sending
 # by deleting all messages and reposting them with custom
-# handles
+# handles.
 
 async def repost_message(message, handle):
     if handle == None:
         post = message.content
     else:
         timestamp = message.created_at
-        timestamp_str = '(' + str(timestamp.hour) + ':' + str(timestamp.minute) + ':' + str(timestamp.second) + ')'
+        # Manual DST fix:
+        hour_str = str((timestamp.hour + 2) % 24)
+        minute = timestamp.minute
+        if minute < 10:
+            minute_str = '0' + str(minute)
+        else:
+            minute_str = str(minute)
+        second = timestamp.second
+        if second < 10:
+            second_str = '0' + str(second)
+        else:
+            second_str = str(second)
+        timestamp_str = '(' + hour_str + ':' + minute_str + ':' + second_str + ')'
         post = '**' + handle + '** ' + timestamp_str + ':\n' + message.content
     await message.channel.send(post)
 
