@@ -1,4 +1,4 @@
-import channels
+import common_channels
 import handles
 import re
 

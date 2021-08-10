@@ -11,7 +11,7 @@ from collections import namedtuple
 
 # Custom imports
 import handles
-import channels
+import common_channels
 import posting
 import reactions
 

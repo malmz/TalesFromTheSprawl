@@ -1,6 +1,6 @@
 import datetime
 import posting
-import channels
+import common_channels
 import handles
 
 reactions_worth_money = {'💸' : 1, '💰' : 1, '🍺' : 1, '💯' : 100}

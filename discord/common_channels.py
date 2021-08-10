@@ -4,6 +4,10 @@ import datetime
 ### Module channels.py
 # This module tracks and handles state related to channels
 
+
+# Channel state: this is the state of a channel, independent of its users.
+# Mostly relevant for common channels, not personal ones.
+
 channel_states = ConfigObj('channel_states.conf')
 
 def init_channel(channel : str):
@@ -80,3 +84,4 @@ def new_post(channel : str, poster_id : str, timestamp):
         return True
     else:
         return False
+

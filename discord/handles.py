@@ -1,4 +1,3 @@
-
 from configobj import ConfigObj
 
 ### Module handles.py
