@@ -50,9 +50,9 @@ def destroy_burner(user_id : str, burner : str):
 		active = handles[user_id]['active']
 		if active == burner:
 			new_active = handles[user_id]['last_regular']
+			switch_to_handle(user_id, new_active)
 		else:
 			new_active = active
-			switch_to_handle(user_id, new_active)
 
 		# Rescue any money about to be burned
 		balance = get_current_balance(burner)
@@ -63,6 +63,7 @@ def destroy_burner(user_id : str, burner : str):
 		del handles[user_id][burner]
 		deinit_stats_for_handle(burner)
 	handles.write()
+	return balance
 
 def switch_to_handle(user_id : str, handle : str):
     handles[user_id]['active'] = handle

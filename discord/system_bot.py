@@ -137,14 +137,19 @@ async def burn_command(ctx, burner_id : str=None):
         elif (handle_status.handle_type == 'burner'):
             amount = handles.destroy_burner(user_id, burner_id)
             current_handle = handles.get_handle(user_id)
-            response = 'Destroyed burner handle **' + burner_id + '**. If you or someone else uses that name, it may be confusing but cannot be traced to the previous use. Your current handle is **' + current_handle + '**.'
+            response = 'Destroyed burner handle **' + burner_id + '**.\n'
+            response = response + 'If you or someone else uses that name, it may be confusing but cannot be traced to the previous use.\n'
+            if amount > 0:
+                response = response + f'Your current handle is **{current_handle}**; the remaining ¥ {amount} from {burner_id} was transferred there.'
+            else:
+                response = response + 'Your current handle is **' + current_handle + '**.'
     await ctx.send(response)
 
 
 # Commands related to money
 
 @bot.command(name='create_money', help='Use \".create_money <handle> <amount>\" to create new money (will be admin-only during the game)')
-#@commands.has_role('admin')  TODO: require admin to create money
+@commands.has_role('gm')
 async def create_money_command(ctx, handle : str=None, amount : int=0):
     if handle == None:
         response = 'Error: no handle specified.'
@@ -158,7 +163,7 @@ async def create_money_command(ctx, handle : str=None, amount : int=0):
     await ctx.send(response)
 
 @bot.command(name='set_money', help='Use \".set_money <handle> <amount>\" to set the balance of an account (will be admin-only during the game)')
-#@commands.has_role('admin')  TODO: require admin to create money
+@commands.has_role('gm')
 async def set_money_command(ctx, handle : str=None, amount : int=-1):
     if handle == None:
         response = 'Error: no handle specified.'
@@ -201,11 +206,13 @@ async def collect_command(ctx):
 ### Admin-only commands for testing etc.
 
 @bot.command(name='fake_join', help='Admin-only function to test run the new member mechanics')
+@commands.has_role('gm')
 async def fake_join_command(ctx, user_id):
     member_to_fake_join = await ctx.guild.fetch_member(user_id)
     await on_member_join(member_to_fake_join)
 
 @bot.command(name='fake_join_name', help='Admin-only function to test run the new member mechanics')
+@commands.has_role('gm')
 async def fake_join_command(ctx, nick : str):
     members = await ctx.guild.fetch_members(limit=100).flatten()
     print(f'{members}')
@@ -214,6 +221,7 @@ async def fake_join_command(ctx, nick : str):
 
 
 @bot.command(name='ping', help='Admin-only function to test user-player-channel mappings')
+@commands.has_role('gm')
 async def ping_command(ctx, user_id : str):
     channel = players.get_cmd_line_channel(ctx.guild, user_id)
     if channel != None:
