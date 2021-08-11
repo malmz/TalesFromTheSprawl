@@ -1,6 +1,6 @@
 import datetime
 import posting
-import common_channels
+import channels
 import finances
 import handles
 import players
@@ -38,7 +38,7 @@ async def find_reaction_recipient_and_message(message_id : int, channel):
 
 
 async def process_reaction_add(message_id : int, user_id : str, channel, emoji):
-	if common_channels.is_anonymous_channel(channel):
+	if channels.is_anonymous_channel(channel):
 		# No point in acting on reactions when we can't determine the receiver
 		return
 	print(f'User reacted with {emoji}')
@@ -53,7 +53,7 @@ async def process_reaction_add(message_id : int, user_id : str, channel, emoji):
 		# If other reactions are implemented, perhaps this search will be relevant for all of them
 		search_result : ReactionRecipientSearchResult = await find_reaction_recipient_and_message(message_id, channel)
 
-		if common_channels.is_outbox(channel.name):
+		if channels.is_outbox(channel.name):
 			# Payment reactions in outbox will be silently swallowed
 			await remove_reaction(search_result.message, emoji, user_id)
 		else:

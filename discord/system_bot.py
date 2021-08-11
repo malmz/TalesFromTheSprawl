@@ -12,7 +12,7 @@ from collections import namedtuple
 
 # Custom imports
 import handles
-import common_channels
+import channels
 import posting
 import reactions
 import players
@@ -44,7 +44,7 @@ async def on_ready():
     global guild
     global guild_name
     guild = discord.utils.find(lambda g: g.name == guild_name, bot.guilds)
-    common_channels.init_channels(bot)
+    channels.init_channels(bot)
     #handles.init() #TODO: ensure that every user has a handle?
     finances.init_finances()
     players.init(bot, guild)
@@ -75,19 +75,19 @@ async def on_message(message):
         # Never react to bot's own message to avoid loops
         return
 
-    if common_channels.is_offline_channel(message.channel):
+    if channels.is_offline_channel(message.channel):
         # No bot shenanigans in the off channel
         return
 
-    if common_channels.is_cmd_line(message.channel.name) or common_channels.is_outbox(message.channel.name):
+    if channels.is_cmd_line(message.channel.name) or channels.is_outbox(message.channel.name):
         await bot.process_commands(message)
         return        
 
-    if common_channels.is_anonymous_channel(message.channel):
+    if channels.is_anonymous_channel(message.channel):
         await posting.process_message(message, True)
         return
 
-    if common_channels.is_pseudonymous_channel(message.channel):
+    if channels.is_pseudonymous_channel(message.channel):
         await posting.process_message(message)
 
 
@@ -101,7 +101,7 @@ async def on_raw_reaction_add(payload):
         # Don't act on bot's own reactions to avoid loops
         return
 
-    if common_channels.is_offline_channel(channel):
+    if channels.is_offline_channel(channel):
         # No bot shenanigans in the off channels
         return
 
@@ -168,7 +168,7 @@ async def burn_command(ctx, burner_id : str=None):
 @bot.command(name='create_money', help='Use \".create_money <handle> <amount>\" to create new money (will be admin-only during the game)')
 @commands.has_role('gm')
 async def create_money_command(ctx, handle : str=None, amount : int=0):
-    if not common_channels.is_cmd_line(ctx.channel.name):
+    if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
 
@@ -186,7 +186,7 @@ async def create_money_command(ctx, handle : str=None, amount : int=0):
 @bot.command(name='set_money', help='Use \".set_money <handle> <amount>\" to set the balance of an account (will be admin-only during the game)')
 @commands.has_role('gm')
 async def set_money_command(ctx, handle : str=None, amount : int=-1):
-    if not common_channels.is_cmd_line(ctx.channel.name):
+    if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
 
@@ -203,7 +203,7 @@ async def set_money_command(ctx, handle : str=None, amount : int=-1):
 
 @bot.command(name='pay', help='Pay money (¥) to the owner of another handle')
 async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
-    if not common_channels.is_cmd_line(ctx.channel.name):
+    if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
 
@@ -219,7 +219,7 @@ async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
 
 @bot.command(name='balance', help='Show current balance (amount of money available) on all available handles.')
 async def show_balance_command(ctx):
-    if not common_channels.is_cmd_line(ctx.channel.name):
+    if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
 
@@ -230,7 +230,7 @@ async def show_balance_command(ctx):
 
 @bot.command(name='collect', help='Collect all your funds from all handles to the current handle\'s account')
 async def collect_command(ctx):
-    if not common_channels.is_cmd_line(ctx.channel.name):
+    if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
 
@@ -246,7 +246,7 @@ async def collect_command(ctx):
 
 @bot.command(name='message', help='Send message to another handle. Only works in your \"outbox\" channel.')
 async def message_command(ctx, handle : str = None, content : str = None):
-    if not common_channels.is_outbox(ctx.channel.name):
+    if not channels.is_outbox(ctx.channel.name):
         response = 'Error: you cannot send messages from here. Go to your #outbox channel and use .message there.'
         await ctx.send(response)
         return

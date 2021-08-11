@@ -1,4 +1,4 @@
-import common_channels
+import channels
 import handles
 from constants import forbidden_content
 import players
@@ -81,7 +81,7 @@ async def process_message(message, anonymous=False):
         handle = handles.get_handle(user_id)
         current_poster_id = handle
         current_poster_display_name = handle
-    full_post = common_channels.new_post(current_channel, current_poster_id, message.created_at)
+    full_post = channels.new_post(current_channel, current_poster_id, message.created_at)
     if full_post:
         await repost_message(message, current_poster_display_name)
     else:

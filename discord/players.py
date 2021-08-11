@@ -1,4 +1,4 @@
-import common_channels
+import channels
 import handles
 import reactions
 import finances
@@ -25,15 +25,15 @@ def init(bot, guild):
 	players.write()
 
 async def create_personal_channel(member, overwrites, channel_name):
-	category_personal = discord.utils.find(lambda cat: cat.name == common_channels.personal_category_name, member.guild.channels)
+	category_personal = discord.utils.find(lambda cat: cat.name == channels.personal_category_name, member.guild.channels)
 	overwrites = {
 		member.guild.default_role: discord.PermissionOverwrite(read_messages=False),
 		role: discord.PermissionOverwrite(read_messages=True),
 		system_role: discord.PermissionOverwrite(read_messages=True)
 	}
-	channel_name = common_channels.get_cmd_line_name(player_id)
+	channel_name = channels.get_cmd_line_name(player_id)
 	channel = await member.guild.create_text_channel(channel_name, overwrites=overwrites, category=category_personal)
-	common_channels.init_personal_channel(channel)
+	channels.init_personal_channel(channel)
 	return channel
 
 
@@ -60,25 +60,25 @@ async def create_player(member):
 		system_role: discord.PermissionOverwrite(read_messages=True, send_messages=True)
 	}
 
-	cmd_line_channel = await common_channels.create_personal_channel(
+	cmd_line_channel = await channels.create_personal_channel(
 		member,
 		overwrites,
-		common_channels.get_cmd_line_name(new_player_id)
+		channels.get_cmd_line_name(new_player_id)
 	)
-	inbox_channel = await common_channels.create_personal_channel(
+	inbox_channel = await channels.create_personal_channel(
 		member,
 		overwrites,
-		common_channels.get_inbox_name(new_player_id)
+		channels.get_inbox_name(new_player_id)
 	)
-	outbox_channel = await common_channels.create_personal_channel(
+	outbox_channel = await channels.create_personal_channel(
 		member,
 		overwrites,
-		common_channels.get_outbox_name(new_player_id)
+		channels.get_outbox_name(new_player_id)
 	)
-	finances_channel = await common_channels.create_personal_channel(
+	finances_channel = await channels.create_personal_channel(
 		member,
 		overwrites_finance,
-		common_channels.get_finance_name(new_player_id)
+		channels.get_finance_name(new_player_id)
 	)
 
 	## TODO: give the new role read permission in various locked channels, e.g. anon
@@ -194,7 +194,7 @@ def get_cmd_line_channel_for_handle(guild, handle : str):
 	status : handles.HandleStatus = handles.get_handle_status(handle)
 	if status.exists:
 		player_id = players[player_ids_index][status.user_id]
-		return common_channels.get_cmd_line_channel(guild, player_id)
+		return channels.get_cmd_line_channel(guild, player_id)
 	else:
 		return None
 
@@ -202,7 +202,7 @@ def get_inbox_channel_for_handle(guild, handle : str):
 	status : handles.HandleStatus = handles.get_handle_status(handle)
 	if status.exists:
 		player_id = players[player_ids_index][status.user_id]
-		return common_channels.get_inbox_channel(guild, player_id)
+		return channels.get_inbox_channel(guild, player_id)
 	else:
 		return None
 
@@ -210,6 +210,6 @@ def get_finance_channel_for_handle(guild, handle : str):
 	status : handles.HandleStatus = handles.get_handle_status(handle)
 	if status.exists:
 		player_id = players[player_ids_index][status.user_id]
-		return common_channels.get_finance_channel(guild, player_id)
+		return channels.get_finance_channel(guild, player_id)
 	else:
 		return None

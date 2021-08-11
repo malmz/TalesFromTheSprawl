@@ -1,4 +1,4 @@
-import common_channels
+import channels
 import handles
 import players
 from custom_types import Transaction, ReactionPaymentResult
