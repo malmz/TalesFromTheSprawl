@@ -16,6 +16,7 @@ import common_channels
 import posting
 import reactions
 import players
+import finances
 
 
 load_dotenv()
@@ -43,7 +44,8 @@ async def on_ready():
     global guild_name
     guild = discord.utils.find(lambda g: g.name == guild_name, bot.guilds)
     common_channels.init_channels(bot)
-    handles.init_stats()
+    #handles.init() #TODO: ensure that every user has a handle?
+    finances.init_finances()
     players.init(bot, guild)
     print('Initialization complete.')
 
@@ -174,7 +176,7 @@ async def create_money_command(ctx, handle : str=None, amount : int=0):
     elif amount <= 0:
         response = 'Error: cannot create less than ¥ 1.'
     elif handles.handle_exists(handle):
-        handles.add_funds(handle, amount)
+        finances.add_funds(handle, amount)
         response = 'Added ' + str(amount) + ' to the balance of ' + handle
     else:
         response = 'Error: handle \"' + handle + '\" does not exist.'
@@ -192,7 +194,7 @@ async def set_money_command(ctx, handle : str=None, amount : int=-1):
     elif amount < 0:
         response = 'Error: you must set a new balance.'
     elif handles.handle_exists(handle):
-        handles.set_current_balance(handle, amount)
+        finances.set_current_balance(handle, amount)
         response = 'Set the balance of ' + handle + ' to ' + str(amount)
     else:
         response = 'Error: handle \"' + handle + '\" does not exist.'
@@ -210,7 +212,7 @@ async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
         response = 'Error: cannot transfer less than ¥ 1. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
     else:
         user_id = str(ctx.message.author.id)
-        response = handles.try_to_pay(user_id, handle_recip, amount)
+        response = finances.try_to_pay(user_id, handle_recip, amount)
     await ctx.send(response)
 
 @bot.command(name='balance', help='Show current balance (amount of money available) on all available handles.')
@@ -220,7 +222,7 @@ async def show_balance_command(ctx):
         return
 
     user_id = str(ctx.message.author.id)
-    report = handles.get_all_handles_balance_report(user_id)
+    report = finances.get_all_handles_balance_report(user_id)
     response = 'Current balance for all your accounts:\n' + report
     await ctx.send(response)
 
@@ -233,7 +235,7 @@ async def collect_command(ctx):
     user_id = str(ctx.message.author.id)
     response = 'Collecting all funds to the account of the current handle...'
     await ctx.send(response)
-    handles.collect_all_funds(user_id)
+    finances.collect_all_funds(user_id)
     await show_balance_command(ctx)
 
 

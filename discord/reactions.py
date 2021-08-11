@@ -1,7 +1,7 @@
 import datetime
 import posting
 import common_channels
-import handles
+import finances
 
 reactions_worth_money = {'💸' : 1, '💰' : 1, '🍺' : 1, '💯' : 100}
 
@@ -53,7 +53,7 @@ async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
 			# Payment reactions in outbox will be silently swallowed
 			await remove_reaction(search_result.message, emoji, user_id)
 		else:
-			payment_result : handles.ReactionPaymentResult = handles.try_to_pay_with_reaction(str(user_id), search_result.recipient, payment_amount)
+			payment_result : finances.ReactionPaymentResult = finances.try_to_pay_with_reaction(str(user_id), search_result.recipient, payment_amount)
 			if not payment_result.success:
 				await remove_reaction(search_result.message, emoji, user_id)
 			if payment_result.report != None:

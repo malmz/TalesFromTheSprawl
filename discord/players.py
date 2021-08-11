@@ -81,6 +81,8 @@ async def create_player(member):
 		common_channels.get_finance_name(new_player_id)
 	)
 
+	## TODO: give the new role read permission in various locked channels, e.g. anon
+
 	# Edit user (change nick and add role):
 	base_nick = 'u' + new_player_id
 	#await member.guild.create

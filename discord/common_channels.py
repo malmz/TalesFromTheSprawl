@@ -33,6 +33,8 @@ def is_pseudonymous_channel(channel):
     else:
         return channel.category.name == public_category_name or channel.category.name == shadowlands_category_name
 
+def is_anonymous_channel(channel):
+    return channel.name == 'anon'
 
 def init_channel(channel):
     if channel.type == discord.ChannelType.category or channel.type == discord.ChannelType.voice:
@@ -70,9 +72,6 @@ def set_channel_id(channel):
 
 def get_channel_id(channel_name : str):
     return channel_states[channel_name]['id']
-
-def is_anonymous_channel(channel):
-    return channel.name == 'anon'
 
 def set_last_poster(channel : str, poster_id : str):
     if not channel in channel_states:
@@ -196,7 +195,7 @@ def get_finance_name(player_id : str):
 def is_inbox(channel_name : str):
     return finance_base in channel_name
 
-def get_inbox_channel(guild, player_id : str):
+def get_finance_channel(guild, player_id : str):
     channel_name = get_finance_name(player_id)
     return get_channel_from_name(guild, channel_name)
 

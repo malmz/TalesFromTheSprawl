@@ -13,7 +13,10 @@ import re
 # by deleting all messages and reposting them with custom
 # handles.
 
-post_header_regex = re.compile('^[*][*](.*)[*][*]')
+hard_space = '⠀'
+double_hard_space = hard_space + hard_space
+
+post_header_regex = re.compile(f'^[*][*](.*)[*][*]{double_hard_space}')
 
 def read_handle_from_post(post : str):
     matches = re.search(post_header_regex, post)
@@ -22,9 +25,19 @@ def read_handle_from_post(post : str):
     else:
         return None
 
+def starts_with_bold(content : str):
+    return content.startswith(forbidden_content)
 
-async def post_message_with_header(channel, content : str, sender_info : str, timestamp):
+def add_space(content : str):
+    new = hard_space + content
+    return new
+
+def sanitize_bold(content : str):
+    return add_space(content) if starts_with_bold(content) else content
+
+async def post_message_with_header(channel, message, sender_info : str):
     # Manual DST fix:
+    timestamp = message.created_at
     hour_str = str((timestamp.hour + 2) % 24)
     minute = timestamp.minute
     if minute < 10:
@@ -37,25 +50,25 @@ async def post_message_with_header(channel, content : str, sender_info : str, ti
     else:
         second_str = str(second)
     timestamp_str = '(' + hour_str + ':' + minute_str + ':' + second_str + ')'
-    if content.startswith(forbidden_content):
-        content = ' ' + content
-    post = sender_info + ' ' + timestamp_str + ':\n' + content
-    await channel.send(post)
+    post = sender_info + double_hard_space + timestamp_str + ':\n' + sanitize_bold(message.content)
+    await channel.send(post, files=message.attachments)
 
-async def post_message_with_header_sender_and_recip(channel, content : str, sender : str, recip : str, timestamp):
+async def post_message_with_header_sender_and_recip(channel, message, sender : str, recip : str):
     sender_info = f'**{sender}** to {recip}'
-    await post_message_with_header(channel, content, sender_info, timestamp)
+    await post_message_with_header(channel, message, sender_info)
 
-async def post_message_with_header_sender_only(channel, content : str, handle : str, timestamp):
-    sender = '**' + handle + '** '
-    await post_message_with_header(channel, content, sender, timestamp)
+async def post_message_with_header_sender_only(channel, message, handle : str):
+    sender = '**' + handle + '**'
+    await post_message_with_header(channel, message, sender)
+
+async def post_message_without_header(channel, message):
+    await channel.send(sanitize_bold(message.content), files=message.attachments)
 
 async def repost_message(message, handle):
     if handle == None:
-        post = message.content
-        await message.channel.send(post)
+        await post_message_without_header(message.channel, message)
     else:
-        await post_message_with_header_sender_only(message.channel, message.content, handle, message.created_at)
+        await post_message_with_header_sender_only(message.channel, message, handle)
 
 async def process_message(message, anonymous=False):
     await message.delete()
@@ -85,23 +98,20 @@ async def process_email(ctx, recip_handle : str, content : str):
         await ctx.send(response)
     else:
         outbox_channel = ctx.message.channel
-        timestamp = ctx.message.created_at
         sender_handle = handles.get_handle(str(ctx.message.author.id))
         response = f'Message sent to {recip_handle}.'
         # Post the same message to recipients inbox and senders outbox
         await post_message_with_header_sender_and_recip(
             inbox_channel,
-            content,
+            ctx.message,
             sender_handle,
-            recip_handle,
-            timestamp
+            recip_handle
         )
         await post_message_with_header_sender_and_recip(
             outbox_channel,
-            content,
+            ctx.message,
             sender_handle,
-            recip_handle,
-            timestamp
+            recip_handle
         )
         # Delete the original message with the command
         await ctx.message.delete()

@@ -1,3 +1,5 @@
+import finances
+
 from configobj import ConfigObj
 
 ### Module handles.py
@@ -14,10 +16,6 @@ forbidden_content = '**'
 forbidden_prefix_print = '\_\_\_'
 forbidden_content_print = '\*\*'
 
-# 'stats' holds extra information associated with each handle, unrelated to who owns it.
-# The main stat (currently the only one implemented) is 'balance', tracking the account's money.
-stats = ConfigObj('stats.conf')
-
 # TODO: should be able to remove a lot of on-demand initialization now that we init all users
 
 class HandleStatus:
@@ -25,10 +23,6 @@ class HandleStatus:
     exists = False
     user_id = 0
     handle_type = ''
-
-class ReactionPaymentResult:
-    success = False
-    report = None
 
 def init_handles_for_user(user_id : str, player_id : str = None ):
     handles[user_id] = {}
@@ -41,12 +35,15 @@ def init_handles_for_user(user_id : str, player_id : str = None ):
 
 def create_handle(user_id : str, new_handle : str, burner : bool):
 	if new_handle.startswith(forbidden_prefix):
+		print(f'{user_id} starts with {forbidden_prefix}')
 		return False
 	if forbidden_content in new_handle:
+		print(f'{user_id} contains {forbidden_content}')
 		return False
 	handles[user_id][new_handle] = 'burner' if burner else 'regular'
-	init_stats_for_handle(new_handle)
+	finances.init_finances_for_handle(new_handle)
 	handles.write()
+	return True
 
 def create_regular_handle(user_id : str, new_handle : str):
 	return create_handle(user_id, new_handle, False)
@@ -69,11 +66,11 @@ def destroy_burner(user_id : str, burner : str):
 		# Rescue any money about to be burned
 		balance = get_current_balance(burner)
 		if balance > 0:
-			transfer_funds(burner, new_active, balance)
+			finances.transfer_funds(burner, new_active, balance)
 
 		# Delete the burner
 		del handles[user_id][burner]
-		deinit_stats_for_handle(burner)
+		finances.deinit_finances_for_handle(burner)
 	handles.write()
 	return balance
 
@@ -87,6 +84,17 @@ def get_handle(user_id : str):
     if not user_id in handles:
         init_handles_for_user(user_id)
     return handles[user_id][active_index]
+
+def get_handles_for_user(user_id : str):
+    for handle in handles[user_id]:
+        if handle != active_index and handle != last_regular_index:
+            yield handle
+
+def get_all_handles():
+    for user_id in handles:
+        for handle in handles[user_id]:
+            if handle != active_index and handle != last_regular_index:
+                yield handle
 
 def handle_exists(handle : str):
     result = HandleStatus()
@@ -105,73 +113,6 @@ def get_handle_status(handle : str):
             result.handle_type = handles[user_id][handle]
             break
     return result
-
-def init_stats():
-	for user_id in handles:
-		for handle in handles[user_id]:
-			if not handle in stats and handle != active_index and handle != last_regular_index:
-				init_stats_for_handle(handle)
-
-def init_stats_for_handle(handle : str):
-	stats[handle] = {}
-	stats[handle]['balance'] = '0'
-	stats.write()
-
-def deinit_stats_for_handle(handle : str):
-	del stats[handle]
-	stats.write()
-
-def get_current_balance(handle : str):
-	return int(stats[handle]['balance'])
-
-def set_current_balance(handle : str, balance : int):
-	stats[handle]['balance'] = str(balance)
-	stats.write()
-
-def get_all_handles_balance_report(user_id : str):
-	current_handle = get_handle(user_id)
-	report = ''
-	total = 0
-	for handle in handles[user_id]:
-		if handle != active_index and handle != last_regular_index:
-			balance = get_current_balance(handle)
-			total += balance
-			balance_str = str(balance)
-			if handle == current_handle:
-				report = report + '> **' + handle + '**: ¥ **' + balance_str + '**\n'
-			else:
-				report = report + '> ' + handle + ': ¥ **' + balance_str + '**\n'
-	report = report + 'Total: ¥ **' + str(total) + '**'
-	return report
-
-# TODO: add a transfer method that also sends a report to the financial channel?
-def transfer_funds(handle_payer : str, handle_recip : str, amount : int):
-	avail_at_payer = int(stats[handle_payer]['balance'])
-	if avail_at_payer >= amount:
-		amount_at_recip = get_current_balance(handle_recip)
-		set_current_balance(handle_recip, amount_at_recip + amount)
-		set_current_balance(handle_payer, avail_at_payer - amount)
-		return True
-	else:
-		return False
-
-def add_funds(handle : str, amount : int):
-	previous_balance = int(stats[handle]['balance'])
-	new_balance = previous_balance + amount
-	stats[handle]['balance'] = str(new_balance)
-	stats.write()
-
-def collect_all_funds(user_id : str):
-	current_handle = get_handle(user_id)
-	total = 0
-	for handle in handles[user_id]:
-		if handle != active_index and handle != last_regular_index:
-			total += get_current_balance(handle)
-			set_current_balance(handle, 0)
-	set_current_balance(current_handle, total)
-
-
-
 
 
 
@@ -211,47 +152,3 @@ def create_handle_and_switch(user_id : str, new_handle : str, new_shall_be_burne
 	else:
 		response = f'Error: cannot create handle {new_handle}. Handles cannot start with \"{forbidden_prefix_print}\" or contain \"{forbidden_content_print}\".'
 	return response
-
-
-def try_to_pay(user_id : str, handle_recip : str, amount : int):
-    current_handle = get_handle(user_id)
-    if current_handle == handle_recip:
-        response = 'Error: cannot transfer funds from account ' + handle_recip + ' to itself.'
-        return response
-    recip_status : HandleStatus = get_handle_status(handle_recip)
-    if not recip_status.exists:
-        response = 'Error: recipient \"' + handle_recip + '\" does not exist. Check the spelling; lowercase/UPPERCASE matters.'
-    else:
-        success = transfer_funds(current_handle, handle_recip, amount)
-        if not success:
-            avail = get_current_balance(current_handle)
-            response = 'Error: insufficient funds. Current balance is **' + str(avail) + '**.'
-        elif recip_status.user_id == user_id:
-            response = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**. (Note: you control both accounts.)'
-        else:
-            response = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**.'
-    return response
-
-def try_to_pay_with_reaction(user_id : str, handle_recip : str, amount : int):
-    current_handle = get_handle(user_id)
-    result = ReactionPaymentResult()
-    if current_handle == handle_recip or handle_recip == None:
-        # Cannot tip yourself, and cannot tip on unknown messages
-        # No action, no report
-        result.success = False
-        result.report = None
-        return result
-    recip_status : HandleStatus = get_handle_status(handle_recip)
-    if not recip_status.exists:
-        result.success = False
-        result.report = 'Failed to transfer ¥ **' + str(amount) + '** from ' + current_handle + ' to ' + handle_recip + '; recipient does not exist.'
-    else:
-        result.success = transfer_funds(current_handle, handle_recip, amount)
-        if not result.success:
-            avail = get_current_balance(current_handle)
-            result.report = 'Failed to transfer ¥ **' + str(amount) + '** from ' + current_handle + ' to ' + handle_recip + '; current balance is ¥ **' + str(avail) + '**.'
-        elif recip_status.user_id == user_id:
-            result.report = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**. (Note: you control both accounts.)'
-        else:
-            result.report = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**.'
-    return result
