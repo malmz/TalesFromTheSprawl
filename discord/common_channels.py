@@ -128,6 +128,13 @@ outbox_base = 'outbox_'
 finance_base = 'finance_'
 daemon_base = 'daemon_'
 private_base = 'private_chats_'
+# TODO: some sort of dictionary for these, with an enum type
+
+async def create_personal_channel(member, overwrites, channel_name):
+    category_personal = discord.utils.find(lambda cat: cat.name == personal_category_name, member.guild.channels)
+    channel = await member.guild.create_text_channel(channel_name, overwrites=overwrites, category=category_personal)
+    init_personal_channel(channel)
+    return channel
 
 def init_personal_channel(channel):
     channel_states[channel.name] = {}
@@ -137,5 +144,27 @@ def init_personal_channel(channel):
 def get_cmd_line_name(player_id : str):
     return cmd_line_base + player_id
 
-def is_command_line(channel_name : str):
+def is_cmd_line(channel_name : str):
     return cmd_line_base in channel_name
+
+def get_cmd_line_channel(guild, player_id : str):
+    cmd_line_channel_name = get_cmd_line_name(player_id)
+    cmd_line_channel_id = get_channel_id(cmd_line_channel_name)
+    return guild.get_channel(cmd_line_channel_id)
+
+def get_inbox_name(player_id : str):
+    return inbox_base + player_id
+
+def is_inbox(channel_name : str):
+    return inbox_base in channel_name
+
+def get_outbox_name(player_id : str):
+    return outbox_base + player_id
+
+def is_outbox(channel_name : str):
+    return outbox_base in channel_name
+
+def get_inbox_channel(guild, player_id : str):
+    cmd_line_channel_name = get_inbox_name(player_id)
+    cmd_line_channel_id = get_channel_id(cmd_line_channel_name)
+    return guild.get_channel(cmd_line_channel_id)

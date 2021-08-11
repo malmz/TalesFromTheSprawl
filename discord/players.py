@@ -9,6 +9,7 @@ players = ConfigObj('players.conf')
 players_input = ConfigObj('players_input.conf')
 
 highest_ever_index = '___highest_ever'
+player_ids_index = '___player_ids'
 
 system_role_name = 'system'
 system_role = None
@@ -16,35 +17,57 @@ system_role = None
 def init(bot, guild):
 	global system_role
 	system_role = discord.utils.find(lambda role: role.name == system_role_name, guild.roles)
-	if not 'player_ids' in players:
-		players['player_ids'] = {}
-	if not highest_ever_index in players['player_ids']:
-		players['player_ids'][highest_ever_index] = '2701'
+	if not player_ids_index in players:
+		players[player_ids_index] = {}
+	if not highest_ever_index in players[player_ids_index]:
+		players[player_ids_index][highest_ever_index] = '2701'
 	players.write()
 
-
-async def create_player(member):
-	user_id = str(member.id)
-	prev_highest = int(players['player_ids'][highest_ever_index])
-	new_player_id = str(prev_highest + 1)
-	players['player_ids'][user_id] = new_player_id
-	players['player_ids'][highest_ever_index] = new_player_id
-	players.write()
-
-	# Create role for this user:
-	role = await member.guild.create_role(name=new_player_id)
-
-	# Create personal channels for user:
+async def create_personal_channel(member, overwrites, channel_name):
 	category_personal = discord.utils.find(lambda cat: cat.name == common_channels.personal_category_name, member.guild.channels)
 	overwrites = {
 		member.guild.default_role: discord.PermissionOverwrite(read_messages=False),
 		role: discord.PermissionOverwrite(read_messages=True),
 		system_role: discord.PermissionOverwrite(read_messages=True)
 	}
-	cmd_line_channel_name = common_channels.get_cmd_line_name(new_player_id)
-	cmd_line_channel = await member.guild.create_text_channel(cmd_line_channel_name, overwrites=overwrites, category=category_personal)
-	common_channels.init_personal_channel(cmd_line_channel)
-	# TODO: create other channels for user
+	channel_name = common_channels.get_cmd_line_name(player_id)
+	channel = await member.guild.create_text_channel(channel_name, overwrites=overwrites, category=category_personal)
+	common_channels.init_personal_channel(channel)
+	return channel
+
+
+async def create_player(member):
+	user_id = str(member.id)
+	prev_highest = int(players[player_ids_index][highest_ever_index])
+	new_player_id = str(prev_highest + 1)
+	players[player_ids_index][user_id] = new_player_id
+	players[player_ids_index][highest_ever_index] = new_player_id
+	players.write()
+	# Create role for this user:
+	role = await member.guild.create_role(name=new_player_id)
+
+	# Create personal channels for user:
+	overwrites = {
+		member.guild.default_role: discord.PermissionOverwrite(read_messages=False),
+		role: discord.PermissionOverwrite(read_messages=True),
+		system_role: discord.PermissionOverwrite(read_messages=True)
+	}
+
+	cmd_line_channel = await common_channels.create_personal_channel(
+		member,
+		overwrites,
+		common_channels.get_cmd_line_name(new_player_id)
+	)
+	inbox_channel = await common_channels.create_personal_channel(
+		member,
+		overwrites,
+		common_channels.get_inbox_name(new_player_id)
+	)
+	outbox_channel = await common_channels.create_personal_channel(
+		member,
+		overwrites,
+		common_channels.get_outbox_name(new_player_id)
+	)
 
 	# Edit user (change nick and add role):
 	base_nick = 'u' + new_player_id
@@ -110,14 +133,24 @@ async def send_startup_messages(member, player_id : str, channel):
 
 	content = '=== **REACTIONS** ===\n'
 	content = '  You can also send money by reacting to messages. '
-	content = content + '  Adding the following reactions to a message will transfer the corresponding amount of money:\n'
+	content = content + 'Adding the following reactions to a message will transfer the corresponding amount of money:\n'
 	for emoji, amount in reactions.reactions_worth_money.items():
-		content = content + '  ' + emoji + ' = ¥' + str(amount)
+		content = content + '  ' + emoji + ' = ¥' + str(amount) + '\n'
 
 	await channel.send(content)
 
-def get_cmd_line_channel(guild, user_id : str):
-	player_id = players['player_ids'][user_id]
-	cmd_line_channel_name = common_channels.get_cmd_line_name(player_id)
-	cmd_line_channel_id = common_channels.get_channel_id(cmd_line_channel_name)
-	return guild.get_channel(cmd_line_channel_id)
+def get_cmd_line_channel_for_handle(guild, handle : str):
+	status : handles.HandleStatus = handles.get_handle_status(handle)
+	if status.exists:
+		player_id = players[player_ids_index][status.user_id]
+		return common_channels.get_cmd_line_channel(guild, player_id)
+	else:
+		return None
+
+def get_inbox_channel_for_handle(guild, handle : str):
+	status : handles.HandleStatus = handles.get_handle_status(handle)
+	if status.exists:
+		player_id = players[player_ids_index][status.user_id]
+		return common_channels.get_inbox_channel(guild, player_id)
+	else:
+		return None

@@ -6,6 +6,9 @@ from configobj import ConfigObj
 
 # 'handles' is the config object holding each user's current handles.
 handles = ConfigObj('handles.conf')
+active_index = '___active'
+last_regular_index = '___last_regular'
+
 # 'stats' holds extra information associated with each handle, unrelated to who owns it.
 # The main stat (currently the only one implemented) is 'balance', tracking the account's money.
 stats = ConfigObj('stats.conf')
@@ -31,7 +34,7 @@ def init_handles_for_user(user_id : str, player_id : str = None ):
     create_handle(user_id, first_handle)
     switch_to_handle(user_id, first_handle)
 
-# TODO: prevent creating handles 'active' and 'last_regular'
+# TODO: prevent creating handles active_index and last_regular_index
 def create_handle(user_id : str, new_handle : str):
     handles[user_id][new_handle] = 'regular'
     init_stats_for_handle(new_handle)
@@ -47,9 +50,9 @@ def destroy_burner(user_id : str, burner : str):
 	balance = 0
 	if burner in handles[user_id]:
 	# If we burn the active handle, we must figure out the new active one
-		active = handles[user_id]['active']
+		active = handles[user_id][active_index]
 		if active == burner:
-			new_active = handles[user_id]['last_regular']
+			new_active = handles[user_id][last_regular_index]
 			switch_to_handle(user_id, new_active)
 		else:
 			new_active = active
@@ -66,15 +69,15 @@ def destroy_burner(user_id : str, burner : str):
 	return balance
 
 def switch_to_handle(user_id : str, handle : str):
-    handles[user_id]['active'] = handle
+    handles[user_id][active_index] = handle
     if handles[user_id][handle] == 'regular':
-        handles[user_id]['last_regular'] = handle
+        handles[user_id][last_regular_index] = handle
     handles.write()
 
 def get_handle(user_id : str):
     if not user_id in handles:
         init_handles_for_user(user_id)
-    return handles[user_id]['active']
+    return handles[user_id][active_index]
 
 def handle_exists(handle : str):
     result = HandleStatus()
@@ -97,7 +100,7 @@ def get_handle_status(handle : str):
 def init_stats():
 	for user_id in handles:
 		for handle in handles[user_id]:
-			if not handle in stats and handle != 'active' and handle != 'last_regular':
+			if not handle in stats and handle != active_index and handle != last_regular_index:
 				init_stats_for_handle(handle)
 
 def init_stats_for_handle(handle : str):
@@ -121,7 +124,7 @@ def get_all_handles_balance_report(user_id : str):
 	report = ''
 	total = 0
 	for handle in handles[user_id]:
-		if handle != 'active' and handle != 'last_regular':
+		if handle != active_index and handle != last_regular_index:
 			balance = get_current_balance(handle)
 			total += balance
 			balance_str = str(balance)
@@ -153,7 +156,7 @@ def collect_all_funds(user_id : str):
 	current_handle = get_handle(user_id)
 	total = 0
 	for handle in handles[user_id]:
-		if handle != 'active' and handle != 'last_regular':
+		if handle != active_index and handle != last_regular_index:
 			total += get_current_balance(handle)
 			set_current_balance(handle, 0)
 	set_current_balance(current_handle, total)
@@ -221,12 +224,15 @@ def try_to_pay(user_id : str, handle_recip : str, amount : int):
 def try_to_pay_with_reaction(user_id : str, handle_recip : str, amount : int):
     current_handle = get_handle(user_id)
     result = ReactionPaymentResult()
-    if current_handle == handle_recip:
-        # Cannot tip yourself
+    if current_handle == handle_recip or handle_recip == None:
+        # Cannot tip yourself, and cannot tip on unknown messages
+        # No action, no report
         result.success = False
         result.report = None
+        return result
     recip_status : HandleStatus = get_handle_status(handle_recip)
     if not recip_status.exists:
+        print(f'What is it? {handle_recip}')
         result.success = False
         result.report = 'Failed to transfer ¥ **' + str(amount) + '** from ' + current_handle + ' to ' + handle_recip + '; recipient does not exist.'
     else:
