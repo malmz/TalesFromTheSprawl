@@ -60,7 +60,7 @@ def destroy_burner(user_id : str, burner : str):
 			new_active = active
 
 		# Rescue any money about to be burned
-		balance = get_current_balance(burner)
+		balance = finances.get_current_balance(burner)
 		if balance > 0:
 			finances.transfer_funds(burner, new_active, balance)
 

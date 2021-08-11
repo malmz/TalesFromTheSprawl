@@ -17,6 +17,7 @@ import posting
 import reactions
 import players
 import finances
+import custom_types
 
 
 load_dotenv()
@@ -104,7 +105,7 @@ async def on_raw_reaction_add(payload):
         # No bot shenanigans in the off channels
         return
 
-    await reactions.process_reaction_add(payload.message_id, payload.user_id, channel, payload.emoji)
+    await reactions.process_reaction_add(payload.message_id, str(payload.user_id), channel, payload.emoji)
 
 # New players
 
@@ -212,7 +213,8 @@ async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
         response = 'Error: cannot transfer less than ¥ 1. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
     else:
         user_id = str(ctx.message.author.id)
-        response = await finances.try_to_pay(ctx.guild, user_id, handle_recip, amount)
+        transaction : custom_types.Transaction = await finances.try_to_pay(ctx.guild, user_id, handle_recip, amount)
+        response = transaction.report
     await ctx.send(response)
 
 @bot.command(name='balance', help='Show current balance (amount of money available) on all available handles.')

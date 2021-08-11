@@ -2,7 +2,7 @@ class ReactionPaymentResult:
     success = False
     report = None
 
-class CompletedTransaction:
+class Transaction:
     success = False
     report : str = None
     timestamp = None

@@ -2,6 +2,9 @@ import datetime
 import posting
 import common_channels
 import finances
+import handles
+import players
+import custom_types
 
 reactions_worth_money = {'💴' : 1, '💸' : 1, '💰' : 1, '🍺' : 1, '💯' : 100}
 
@@ -34,7 +37,7 @@ async def find_reaction_recipient_and_message(message_id : int, channel):
 	return result
 
 
-async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
+async def process_reaction_add(message_id : int, user_id : str, channel, emoji):
 	if common_channels.is_anonymous_channel(channel):
 		# No point in acting on reactions when we can't determine the receiver
 		return
@@ -54,11 +57,18 @@ async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
 			# Payment reactions in outbox will be silently swallowed
 			await remove_reaction(search_result.message, emoji, user_id)
 		else:
-			payment_result : finances.ReactionPaymentResult = await finances.try_to_pay_with_reaction(channel.guild, str(user_id), search_result.recipient, payment_amount)
-			if not payment_result.success:
+			transaction : custom_types.Transaction = await finances.try_to_pay(
+				channel.guild,
+				user_id,
+				search_result.recipient,
+				payment_amount,
+				from_reaction=True
+			)
+			if not transaction.success:
 				await remove_reaction(search_result.message, emoji, user_id)
-			if payment_result.report != None:
-				# TODO: send this to user's finance channel instead
-				await channel.send(payment_result.report)
+			if transaction.report != None:
+				handle = handles.get_handle(user_id)
+				cmd_line_channel = players.get_cmd_line_channel_for_handle(channel.guild, handle)
+				await cmd_line_channel.send(transaction.report)
 
 

@@ -4,7 +4,6 @@ import reactions
 import finances
 
 from constants import highest_ever_index, player_ids_index, system_role_name
-from custom_types import CompletedTransaction
 
 import discord
 import asyncio

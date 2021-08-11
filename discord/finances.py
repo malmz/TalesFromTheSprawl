@@ -1,7 +1,7 @@
 import common_channels
 import handles
 import players
-from custom_types import CompletedTransaction, ReactionPaymentResult
+from custom_types import Transaction, ReactionPaymentResult
 
 from configobj import ConfigObj
 import asyncio
@@ -55,21 +55,15 @@ def get_all_handles_balance_report(user_id : str):
     return report
 
 # TODO: add a transfer method that also sends a report to the financial channel?
-def transfer_funds(handle_payer : str, handle_recip : str, amount : int):
-    avail_at_payer = int(finances[handle_payer][balance_index])
-    transaction = CompletedTransaction()
-    transaction.payer = handle_payer
-    transaction.recip = handle_recip
-    transaction.amount = amount
-    if avail_at_payer >= amount:
-        amount_at_recip = get_current_balance(handle_recip)
-        set_current_balance(handle_recip, amount_at_recip + amount)
-        set_current_balance(handle_payer, avail_at_payer - amount)
-        #return True
+def transfer_funds(transaction : Transaction):
+    avail_at_payer = int(finances[transaction.payer][balance_index])
+    if avail_at_payer >= transaction.amount:
+        amount_at_recip = get_current_balance(transaction.recip)
+        set_current_balance(transaction.recip, amount_at_recip + transaction.amount)
+        set_current_balance(transaction.payer, avail_at_payer - transaction.amount)
         transaction.success = True
     else:
         transaction.success = False
-        transaction.report = 'Error: insufficient funds. Current balance is **' + str(avail) + '**.'
     return transaction
 
 def add_funds(handle : str, amount : int):
@@ -90,64 +84,54 @@ def collect_all_funds(user_id : str):
 # Related to transactions
 
 # TODO: timestamp for transactions
-def generate_record_self_transfer(transaction : CompletedTransaction):
+def generate_record_self_transfer(transaction : Transaction):
     return f'🔁 **{transaction.payer}** --> **{transaction.recip}**: ¥ {transaction.amount}'
 
-def generate_record_payer(transaction : CompletedTransaction):
+def generate_record_payer(transaction : Transaction):
     return f'🟥 **{transaction.payer}** --> {transaction.recip}: ¥ {transaction.amount}'
 
-def generate_record_recip(transaction : CompletedTransaction):
+def generate_record_recip(transaction : Transaction):
     return f'🟩 {transaction.payer} --> **{transaction.recip}**: ¥ {transaction.amount}'
 
-async def try_to_pay(guild, user_id : str, handle_recip : str, amount : int):
-    current_handle = handles.get_handle(user_id)
-    if current_handle == handle_recip:
-        response = 'Error: cannot transfer funds from account ' + handle_recip + ' to itself.'
-        return response
+async def try_to_pay(guild, user_id : str, handle_recip : str, amount : int, from_reaction=False):
+    handle_payer = handles.get_handle(user_id)
+    transaction = Transaction()
+    transaction.payer = handle_payer
+    transaction.recip = handle_recip
+    transaction.amount = amount
+    if handle_payer == handle_recip or handle_recip == None:
+        # Cannot transfer to yourself, and cannot transfer to unknown messages
+        # On reactions, feedback in cmd_line would just be distracting
+        # On a command, we want to give feedback anyway so we might as well say what happened
+        if not from_reaction:
+            transaction.report = f'Error: cannot transfer funds from account {handle_recip} to itself.'
+        return transaction
     recip_status : HandleStatus = handles.get_handle_status(handle_recip)
     if not recip_status.exists:
-        response = 'Error: recipient \"' + handle_recip + '\" does not exist. Check the spelling; lowercase/UPPERCASE matters.'
+        if from_reaction:
+            transaction.report = f'Tried to transfer ¥ **{amount}** based on your reaction (emoji), but recipient {handle_recip} does not exist.'
+        else:
+            transaction.report = f'Failed to transfer ¥ **{amount}** from {handle_payer} to {handle_recip}; recipient does not exist. Check the spelling; lowercase/UPPERCASE matters.'
     else:
-        transaction : CompletedTransaction = transfer_funds(current_handle, handle_recip, amount)
+        transaction = transfer_funds(transaction)
         if not transaction.success:
-            avail = get_current_balance(current_handle)
+            avail = get_current_balance(handle_payer)
+            if from_reaction:
+                transaction.report = f'Tried to transfer ¥ **{amount}** from {handle_payer} to {handle_recip} based on your reaction (emoji), but your balance is {amount}.'
+            else:
+                transaction.report = f'Failed to transfer ¥ **{amount}** from {handle_payer} to {handle_recip}; current balance is ¥ **{avail}**.'
+        elif from_reaction:
+            # Success; no need for report to cmd_line
+            await write_financial_record(guild, transaction)
         else:
             if recip_status.user_id == user_id:
-                transaction.report = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**. (Note: you control both accounts.)'
+                transaction.report = 'Successfully transferred ¥ **' + str(amount) + '** from ' + handle_payer + ' to **' + handle_recip + '**. (Note: you control both accounts.)'
             else:
-                transaction.report = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**.'
-            response = transaction.report
-            await write_financial_record(guild, transaction)
-    return response
+                transaction.report = 'Successfully transferred ¥ **' + str(amount) + '** from ' + handle_payer + ' to **' + handle_recip + '**.'
+            await write_financial_record(guild, transaction)            
+    return transaction
 
-async def try_to_pay_with_reaction(guild, user_id : str, handle_recip : str, amount : int):
-    current_handle = handles.get_handle(user_id)
-    result = ReactionPaymentResult()
-    if current_handle == handle_recip or handle_recip == None:
-        # Cannot tip yourself, and cannot tip on unknown messages
-        # No action, no report
-        result.success = False
-        result.report = None
-        return result
-    recip_status : HandleStatus = handles.get_handle_status(handle_recip)
-    if not recip_status.exists:
-        result.success = False
-        result.report = 'Failed to transfer ¥ **' + str(amount) + '** from ' + current_handle + ' to ' + handle_recip + '; recipient does not exist.'
-    else:
-        transaction : CompletedTransaction = transfer_funds(current_handle, handle_recip, amount)
-        if not transaction.success:
-            avail = get_current_balance(current_handle)
-            result.report = 'Failed to transfer ¥ **' + str(amount) + '** from ' + current_handle + ' to ' + handle_recip + '; current balance is ¥ **' + str(avail) + '**.'
-        else:
-            if recip_status.user_id == user_id:
-                transaction.report = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**. (Note: you control both accounts.)'
-            else:
-                transaction.report = 'Successfully transferred ¥ **' + str(amount) + '** from ' + current_handle + ' to **' + handle_recip + '**.'
-            result.report = transaction.report
-            await write_financial_record(guild, transaction)
-    return result
-
-async def write_financial_record(guild, transaction : CompletedTransaction):
+async def write_financial_record(guild, transaction : Transaction):
     payer_channel = players.get_finance_channel_for_handle(guild, transaction.payer)
     recip_channel = players.get_finance_channel_for_handle(guild, transaction.recip)
     if (payer_channel.name == recip_channel.name):
