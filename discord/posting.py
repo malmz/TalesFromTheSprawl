@@ -1,5 +1,6 @@
 import common_channels
 import handles
+from handles import forbidden_content
 import players
 
 import re
@@ -36,6 +37,8 @@ async def post_message_with_header(channel, content : str, sender_info : str, ti
     else:
         second_str = str(second)
     timestamp_str = '(' + hour_str + ':' + minute_str + ':' + second_str + ')'
+    if content.startswith(forbidden_content):
+        content = ' ' + content
     post = sender_info + ' ' + timestamp_str + ':\n' + content
     await channel.send(post)
 

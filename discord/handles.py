@@ -9,6 +9,11 @@ handles = ConfigObj('handles.conf')
 active_index = '___active'
 last_regular_index = '___last_regular'
 
+forbidden_prefix = '___'
+forbidden_content = '**'
+forbidden_prefix_print = '\_\_\_'
+forbidden_content_print = '\*\*'
+
 # 'stats' holds extra information associated with each handle, unrelated to who owns it.
 # The main stat (currently the only one implemented) is 'balance', tracking the account's money.
 stats = ConfigObj('stats.conf')
@@ -31,19 +36,23 @@ def init_handles_for_user(user_id : str, player_id : str = None ):
         first_handle = user_id
     else:
         first_handle = player_id
-    create_handle(user_id, first_handle)
+    create_regular_handle(user_id, first_handle)
     switch_to_handle(user_id, first_handle)
 
-# TODO: prevent creating handles active_index and last_regular_index
-def create_handle(user_id : str, new_handle : str):
-    handles[user_id][new_handle] = 'regular'
-    init_stats_for_handle(new_handle)
-    handles.write()
+def create_handle(user_id : str, new_handle : str, burner : bool):
+	if new_handle.startswith(forbidden_prefix):
+		return False
+	if forbidden_content in new_handle:
+		return False
+	handles[user_id][new_handle] = 'burner' if burner else 'regular'
+	init_stats_for_handle(new_handle)
+	handles.write()
 
-def create_burner(user_id : str, new_burner_handle : str):
-    handles[user_id][new_burner_handle] = 'burner'
-    init_stats_for_handle(new_burner_handle)
-    handles.write()
+def create_regular_handle(user_id : str, new_handle : str):
+	return create_handle(user_id, new_handle, False)
+
+def create_burner_handle(user_id : str, new_burner_handle : str):
+	return create_handle(user_id, new_burner_handle, True)
 
 # returns the amount of money (if any) that was transferred away from the burner
 def destroy_burner(user_id : str, burner : str):
@@ -191,15 +200,17 @@ def switch_to_own_existing_handle(user_id : str, new_handle : str, handle_status
     return response
 
 def create_handle_and_switch(user_id : str, new_handle : str, new_shall_be_burner):
-    if new_shall_be_burner:
-        # TODO: note about possibly being hacked until destroyed?
-        response = 'Switched to new burner handle **' + new_handle + '** (created now). To destroy it, use \".burn ' + new_handle + '\".'
-        create_burner(user_id, new_handle)
-    else:
-        response = 'Switched to new handle **' + new_handle + '** (created now).'
-        create_handle(user_id, new_handle)
-    switch_to_handle(user_id, new_handle)
-    return response
+	success = create_handle(user_id, new_handle, new_shall_be_burner)
+	if success:
+		switch_to_handle(user_id, new_handle)
+		if new_shall_be_burner:
+			# TODO: note about possibly being hacked until destroyed?
+			response = f'Switched to new burner handle **{new_handle}** (created now). To destroy it, use \".burn {new_handle}\".'
+		else:
+			response = f'Switched to new handle **{new_handle}** (created now).'
+	else:
+		response = f'Error: cannot create handle {new_handle}. Handles cannot start with \"{forbidden_prefix_print}\" or contain \"{forbidden_content_print}\".'
+	return response
 
 
 def try_to_pay(user_id : str, handle_recip : str, amount : int):
@@ -232,7 +243,6 @@ def try_to_pay_with_reaction(user_id : str, handle_recip : str, amount : int):
         return result
     recip_status : HandleStatus = get_handle_status(handle_recip)
     if not recip_status.exists:
-        print(f'What is it? {handle_recip}')
         result.success = False
         result.report = 'Failed to transfer ¥ **' + str(amount) + '** from ' + current_handle + ' to ' + handle_recip + '; recipient does not exist.'
     else:

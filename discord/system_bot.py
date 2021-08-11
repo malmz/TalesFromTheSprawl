@@ -133,7 +133,6 @@ async def create_burner_command(ctx, new_id : str=None):
     await switch_handle_command(ctx, new_id, True)
 
 
-# TODO: improve handling of burning a burner with money
 @bot.command(name='burn', help='Destroy a burner account forever.')
 async def burn_command(ctx, burner_id : str=None):
     if burner_id == None:
@@ -168,6 +167,7 @@ async def create_money_command(ctx, handle : str=None, amount : int=0):
     if not common_channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
+
     if handle == None:
         response = 'Error: no handle specified.'
     elif amount <= 0:
@@ -185,6 +185,7 @@ async def set_money_command(ctx, handle : str=None, amount : int=-1):
     if not common_channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
+
     if handle == None:
         response = 'Error: no handle specified.'
     elif amount < 0:
@@ -201,6 +202,7 @@ async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
     if not common_channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
+
     if handle_recip == None:
         response = 'Error: no recipient specified. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
     elif amount <= 0:
@@ -215,6 +217,7 @@ async def show_balance_command(ctx):
     if not common_channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
+
     user_id = str(ctx.message.author.id)
     report = handles.get_all_handles_balance_report(user_id)
     response = 'Current balance for all your accounts:\n' + report
@@ -225,6 +228,7 @@ async def collect_command(ctx):
     if not common_channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
+
     user_id = str(ctx.message.author.id)
     response = 'Collecting all funds to the account of the current handle...'
     await ctx.send(response)
