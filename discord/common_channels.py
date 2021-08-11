@@ -8,6 +8,8 @@ import discord
 
 personal_category_name = 'personal_account'
 off_category_name = 'offline'
+public_category_name = 'public_network'
+shadowlands_category_name = 'shadowlands'
 
 # Channel state: this is the state of the channel, independent of the handles used in it.
 
@@ -18,6 +20,19 @@ def is_offline_channel(channel):
         return True
     else:
         return channel.category.name == off_category_name
+
+def is_public_channel(channel):
+    if channel.category == None:
+        return False
+    else:
+        return channel.category.name == public_category_name
+
+def is_pseudonymous_channel(channel):
+    if channel.category == None:
+        return False
+    else:
+        return channel.category.name == public_category_name or channel.category.name == shadowlands_category_name
+
 
 def init_channel(channel):
     if channel.type == discord.ChannelType.category or channel.type == discord.ChannelType.voice:
@@ -141,6 +156,11 @@ def init_personal_channel(channel):
     set_channel_id(channel)
     channel_states.write()
 
+def get_channel_from_name(guild, channel_name : str):
+    channel_id = get_channel_id(channel_name)
+    return guild.get_channel(channel_id)
+
+
 def get_cmd_line_name(player_id : str):
     return cmd_line_base + player_id
 
@@ -148,9 +168,9 @@ def is_cmd_line(channel_name : str):
     return cmd_line_base in channel_name
 
 def get_cmd_line_channel(guild, player_id : str):
-    cmd_line_channel_name = get_cmd_line_name(player_id)
-    cmd_line_channel_id = get_channel_id(cmd_line_channel_name)
-    return guild.get_channel(cmd_line_channel_id)
+    channel_name = get_cmd_line_name(player_id)
+    return get_channel_from_name(guild, channel_name)
+
 
 def get_inbox_name(player_id : str):
     return inbox_base + player_id
@@ -158,13 +178,27 @@ def get_inbox_name(player_id : str):
 def is_inbox(channel_name : str):
     return inbox_base in channel_name
 
+def get_inbox_channel(guild, player_id : str):
+    channel_name = get_inbox_name(player_id)
+    return get_channel_from_name(guild, channel_name)
+
+
 def get_outbox_name(player_id : str):
     return outbox_base + player_id
 
 def is_outbox(channel_name : str):
     return outbox_base in channel_name
 
+
+def get_finance_name(player_id : str):
+    return finance_base + player_id
+
+def is_inbox(channel_name : str):
+    return finance_base in channel_name
+
 def get_inbox_channel(guild, player_id : str):
-    cmd_line_channel_name = get_inbox_name(player_id)
-    cmd_line_channel_id = get_channel_id(cmd_line_channel_name)
-    return guild.get_channel(cmd_line_channel_id)
+    channel_name = get_finance_name(player_id)
+    return get_channel_from_name(guild, channel_name)
+
+
+

@@ -80,12 +80,13 @@ async def on_message(message):
         await bot.process_commands(message)
         return        
 
-    if message.channel.name == 'anon':
+    if common_channels.is_anonymous_channel(message.channel):
         await posting.process_message(message, True)
         return
 
-    # All other channels: repost message using user's current handle
-    await posting.process_message(message)
+    if common_channels.is_pseudonymous_channel(message.channel):
+        await posting.process_message(message)
+
 
 
 # General reaction handling

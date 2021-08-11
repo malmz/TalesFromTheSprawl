@@ -3,6 +3,7 @@ import handles
 import reactions
 
 import discord
+import asyncio
 from configobj import ConfigObj
 
 players = ConfigObj('players.conf')
@@ -53,6 +54,12 @@ async def create_player(member):
 		system_role: discord.PermissionOverwrite(read_messages=True)
 	}
 
+	overwrites_finance = {
+		member.guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
+		role: discord.PermissionOverwrite(read_messages=True),
+		system_role: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+	}
+
 	cmd_line_channel = await common_channels.create_personal_channel(
 		member,
 		overwrites,
@@ -67,6 +74,11 @@ async def create_player(member):
 		member,
 		overwrites,
 		common_channels.get_outbox_name(new_player_id)
+	)
+	finances_channel = await common_channels.create_personal_channel(
+		member,
+		overwrites_finance,
+		common_channels.get_finance_name(new_player_id)
 	)
 
 	# Edit user (change nick and add role):
@@ -83,11 +95,32 @@ async def create_player(member):
 
 	# TODO: send welcome message in cmd_line
 
-	await send_startup_messages(member, new_player_id, cmd_line_channel)
+	task1 = asyncio.create_task(send_startup_message_cmd_line(member, new_player_id, cmd_line_channel))
+
+	task2 = asyncio.create_task(
+		send_startup_message_inbox(
+			inbox_channel,
+			get_clickable_channel_ref(member.guild, outbox_channel)
+		)
+	)
+	task3 = asyncio.create_task(
+		send_startup_message_outbox(
+			outbox_channel,
+			get_clickable_channel_ref(member.guild, inbox_channel)
+		)
+	)
+	task4 = asyncio.create_task(send_startup_message_finance(finances_channel))
+	await task1
+	await task2
+	await task3
+	await task4
 
 	handles.init_handles_for_user(user_id, base_nick)
 
-async def send_startup_messages(member, player_id : str, channel):
+def get_clickable_channel_ref(guild, channel):
+	return f'<#{channel.id}>'
+
+async def send_startup_message_cmd_line(member, player_id : str, channel):
 	content = 'Welcome to the matrix_client. This is your command line. To see all commands, type \"**.help**\"\n'
 	content = content + f'Your account ID is {member.nick}. All channels ending with {player_id} are only visible to you.\n'
 	content = content + 'In all other channels, your posts will be shown under your current **handle**.'
@@ -137,6 +170,22 @@ async def send_startup_messages(member, player_id : str, channel):
 	for emoji, amount in reactions.reactions_worth_money.items():
 		content = content + '  ' + emoji + ' = ¥' + str(amount) + '\n'
 
+	await channel.send(content)
+
+async def send_startup_message_inbox(channel, outbox_channel_name):
+	content = 'This is your inbox. Private messages from other users will appear here.\n'
+	content = content + f'Note: you cannot respond here. To respond, you have to send a message from your outbox: {outbox_channel_name}.\n'
+	await channel.send(content)
+
+async def send_startup_message_outbox(channel, inbox_channel_name):
+	content = 'This is your outbox. Think of it as an email client.\n'
+	content = content + 'Send messages by typing \'.message <recipient> \"message\"\', e.g. \'.message Shadow_Weaver \"Oi chummer!\"\'.\n'
+	content = content + f'The message will show up in recipient\'s inbox. You have your inbox in {inbox_channel_name}.'
+	await channel.send(content)
+
+async def send_startup_message_finance(channel):
+	content = 'This is your financial record.\n'
+	content = content + 'A record of every transaction will appear here. You cannot send anything in this channel.'
 	await channel.send(content)
 
 def get_cmd_line_channel_for_handle(guild, handle : str):
