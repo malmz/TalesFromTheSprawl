@@ -1,5 +1,7 @@
 import common_channels
 import handles
+import reactions
+
 import discord
 from configobj import ConfigObj
 
@@ -58,7 +60,61 @@ async def create_player(member):
 
 	# TODO: send welcome message in cmd_line
 
+	await send_startup_messages(member, new_player_id, cmd_line_channel)
+
 	handles.init_handles_for_user(user_id, base_nick)
+
+async def send_startup_messages(member, player_id : str, channel):
+	content = 'Welcome to the matrix_client. This is your command line. To see all commands, type \"**.help**\"\n'
+	content = content + f'Your account ID is {member.nick}. All channels ending with {player_id} are only visible to you.\n'
+	content = content + 'In all other channels, your posts will be shown under your current **handle**.'
+	await channel.send(content)
+
+	content = '=== **HANDLES** ===\n'
+	content = content + 'You can create and switch handles freely using the following commands:\n'
+	content = content + '\n'
+	content = content + '  **.handle <new_handle>**\n'
+	content = content + '  Switch to handle - if it does not already exist, it will be created for you.\n'
+	content = content + '  Regular handles cannot be deleted, but you can just abandon it if you don\'t need it.\n'
+	content = content + '\n'
+	content = content + '  **.handle**\n'
+	content = content + '  Show you what your current handle is.\n'
+	content = content + '\n'
+	content = content + '  **.burner <new_handle>**\n'
+	content = content + '  Switch to a burner handle - if it does not already exist, it will be created for you.\n'
+	content = content + '\n'
+	content = content + '  **.burn <burner_handle>**\n'
+	content = content + '  Destroy a burner handle forever.\n'
+	content = content + '  While a burner handle is active, it can possibly be traced.\n'
+	content = content + '  After burning it, its ownership cannot be traced.\n'
+	content = content + '\n '
+	await channel.send(content)
+
+	content = '=== **MONEY** ===\n'
+	content = content + 'Each handle (regular and burner) has its own balance (money). Commands related to money:\n'
+	content = content + '\n'
+	content = content + '  **.balance**\n'
+	content = content + '  Show the current balance of all handles you control.\n'
+	content = content + '\n'
+	content = content + '  **.collect**\n'
+	content = content + '  Transfer all money from all handles you control to the one you are currently using.\n'
+	content = content + '\n'
+	content = content + '  **.pay <recipient> <amount>**\n'
+	content = content + '  Transfer money from your current handle to the recipient.\n'
+	content = content + '  You can of course use this to transfer money to another handle that you also own.\n'
+	content = content + '\n'
+	content = content + '  Note: when a burner handle is destroyed, any money on it will be transferred to your active handle.\n'
+	content = content + '  Money transfer can be traced, even from burners.\n'
+	content = content + '\n'
+	await channel.send(content)
+
+	content = '=== **REACTIONS** ===\n'
+	content = '  You can also send money by reacting to messages. '
+	content = content + '  Adding the following reactions to a message will transfer the corresponding amount of money:\n'
+	for emoji, amount in reactions.reactions_worth_money.items():
+		content = content + '  ' + emoji + ' = ¥' + str(amount)
+
+	await channel.send(content)
 
 def get_cmd_line_channel(guild, user_id : str):
 	player_id = players['player_ids'][user_id]

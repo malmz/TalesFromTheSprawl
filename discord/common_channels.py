@@ -13,6 +13,12 @@ off_category_name = 'offline'
 
 channel_states = ConfigObj('channel_states.conf')
 
+def is_offline_channel(channel):
+    if channel.category == None:
+        return True
+    else:
+        return channel.category.name == off_category_name
+
 def init_channel(channel):
     if channel.type == discord.ChannelType.category or channel.type == discord.ChannelType.voice:
         # No need to do anything for the categories themselves or the voice channels
@@ -130,3 +136,6 @@ def init_personal_channel(channel):
 
 def get_cmd_line_name(player_id : str):
     return cmd_line_base + player_id
+
+def is_command_line(channel_name : str):
+    return cmd_line_base in channel_name

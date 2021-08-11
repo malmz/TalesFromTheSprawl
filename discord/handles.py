@@ -10,6 +10,8 @@ handles = ConfigObj('handles.conf')
 # The main stat (currently the only one implemented) is 'balance', tracking the account's money.
 stats = ConfigObj('stats.conf')
 
+# TODO: should be able to remove a lot of on-demand initialization now that we init all users
+
 class HandleStatus:
     handle = ''
     exists = False
@@ -40,15 +42,27 @@ def create_burner(user_id : str, new_burner_handle : str):
     init_stats_for_handle(new_burner_handle)
     handles.write()
 
+# returns the amount of money (if any) that was transferred away from the burner
 def destroy_burner(user_id : str, burner : str):
-    if not user_id in handles:
-        handles[user_id] = {}
-    if burner in handles[user_id]:
-        del handles[user_id][burner]
-        deinit_stats_for_handle(burner)
-        if handles[user_id]['active'] == burner:
-            switch_to_handle(user_id, handles[user_id]['last_regular'])
-    handles.write()
+	balance = 0
+	if burner in handles[user_id]:
+	# If we burn the active handle, we must figure out the new active one
+		active = handles[user_id]['active']
+		if active == burner:
+			new_active = handles[user_id]['last_regular']
+		else:
+			new_active = active
+			switch_to_handle(user_id, new_active)
+
+		# Rescue any money about to be burned
+		balance = get_current_balance(burner)
+		if balance > 0:
+			transfer_funds(burner, new_active, balance)
+
+		# Delete the burner
+		del handles[user_id][burner]
+		deinit_stats_for_handle(burner)
+	handles.write()
 
 def switch_to_handle(user_id : str, handle : str):
     handles[user_id]['active'] = handle
@@ -117,6 +131,7 @@ def get_all_handles_balance_report(user_id : str):
 	report = report + 'Total: ¥ **' + str(total) + '**'
 	return report
 
+# TODO: add a transfer method that also sends a report to the financial channel?
 def transfer_funds(handle_payer : str, handle_recip : str, amount : int):
 	avail_at_payer = int(stats[handle_payer]['balance'])
 	if avail_at_payer >= amount:
@@ -153,15 +168,15 @@ def try_switch_to_none_handle(user_id : str):
     current_handle = get_handle(user_id)
     handle_status : HandleStatus = get_handle_status(current_handle)
     if (handle_status.handle_type == 'burner'):
-        response = 'Your current handle is **' + current_handle + '**. It\'s a burner handle – to destroy it, use \".burn ' + current_handle + '\". To switch handle, type \".handle <new_name>\" in #command_line.'
+        response = 'Your current handle is **' + current_handle + '**. It\'s a burner handle – to destroy it, use \".burn ' + current_handle + '\". To switch handle, type \".handle <new_name>\".'
     else:
-        response = 'Your current handle is **' + current_handle + '**. To switch handle, type \".handle <new_name>\" in #command_line.'
+        response = 'Your current handle is **' + current_handle + '**. To switch handle, type \".handle <new_name>\".'
     return response
 
 def switch_to_own_existing_handle(user_id : str, new_handle : str, handle_status : HandleStatus, new_shall_be_burner):
     if (handle_status.handle_type == 'burner'):
         # We can switch to a burner handle using both .handle and .burner
-        response = 'Switched to burner handle **' + new_handle + '**. Remember to burn it when done, using \".burn ' + new_handle + '\" in #command_line.'
+        response = 'Switched to burner handle **' + new_handle + '**. Remember to burn it when done, using \".burn ' + new_handle + '\".'
         switch_to_handle(user_id, new_handle)
     elif new_shall_be_burner:
         # We cannot switch to a non-burner using .burner
@@ -174,7 +189,7 @@ def switch_to_own_existing_handle(user_id : str, new_handle : str, handle_status
 def create_handle_and_switch(user_id : str, new_handle : str, new_shall_be_burner):
     if new_shall_be_burner:
         # TODO: note about possibly being hacked until destroyed?
-        response = 'Switched to new burner handle **' + new_handle + '** (created now). To destroy it, use \".burn ' + new_handle + '\" in #command_line.'
+        response = 'Switched to new burner handle **' + new_handle + '** (created now). To destroy it, use \".burn ' + new_handle + '\".'
         create_burner(user_id, new_handle)
     else:
         response = 'Switched to new handle **' + new_handle + '** (created now).'

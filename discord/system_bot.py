@@ -21,7 +21,10 @@ load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 guild_name = os.getenv('GUILD_NAME')
 
-bot = commands.Bot(command_prefix='.')
+intents = discord.Intents.default()
+intents.members = True
+
+bot = commands.Bot(command_prefix='.', intents=intents)
 guild = None
 
 @bot.event
@@ -53,13 +56,17 @@ async def on_message(message):
         # Never react to bot's own message to avoid loops
         return
 
-    if message.channel.name == 'offline':
+    if common_channels.is_offline_channel(message.channel):
         # No bot shenanigans in the off channel
         return
 
     if message.channel.name == 'command_line':
         await bot.process_commands(message)
         return
+
+    if common_channels.is_command_line(message.channel.name):
+        await bot.process_commands(message)
+        return        
 
     if message.channel.name == 'anon':
         await posting.process_message(message, True)
@@ -78,8 +85,8 @@ async def on_raw_reaction_add(payload):
         # Don't act on bot's own reactions to avoid loops
         return
 
-    if payload.channel_id == 'offline':
-        # No bot shenanigans in the off channel
+    if common_channels.is_offline_channel(channel):
+        # No bot shenanigans in the off channels
         return
 
     await reactions.process_reaction_add(payload.message_id, payload.user_id, channel, payload.emoji)
@@ -93,7 +100,7 @@ async def on_member_join(member):
 
 # Commands related to handles
 
-@bot.command(name='handle', help='Switch to another handle for #open_channel and other channels. Handle must be free; once created, no-one else can use it.')
+@bot.command(name='handle', help='Show current handle, or switch to another handle. To switch, new handle must be free (then it will be created) or controlled by you. Your handle is shown to other users in most other channels.')
 async def switch_handle_command(ctx, new_handle : str=None, burner=False):
     user_id = str(ctx.message.author.id)
     if new_handle == None:
@@ -108,13 +115,13 @@ async def switch_handle_command(ctx, new_handle : str=None, burner=False):
             response = handles.create_handle_and_switch(user_id, new_handle, burner)
     await ctx.send(response)
 
-@bot.command(name='burner', help='Create a burner account for #open_channel and other channels')
+@bot.command(name='burner', help='Create a new burner handle, or switch to one that you already that you have not burned yet.')
 async def create_burner_command(ctx, new_id : str=None):
     await switch_handle_command(ctx, new_id, True)
 
 
 # TODO: improve handling of burning a burner with money
-@bot.command(name='burn', help='Destroy a burner account forever')
+@bot.command(name='burn', help='Destroy a burner account forever.')
 async def burn_command(ctx, burner_id : str=None):
     if burner_id == None:
         response = 'Error: No burner handle specified. Use \".burn <handle>\"'
@@ -128,7 +135,7 @@ async def burn_command(ctx, burner_id : str=None):
         elif (handle_status.handle_type == 'regular'):
             response = 'Error: **' + burner_id + '** is not a burner handle, cannot be destroyed. To stop using it, simply switch to another handle.'
         elif (handle_status.handle_type == 'burner'):
-            handles.destroy_burner(user_id, burner_id)
+            amount = handles.destroy_burner(user_id, burner_id)
             current_handle = handles.get_handle(user_id)
             response = 'Destroyed burner handle **' + burner_id + '**. If you or someone else uses that name, it may be confusing but cannot be traced to the previous use. Your current handle is **' + current_handle + '**.'
     await ctx.send(response)
@@ -152,7 +159,7 @@ async def create_money_command(ctx, handle : str=None, amount : int=0):
 
 @bot.command(name='set_money', help='Use \".set_money <handle> <amount>\" to set the balance of an account (will be admin-only during the game)')
 #@commands.has_role('admin')  TODO: require admin to create money
-async def create_money_command(ctx, handle : str=None, amount : int=-1):
+async def set_money_command(ctx, handle : str=None, amount : int=-1):
     if handle == None:
         response = 'Error: no handle specified.'
     elif amount < 0:
@@ -164,7 +171,7 @@ async def create_money_command(ctx, handle : str=None, amount : int=-1):
         response = 'Error: handle \"' + handle + '\" does not exist.'
     await ctx.send(response)
 
-@bot.command(name='pay', help='Pay money (nuyen) to the owner of another handle')
+@bot.command(name='pay', help='Pay money (¥) to the owner of another handle')
 async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
     if handle_recip == None:
         response = 'Error: no recipient specified. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
@@ -197,6 +204,14 @@ async def collect_command(ctx):
 async def fake_join_command(ctx, user_id):
     member_to_fake_join = await ctx.guild.fetch_member(user_id)
     await on_member_join(member_to_fake_join)
+
+@bot.command(name='fake_join_name', help='Admin-only function to test run the new member mechanics')
+async def fake_join_command(ctx, nick : str):
+    members = await ctx.guild.fetch_members(limit=100).flatten()
+    print(f'{members}')
+    member_to_fake_join = discord.utils.find(lambda m: m.name == nick, members)
+    await on_member_join(member_to_fake_join)
+
 
 @bot.command(name='ping', help='Admin-only function to test user-player-channel mappings')
 async def ping_command(ctx, user_id : str):
