@@ -23,12 +23,13 @@ class ReactionPaymentResult:
 def init_handles_for_user(user_id : str, player_id : str = None ):
     handles[user_id] = {}
     if player_id == None:
-    	first_handle = user_id    	
+        first_handle = user_id
     else:
-    	first_handle = player_id
+        first_handle = player_id
     create_handle(user_id, first_handle)
     switch_to_handle(user_id, first_handle)
 
+# TODO: prevent creating handles 'active' and 'last_regular'
 def create_handle(user_id : str, new_handle : str):
     handles[user_id][new_handle] = 'regular'
     init_stats_for_handle(new_handle)
