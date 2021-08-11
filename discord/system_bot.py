@@ -19,15 +19,19 @@ import players
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
+guild_name = os.getenv('GUILD_NAME')
 
 bot = commands.Bot(command_prefix='.')
+guild = None
 
 @bot.event
 async def on_ready():
-    print(f'{bot.user} has connected to Discord!')
+    global guild
+    global guild_name
+    guild = discord.utils.find(lambda g: g.name == guild_name, bot.guilds)
     common_channels.init_channels(bot)
     handles.init_stats()
-    players.init(bot)
+    players.init(bot, guild)
     print('Initialization complete.')
 
 @bot.event
@@ -38,7 +42,7 @@ async def on_command_error(ctx, error):
         await ctx.send("Error: that is not a known command.")
     else:
         await ctx.send("Error: unknown system error. Contact administrator.")
-        print(str(error))
+        raise(error)
 
 
 # General message processing (reposting for anonymity/pseudonymity)
@@ -186,9 +190,20 @@ async def collect_command(ctx):
     handles.collect_all_funds(user_id)
     await show_balance_command(ctx)
 
+
+### Admin-only commands for testing etc.
+
 @bot.command(name='fake_join', help='Admin-only function to test run the new member mechanics')
 async def fake_join_command(ctx, user_id):
     member_to_fake_join = await ctx.guild.fetch_member(user_id)
     await on_member_join(member_to_fake_join)
+
+@bot.command(name='ping', help='Admin-only function to test user-player-channel mappings')
+async def ping_command(ctx, user_id : str):
+    channel = players.get_cmd_line_channel(ctx.guild, user_id)
+    if channel != None:
+        await channel.send(f'Testing ping for {user_id}')
+    else:
+        print(f'Error: could not find the command line channel for {user_id}')
 
 bot.run(TOKEN)

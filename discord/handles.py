@@ -68,6 +68,7 @@ def handle_exists(handle : str):
             return True
     return False
 
+# Sanitize input -- special return on reserved values will protect many commands, including creating
 def get_handle_status(handle : str):
     result = HandleStatus()
     for user_id in handles:
