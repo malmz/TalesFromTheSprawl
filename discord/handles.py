@@ -1,4 +1,5 @@
 import finances
+from constants import forbidden_prefix, forbidden_content, forbidden_prefix_print, forbidden_content_print
 
 from configobj import ConfigObj
 
@@ -10,11 +11,6 @@ from configobj import ConfigObj
 handles = ConfigObj('handles.conf')
 active_index = '___active'
 last_regular_index = '___last_regular'
-
-forbidden_prefix = '___'
-forbidden_content = '**'
-forbidden_prefix_print = '\_\_\_'
-forbidden_content_print = '\*\*'
 
 # TODO: should be able to remove a lot of on-demand initialization now that we init all users
 

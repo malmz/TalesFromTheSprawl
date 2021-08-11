@@ -1,18 +1,19 @@
 import common_channels
 import handles
 import reactions
+import finances
+
+from constants import highest_ever_index, player_ids_index, system_role_name
+from custom_types import CompletedTransaction
 
 import discord
 import asyncio
 from configobj import ConfigObj
 
+
 players = ConfigObj('players.conf')
 players_input = ConfigObj('players_input.conf')
 
-highest_ever_index = '___highest_ever'
-player_ids_index = '___player_ids'
-
-system_role_name = 'system'
 system_role = None
 
 def init(bot, guild):
@@ -203,5 +204,13 @@ def get_inbox_channel_for_handle(guild, handle : str):
 	if status.exists:
 		player_id = players[player_ids_index][status.user_id]
 		return common_channels.get_inbox_channel(guild, player_id)
+	else:
+		return None
+
+def get_finance_channel_for_handle(guild, handle : str):
+	status : handles.HandleStatus = handles.get_handle_status(handle)
+	if status.exists:
+		player_id = players[player_ids_index][status.user_id]
+		return common_channels.get_finance_channel(guild, player_id)
 	else:
 		return None

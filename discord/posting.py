@@ -1,6 +1,6 @@
 import common_channels
 import handles
-from handles import forbidden_content
+from constants import forbidden_content
 import players
 
 import re

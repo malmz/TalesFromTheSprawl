@@ -3,7 +3,7 @@ import posting
 import common_channels
 import finances
 
-reactions_worth_money = {'💸' : 1, '💰' : 1, '🍺' : 1, '💯' : 100}
+reactions_worth_money = {'💴' : 1, '💸' : 1, '💰' : 1, '🍺' : 1, '💯' : 100}
 
 async def remove_reaction(message, emoji, user_id : int):
 	member = await message.channel.guild.fetch_member(user_id)
@@ -38,6 +38,7 @@ async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
 	if common_channels.is_anonymous_channel(channel):
 		# No point in acting on reactions when we can't determine the receiver
 		return
+	print(f'User reacted with {emoji}')
 
 	# Currently only one use case for reading reactions, and that is for paying money
 	payment_amount = 0
@@ -53,7 +54,7 @@ async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
 			# Payment reactions in outbox will be silently swallowed
 			await remove_reaction(search_result.message, emoji, user_id)
 		else:
-			payment_result : finances.ReactionPaymentResult = finances.try_to_pay_with_reaction(str(user_id), search_result.recipient, payment_amount)
+			payment_result : finances.ReactionPaymentResult = await finances.try_to_pay_with_reaction(channel.guild, str(user_id), search_result.recipient, payment_amount)
 			if not payment_result.success:
 				await remove_reaction(search_result.message, emoji, user_id)
 			if payment_result.report != None:

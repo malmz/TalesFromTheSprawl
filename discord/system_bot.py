@@ -212,7 +212,7 @@ async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
         response = 'Error: cannot transfer less than ¥ 1. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
     else:
         user_id = str(ctx.message.author.id)
-        response = finances.try_to_pay(user_id, handle_recip, amount)
+        response = await finances.try_to_pay(ctx.guild, user_id, handle_recip, amount)
     await ctx.send(response)
 
 @bot.command(name='balance', help='Show current balance (amount of money available) on all available handles.')
