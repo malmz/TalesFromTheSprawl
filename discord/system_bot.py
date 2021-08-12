@@ -151,7 +151,7 @@ async def burn_command(ctx, burner_id : str=None):
         elif (handle_status.handle_type == 'regular'):
             response = 'Error: **' + burner_id + '** is not a burner handle, cannot be destroyed. To stop using it, simply switch to another handle.'
         elif (handle_status.handle_type == 'burner'):
-            amount = handles.destroy_burner(user_id, burner_id)
+            amount = await handles.destroy_burner(ctx.guild, user_id, burner_id)
             current_handle = handles.get_handle(user_id)
             response = 'Destroyed burner handle **' + burner_id + '**.\n'
             response = response + 'If you or someone else uses that name, it may be confusing but cannot be traced to the previous use.\n'
@@ -177,7 +177,7 @@ async def create_money_command(ctx, handle : str=None, amount : int=0):
     elif amount <= 0:
         response = 'Error: cannot create less than ¥ 1.'
     elif handles.handle_exists(handle):
-        finances.add_funds(handle, amount)
+        await finances.add_funds(ctx.guild, handle, amount)
         response = 'Added ' + str(amount) + ' to the balance of ' + handle
     else:
         response = 'Error: handle \"' + handle + '\" does not exist.'
@@ -195,7 +195,7 @@ async def set_money_command(ctx, handle : str=None, amount : int=-1):
     elif amount < 0:
         response = 'Error: you must set a new balance.'
     elif handles.handle_exists(handle):
-        finances.set_current_balance(handle, amount)
+        await finances.overwrite_balance(ctx.guild, handle, amount)
         response = 'Set the balance of ' + handle + ' to ' + str(amount)
     else:
         response = 'Error: handle \"' + handle + '\" does not exist.'
@@ -224,8 +224,7 @@ async def show_balance_command(ctx):
         return
 
     user_id = str(ctx.message.author.id)
-    report = finances.get_all_handles_balance_report(user_id)
-    response = 'Current balance for all your accounts:\n' + report
+    response = finances.get_all_handles_balance_report(user_id)
     await ctx.send(response)
 
 @bot.command(name='collect', help='Collect all your funds from all handles to the current handle\'s account')
@@ -236,10 +235,9 @@ async def collect_command(ctx):
 
     user_id = str(ctx.message.author.id)
     response = 'Collecting all funds to the account of the current handle...'
-    await ctx.send(response)
-    finances.collect_all_funds(user_id)
-    await show_balance_command(ctx)
-
+    await asyncio.create_task(ctx.send(response))
+    await asyncio.create_task(finances.collect_all_funds(ctx.guild, user_id))
+    #await show_balance_command(ctx)
 
 
 # Commands for passing messages / email

@@ -15,10 +15,10 @@ last_regular_index = '___last_regular'
 # TODO: should be able to remove a lot of on-demand initialization now that we init all users
 
 class HandleStatus:
-    handle = ''
-    exists = False
-    user_id = 0
-    handle_type = ''
+    handle : str = ''
+    exists : str = False
+    user_id : str = ''
+    handle_type : str = ''
 
 def init_handles_for_user(user_id : str, player_id : str = None ):
     handles[user_id] = {}
@@ -48,7 +48,7 @@ def create_burner_handle(user_id : str, new_burner_handle : str):
 	return create_handle(user_id, new_burner_handle, True)
 
 # returns the amount of money (if any) that was transferred away from the burner
-def destroy_burner(user_id : str, burner : str):
+async def destroy_burner(guild, user_id : str, burner : str):
 	balance = 0
 	if burner in handles[user_id]:
 	# If we burn the active handle, we must figure out the new active one
@@ -62,7 +62,7 @@ def destroy_burner(user_id : str, burner : str):
 		# Rescue any money about to be burned
 		balance = finances.get_current_balance(burner)
 		if balance > 0:
-			finances.transfer_funds(burner, new_active, balance)
+			await finances.transfer_from_burner(guild, burner, new_active, balance)
 
 		# Delete the burner
 		del handles[user_id][burner]

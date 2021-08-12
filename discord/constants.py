@@ -6,3 +6,6 @@ forbidden_prefix = '___'
 forbidden_content = '**'
 forbidden_prefix_print = '\_\_\_'
 forbidden_content_print = '\*\*'
+
+transaction_collector = '___collector'
+transaction_collected = '___collected'
