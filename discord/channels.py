@@ -62,34 +62,35 @@ def set_channel_id(channel_name : str, ident : ChannelIdentifier):
     channel_states.write()
 
 def get_channel_id(channel_name : str):
-    return channel_states[channel_name][channel_id_index]
+    return ChannelIdentifier.from_string(channel_states[channel_name][channel_id_index])
 
 def get_discord_channel_from_name(guild, channel_name : str):
-    ident : get_channel_id = get_channel_id(channel_name)
+    ident : ChannelIdentifier = get_channel_id(channel_name)
     if ident.discord_channel_id != None:
-        return guild.get_channel(channel_id)
+        return guild.get_channel(ident.discord_channel_id)
     else:
         raise RuntimeError(f'Tried to find discord channel but channel_id missing: {ident.to_string()}')
 
 ### Common init functions:
 
 def init_discord_channel(discord_channel):
-    if discord_channel.type == discord.ChannelType.category or discord_channel.type == discord.ChannelType.voice:
+    if discord_channel.type in [discord.ChannelType.category, discord.ChannelType.voice]:
         # No need to do anything for the categories themselves or the voice channels
         return
 
     if discord_channel.category != None:
         if discord_channel.category.name == personal_category_name:
             init_personal_channel(discord_channel)
-        elif not discord_channel.category.name == off_category_name:
+        elif discord_channel.category.name == public_category_name:
             init_common_channel(discord_channel)
-        else:
-            print(f'Will not create channel state for channel {discord_channel.name} in category {discord_channel.category.name}')
     else:
         print(f'Will not create channel state for channel {discord_channel.name} which has no category')
 
 
 def init_channels(bot):
+    for elem in channel_states:
+        del channel_states[elem]
+    channel_states.write()
     for discord_channel in bot.get_all_channels():
         init_discord_channel(discord_channel)
 
@@ -156,7 +157,9 @@ def reset_post_counter(channel_name : str):
     channel_states[channel_name][post_counter_index] = str(0)
     channel_states.write()
 
-def new_post(channel_name : str, poster_id : str, timestamp):
+# Returns True if the new post should be a full post (with sender and timestamp header)
+# Returns False if the new post should only include the content itself
+def record_new_post(channel_name : str, poster_id : str, timestamp):
     last_poster = get_last_poster(channel_name)
     time_has_passed = time_has_passed_since_last_full_post(channel_name, timestamp)
     counter_has_passed_limit = increment_post_counter(channel_name)

@@ -59,19 +59,22 @@ async def post_message_with_header_sender_and_recip(channel, message, sender : s
     sender_info = f'**{sender}** to {recip}'
     await post_message_with_header(channel, message, sender_info)
 
-async def post_message_with_header_sender_only(channel, message, handle : str):
-    sender = '**' + handle + '**'
-    await post_message_with_header(channel, message, sender)
+async def post_message_with_header_sender_only(channel, message, sender : str):
+    sender_info = f'**{sender}**'
+    await post_message_with_header(channel, message, sender_info)
 
 async def post_message_without_header(channel, message):
     files = [await a.to_file() for a in message.attachments]
     await channel.send(sanitize_bold(message.content), files=files)
 
-async def repost_message(message, handle):
-    if handle == None:
-        await post_message_without_header(message.channel, message)
+async def repost_message_to_channel(channel, message, sender : str):
+    if sender == None:
+        await post_message_without_header(channel, message)
     else:
-        await post_message_with_header_sender_only(message.channel, message, handle)
+        await post_message_with_header_sender_only(channel, message, sender)
+
+async def repost_message(message, sender : str):
+    await repost_message_to_channel(message.channel, message, sender)
 
 async def process_open_message(message, anonymous=False):
     task1 = asyncio.create_task(message.delete())
@@ -84,7 +87,7 @@ async def process_open_message(message, anonymous=False):
         handle = handles.get_handle(player_id)
         current_poster_id = handle
         current_poster_display_name = handle
-    full_post = channels.new_post(current_channel, current_poster_id, message.created_at)
+    full_post = channels.record_new_post(current_channel, current_poster_id, message.created_at)
     if full_post:
         task2 = asyncio.create_task(repost_message(message, current_poster_display_name))
     else:

@@ -1,3 +1,4 @@
+import discord
 import asyncio
 from configobj import ConfigObj
 import simplejson
@@ -6,6 +7,7 @@ import players
 import handles
 import channels
 import server
+import posting
 
 chats_dir = 'chats'
 chats = ConfigObj(f'{chats_dir}/chats.conf')
@@ -33,7 +35,7 @@ class ChatConnection(object):
 
 	@staticmethod
 	def from_string(string : str):
-		obj = ChatConnection()
+		obj = ChatConnection(None, None, None)
 		obj.__dict__ = simplejson.loads(string)
 		return obj
 
@@ -72,7 +74,13 @@ def get_chat_data_from_channel_id(channel_id : str):
 	chat_channel_data : ChatChannelData = ChatChannelData.from_string(string)
 	return chat_channel_data
 
+def read_chat_connection(chat_state, player_id : str):
+	string = chat_state[chat_connection_index][player_id]
+	chat_connection : ChatConnection = ChatConnection.from_string(string)
+	return chat_connection
 
+def store_chat_connection(chat_state, player_id : str, chat_connection : ChatConnection):
+	chat_state[chat_connection_index][player_id] = chat_connection.to_string()
 
 ### Creating a new chat
 
@@ -94,6 +102,7 @@ async def create_chat(ctx, recip_handle):
 	chat_file_name = f'{chat_name}.conf'
 	chats[file_name_index][chat_name] = chat_file_name
 	chats.write()
+	channels.init_chat_channel(chat_name)
 
 	# Chat-specific config: will hold all history, but also players' active handles and channels
 	chat_state = ConfigObj(f'{chats_dir}/{chat_file_name}')
@@ -143,31 +152,43 @@ async def create_chat_for_participant(guild, chat_state, chat_name : str, my_han
 	
 	# chat -> channel ID mapping
 	chat_connection = ChatConnection(chat_name, my_player_id, my_handle, channel_id)
-	chat_state[chat_connection_index][my_player_id] = chat_connection
+	store_chat_connection(chat_state, my_player_id, chat_connection)
 	chat_state.write()
 
 	#test = ChatChannelData.from_string(chats[channel_id][chat_channel_data_index])
 	
 	print(f'Created ChatChannelData: {chat_channel_data.channel_id}, {chat_channel_data.chat_name}, {chat_channel_data.handle}, {chat_channel_data.player_id}')
-	channels.init_chat_channel(channel_name)
 	return clickable_channel_ref
 
 ### Messages in chat
 
-async def process_message(message):
+async def find_chat_channel_and_post(message, chat_connection : ChatConnection, poster_id : str):
 	guild = server.get_guild()
+	discord_channel = guild.get_channel(int(chat_connection.channel_id))
+	if discord_channel == None:
+		raise RuntimeError(f'Could not find channel with ID {chat_connection.channel_id}')
+	else:
+		await posting.repost_message_to_channel(discord_channel, message, poster_id)
+
+def create_reposting_tasks(chat_name : str, message, poster_id : str):
+	file_name = chats[file_name_index][chat_name]
+	chat_state = ConfigObj(f'{chats_dir}/{file_name}')
+	for player_id in chat_state[chat_connection_index]:
+		# TODO: if connection is closed, don't try to send to its channel
+		chat_connection : ChatConnection = read_chat_connection(chat_state, player_id)
+		if chat_connection.channel_id != None:
+			yield asyncio.create_task(find_chat_channel_and_post(message, chat_connection, poster_id))
+
+async def process_message(message):
+	task1 = asyncio.create_task(message.delete())
 
 	sender_channel = message.channel
 	chat_channel_data : ChatChannelData = get_chat_data_from_channel_id(str(sender_channel.id))
+	handle = chat_channel_data.handle
+	chat_name = chat_channel_data.chat_name
 
-	#channels.new_post(channel_name : str, poster_id : str, message.created_at)
-
-	#ChatChannelData for easy ref:
-	#self.channel_id = channel_id
-	#self.chat_name = chat_name
-	#self.player_id = player_id
-	#self.handle = handle
-
-	# TODO: repost to own channel
-	# TODO: repost to other channel
+	full_post = channels.record_new_post(chat_channel_data.chat_name, handle, message.created_at)
+	poster_id = handle if full_post else None
+	tasks = create_reposting_tasks(chat_name, message, poster_id)
+	await asyncio.gather(task1, *tasks)
 

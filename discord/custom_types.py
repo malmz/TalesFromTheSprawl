@@ -44,7 +44,7 @@ class ChannelIdentifier(object):
 
 	@staticmethod
 	def from_string(string : str):
-		obj = ChatConnection()
+		obj = ChannelIdentifier()
 		obj.__dict__ = simplejson.loads(string)
 		return obj
 

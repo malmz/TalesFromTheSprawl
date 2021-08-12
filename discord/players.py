@@ -19,6 +19,7 @@ players_input = ConfigObj('players_input.conf')
 
 finance_statement_index = '___finance_statement_msg_id'
 
+# TODO: loop through all users, find their player_ids and re-map personal channels if not available
 def init(bot, guild):
 	if not player_ids_index in players:
 		players[player_ids_index] = {}
