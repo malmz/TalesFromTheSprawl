@@ -51,7 +51,8 @@ async def post_message_with_header(channel, message, sender_info : str):
         second_str = str(second)
     timestamp_str = '(' + hour_str + ':' + minute_str + ':' + second_str + ')'
     post = sender_info + double_hard_space + timestamp_str + ':\n' + sanitize_bold(message.content)
-    await channel.send(post, files=message.attachments)
+    files = [await a.to_file() for a in message.attachments]
+    await channel.send(post, files=files)
 
 async def post_message_with_header_sender_and_recip(channel, message, sender : str, recip : str):
     sender_info = f'**{sender}** to {recip}'
@@ -62,7 +63,8 @@ async def post_message_with_header_sender_only(channel, message, handle : str):
     await post_message_with_header(channel, message, sender)
 
 async def post_message_without_header(channel, message):
-    await channel.send(sanitize_bold(message.content), files=message.attachments)
+    files = [await a.to_file() for a in message.attachments]
+    await channel.send(sanitize_bold(message.content), files=files)
 
 async def repost_message(message, handle):
     if handle == None:
