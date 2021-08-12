@@ -46,11 +46,12 @@ async def on_ready():
     global guild
     global guild_name
     guild = discord.utils.find(lambda g: g.name == guild_name, bot.guilds)
+    server.init(bot, guild)
+    players.init(bot, guild)
     channels.init_channels(bot)
     #handles.init() #TODO: ensure that every user has a handle?
     finances.init_finances()
-    players.init(bot, guild)
-    server.init(bot, guild)
+    await chats.init(bot, reset_all=True)
     print('Initialization complete.')
 
 @bot.event
@@ -87,11 +88,14 @@ async def on_message(message):
         return        
 
     if channels.is_anonymous_channel(message.channel):
-        await posting.process_message(message, True)
+        await posting.process_open_message(message, True)
         return
 
     if channels.is_pseudonymous_channel(message.channel):
-        await posting.process_message(message)
+        await posting.process_open_message(message)
+
+    if channels.is_chat_channel(message.channel):
+        await chats.process_message(message)
 
 
 
@@ -292,16 +296,16 @@ async def ping_command(ctx, handle : str):
 
 @bot.command(name='chat', help='Admin-only function to test chats')
 @commands.has_role('gm')
-async def chat_command(ctx):
-    #handle = handle.lower()
+async def chat_command(ctx, handle : str):
+    handle = handle.lower()
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    await chats.create_chat(ctx)
+    await chats.create_chat(ctx, handle)
 
-@bot.command(name='read_chat', help='Admin-only function to test chats')
-@commands.has_role('gm')
-async def read_chat_command(ctx):
-    await chats.read_chat()
+#@bot.command(name='read_chat', help='Admin-only function to test chats')
+#@commands.has_role('gm')
+#async def read_chat_command(ctx):
+#    await chats.read_chat()
 
 bot.run(TOKEN)

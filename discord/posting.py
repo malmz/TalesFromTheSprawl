@@ -4,6 +4,7 @@ from constants import forbidden_content
 import players
 
 import re
+import asyncio
 
 ### Module posting.py
 # General message processing (non-command) for system bot.
@@ -21,7 +22,7 @@ post_header_regex = re.compile(f'^[*][*](.*)[*][*]{double_hard_space}')
 def read_handle_from_post(post : str):
     matches = re.search(post_header_regex, post.lower())
     if matches != None:
-        return matches.group(1)
+        return matches.group(1).lower()
     else:
         return None
 
@@ -72,8 +73,8 @@ async def repost_message(message, handle):
     else:
         await post_message_with_header_sender_only(message.channel, message, handle)
 
-async def process_message(message, anonymous=False):
-    await message.delete()
+async def process_open_message(message, anonymous=False):
+    task1 = asyncio.create_task(message.delete())
     current_channel = str(message.channel.name)
     player_id = players.get_player_id(str(message.author.id))
     if anonymous:
@@ -85,13 +86,47 @@ async def process_message(message, anonymous=False):
         current_poster_display_name = handle
     full_post = channels.new_post(current_channel, current_poster_id, message.created_at)
     if full_post:
-        await repost_message(message, current_poster_display_name)
+        task2 = asyncio.create_task(repost_message(message, current_poster_display_name))
     else:
-        await repost_message(message, None)
+        task2 = asyncio.create_task(repost_message(message, None))
+    await task1
+    await task2
 
 
 # Private channels:
+
+async def process_chat_message(message):
+    sender_channel = message.channel
+
+    inbox_channel = players.get_inbox_channel_for_handle(ctx.guild, recip_handle)
+    if inbox_channel == None:
+        response = f'Error: cannot send message to {recip_handle}. Handle might not exist. Check the spelling.'
+        await ctx.send(response)
+    else:
+        outbox_channel = ctx.message.channel
+        sender_handle = handles.get_handle(str(ctx.message.author.id))
+        response = f'Message sent to {recip_handle}.'
+        # Post the same message to recipients inbox and senders outbox
+        await post_message_with_header_sender_and_recip(
+            inbox_channel,
+            ctx.message,
+            sender_handle,
+            recip_handle
+        )
+        await post_message_with_header_sender_and_recip(
+            outbox_channel,
+            ctx.message,
+            sender_handle,
+            recip_handle
+        )
+        # Delete the original message with the command
+        await ctx.message.delete()
+
+
+
+# Email:
 # Handle the inbox/outbox dynamic
+# (will likely be removed)
 
 async def process_email(ctx, recip_handle : str, content : str):
     inbox_channel = players.get_inbox_channel_for_handle(ctx.guild, recip_handle)

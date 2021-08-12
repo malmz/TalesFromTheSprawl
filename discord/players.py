@@ -278,16 +278,3 @@ def get_finance_channel_for_handle(guild, handle : str):
 		return None
 
 
-
-## Chats
-
-
-async def create_chat_channel(guild, player_id : str, channel_name : str):
-	role = get_player_role(guild, player_id)
-	overwrites = server.generate_overwrites_private_channel(role)
-	chat_channel = await channels.create_chat_channel(
-		guild,
-		overwrites,
-		channel_name
-	)
-	return chat_channel

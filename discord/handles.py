@@ -100,6 +100,8 @@ def handle_exists(handle : str):
 
 # Sanitize input -- special return on reserved values will protect many commands, including creating
 def get_handle_status(handle : str):
+    if handle.lower() != handle:
+        raise RuntimeError(f'Unsanitized handle {handle} passed to get_handle_status.')
     result = HandleStatus()
     for player_id in handles:
         if handle in get_handles_for_player(player_id):

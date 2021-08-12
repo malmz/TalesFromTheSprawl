@@ -1,7 +1,10 @@
 from configobj import ConfigObj
-
 import datetime
 import discord
+
+from custom_types import PostTimestamp, ChannelIdentifier
+import players
+import server
 
 ### Module common_channels.py
 # This module tracks and handles state related to channels
@@ -12,164 +15,182 @@ off_category_name = 'offline'
 public_category_name = 'public_network'
 shadowlands_category_name = 'shadowlands'
 
+channel_id_index = '___channel_id'
+last_poster_index = '___last_poster'
+last_full_post_index = '___last_full_post_time'
+post_counter_index = '___post_counter'
+
 # Channel state: this is the state of the channel, independent of the handles used in it.
 
 channel_states = ConfigObj('channel_states.conf')
 
-def clickable_channel_ref(channel):
-    return f'<#{channel.id}>'
 
-def is_offline_channel(channel):
-    if channel.category == None:
+### Utilities:
+
+def clickable_channel_ref(discord_channel):
+    return f'<#{discord_channel.id}>'
+
+def is_offline_channel(discord_channel):
+    if discord_channel.category == None:
         return True
     else:
-        return channel.category.name == off_category_name
+        return discord_channel.category.name == off_category_name
 
-def is_public_channel(channel):
-    if channel.category == None:
+def is_public_channel(discord_channel):
+    if discord_channel.category == None:
         return False
     else:
-        return channel.category.name == public_category_name
+        return discord_channel.category.name == public_category_name
 
-def is_pseudonymous_channel(channel):
-    if channel.category == None:
+def is_chat_channel(discord_channel):
+    if discord_channel.category == None:
         return False
     else:
-        return channel.category.name == public_category_name or channel.category.name == shadowlands_category_name
+        return discord_channel.category.name == chats_category_name
 
-def is_anonymous_channel(channel):
-    return channel.name == 'anon'
+def is_pseudonymous_channel(discord_channel):
+    if discord_channel.category == None:
+        return False
+    else:
+        return discord_channel.category.name == public_category_name or discord_channel.category.name == shadowlands_category_name
 
-def init_channel(channel):
-    if channel.type == discord.ChannelType.category or channel.type == discord.ChannelType.voice:
+def is_anonymous_channel(discord_channel):
+    return discord_channel.name == 'anon'
+
+def set_channel_id(channel_name : str, ident : ChannelIdentifier):
+    channel_states[channel_name][channel_id_index] = ident.to_string()
+    channel_states.write()
+
+def get_channel_id(channel_name : str):
+    return channel_states[channel_name][channel_id_index]
+
+def get_discord_channel_from_name(guild, channel_name : str):
+    ident : get_channel_id = get_channel_id(channel_name)
+    if ident.discord_channel_id != None:
+        return guild.get_channel(channel_id)
+    else:
+        raise RuntimeError(f'Tried to find discord channel but channel_id missing: {ident.to_string()}')
+
+### Common init functions:
+
+def init_discord_channel(discord_channel):
+    if discord_channel.type == discord.ChannelType.category or discord_channel.type == discord.ChannelType.voice:
         # No need to do anything for the categories themselves or the voice channels
         return
 
-    if channel.category != None:
-        if channel.category.name == personal_category_name:
-            init_personal_channel(channel)
-        elif not channel.category.name == off_category_name:
-            init_common_channel(channel)
+    if discord_channel.category != None:
+        if discord_channel.category.name == personal_category_name:
+            init_personal_channel(discord_channel)
+        elif not discord_channel.category.name == off_category_name:
+            init_common_channel(discord_channel)
         else:
-            print(f'Will not create channel state for channel {channel.name} in category {channel.category.name}')
+            print(f'Will not create channel state for channel {discord_channel.name} in category {discord_channel.category.name}')
     else:
-        print(f'Will not create channel state for channel {channel.name} which has no category')
+        print(f'Will not create channel state for channel {discord_channel.name} which has no category')
+
 
 def init_channels(bot):
-    for channel in bot.get_all_channels():
-        init_channel(channel)
+    for discord_channel in bot.get_all_channels():
+        init_discord_channel(discord_channel)
 
-# Common channels:
-
-def init_common_channel(channel):
-    channel_name = channel.name
+def init_channel_state(discord_channel):
+    channel_name = discord_channel.name
     channel_states[channel_name] = {}
-    set_channel_id(channel)
+    channel_states.write()
+    ident = ChannelIdentifier(discord_channel_id=discord_channel.id)
+    set_channel_id(discord_channel.name, ident)    
+
+def init_common_channel(discord_channel):
+    init_channel_state(discord_channel)
+    init_pseudonymous_channel(discord_channel.name)
+
+def init_personal_channel(discord_channel):
+    init_channel_state(discord_channel)
+
+
+### Utilities related to pseudonymous channels, i.e. ones where all messages are reposted using handle
+
+def init_pseudonymous_channel(channel_name : str):
     set_last_poster(channel_name, '')
     timestamp = datetime.datetime.today()
     set_last_full_post(channel_name, timestamp)
     reset_post_counter(channel_name)
 
-def set_channel_id(channel):
-    channel_states[channel.name]['id'] = channel.id
+def set_last_poster(channel_name : str, poster_id : str):
+    channel_states[channel_name][last_poster_index] = poster_id;
     channel_states.write()
 
-def get_channel_id(channel_name : str):
-    return channel_states[channel_name]['id']
-
-def set_last_poster(channel : str, poster_id : str):
-    if not channel in channel_states:
-        init_channel(channel)
-    channel_states[channel]['last_poster'] = poster_id;
-    channel_states.write()
-
-def get_last_poster(channel : str):
-    if not channel in channel_states:
-        return ''
-    if not 'last_poster' in channel_states[channel]:
+def get_last_poster(channel_name : str):
+    if not last_poster_index in channel_states[channel_name]:
         return ''
     else:
-        return channel_states[channel]['last_poster'];
+        return channel_states[channel_name][last_poster_index];
 
-def set_last_full_post(channel : str, timestamp):
-    if not channel in channel_states:
-        init_channel(channel);
-    channel_states[channel]['last_poster_info_hour'] = str(timestamp.hour)
-    channel_states[channel]['last_poster_info_minute'] = str(timestamp.minute)
+def set_last_post_time(channel_name : str, post_timestamp):
+    channel_states[channel_name][last_full_post_index] = post_timestamp.to_string()
+
+def get_last_post_time(channel_name : str):
+    return PostTimestamp.from_string(channel_states[channel_name][last_full_post_index])
+
+def set_last_full_post(channel_name : str, timestamp):
+    post_time = PostTimestamp(timestamp.hour, timestamp.minute)
+    set_last_post_time(channel_name, post_time)
     channel_states.write()
 
-def time_has_passed_since_last_full_post(channel, timestamp):
-    if not channel in channel_states:
-        init_channel(channel)
-        return True
-    hour = str(timestamp.hour)
-    minute = str(timestamp.minute)
-    old_hour = channel_states[channel]['last_poster_info_hour']
-    old_minute = channel_states[channel]['last_poster_info_minute']
-    if minute != old_minute or hour != old_hour:
+def time_has_passed_since_last_full_post(channel_name : str, timestamp):
+    post_time = PostTimestamp(timestamp.hour, timestamp.minute)
+    old_time = get_last_post_time(channel_name)
+    if post_time != old_time:
         return True
     else:
         return False
 
-def increment_post_counter(channel):
-    if not channel in channel_states:
-        init_channel(channel)
-    count = int(channel_states[channel]['post_counter'])
+def increment_post_counter(channel_name : str):
+    count = int(channel_states[channel_name][post_counter_index])
     count += 1
-    channel_states[channel]['post_counter'] = str(count)
+    channel_states[channel_name][post_counter_index] = str(count)
     channel_states.write()
     return count >= 10
 
-def reset_post_counter(channel):
-    channel_states[channel]['post_counter'] = str(0)
+def reset_post_counter(channel_name : str):
+    channel_states[channel_name][post_counter_index] = str(0)
     channel_states.write()
 
-def new_post(channel : str, poster_id : str, timestamp):
-    last_poster = get_last_poster(channel)
-    time_has_passed = time_has_passed_since_last_full_post(channel, timestamp)
-    counter_has_passed_limit = increment_post_counter(channel)
+def new_post(channel_name : str, poster_id : str, timestamp):
+    last_poster = get_last_poster(channel_name)
+    time_has_passed = time_has_passed_since_last_full_post(channel_name, timestamp)
+    counter_has_passed_limit = increment_post_counter(channel_name)
 
     if last_poster != poster_id or time_has_passed or counter_has_passed_limit:
-        set_last_poster(channel, poster_id)
-        set_last_full_post(channel, timestamp)
-        reset_post_counter(channel)
+        set_last_poster(channel_name, poster_id)
+        set_last_full_post(channel_name, timestamp)
+        reset_post_counter(channel_name)
         return True
     else:
         return False
 
 
-# Personal channels:
+### Private channels:
+# Only visible to some players
+
+async def create_private_channel(guild, overwrites, channel_name : str, category_name : str):
+    category = discord.utils.find(lambda cat: cat.name == category_name, guild.channels)
+    channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
+    init_channel_state(channel)
+    return channel
+
+
+### Personal channels: completely belonging to and owned by one player
 
 cmd_line_base = 'cmd_line_'
 inbox_base = 'inbox_'
 outbox_base = 'outbox_'
 finance_base = 'finance_'
 daemon_base = 'daemon_'
-private_base = 'private_chats_'
 # TODO: some sort of dictionary for these, with an enum type
-
-async def create_private_channel(guild, overwrites, channel_name : str, category_name : str):
-    category = discord.utils.find(lambda cat: cat.name == category_name, guild.channels)
-    channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
-    init_personal_channel(channel)
-    return channel
 
 async def create_personal_channel(guild, overwrites, channel_name : str):
     return await create_private_channel(guild, overwrites, channel_name, personal_category_name)
-
-# TODO: chat channels should have the "last poster" etc in them somehow
-async def create_chat_channel(guild, overwrites, channel_name : str):
-    return await create_private_channel(guild, overwrites, channel_name, chats_category_name)
-
-def init_personal_channel(channel):
-    channel_states[channel.name] = {}
-    set_channel_id(channel)
-    channel_states.write()
-
-def get_channel_from_name(guild, channel_name : str):
-    channel_id = get_channel_id(channel_name)
-    return guild.get_channel(channel_id)
-
 
 def get_cmd_line_name(player_id : str):
     return cmd_line_base + player_id
@@ -179,7 +200,7 @@ def is_cmd_line(channel_name : str):
 
 def get_cmd_line_channel(guild, player_id : str):
     channel_name = get_cmd_line_name(player_id)
-    return get_channel_from_name(guild, channel_name)
+    return get_discord_channel_from_name(guild, channel_name)
 
 
 def get_inbox_name(player_id : str):
@@ -190,7 +211,7 @@ def is_inbox(channel_name : str):
 
 def get_inbox_channel(guild, player_id : str):
     channel_name = get_inbox_name(player_id)
-    return get_channel_from_name(guild, channel_name)
+    return get_discord_channel_from_name(guild, channel_name)
 
 
 def get_outbox_name(player_id : str):
@@ -208,7 +229,34 @@ def is_inbox(channel_name : str):
 
 def get_finance_channel(guild, player_id : str):
     channel_name = get_finance_name(player_id)
-    return get_channel_from_name(guild, channel_name)
+    return get_discord_channel_from_name(guild, channel_name)
+
+
+### Chat channels:
+# These are weird: the "channel" is not the discord channel, but rather a name that can be used to fetch one or more channels
+# from the chats.py module
+
+def init_chat_channel(channel_name : str):
+    channel_states[channel_name] = {}
+    channel_states.write()
+    init_pseudonymous_channel(channel_name)
+    ident = ChannelIdentifier(chat_channel_name=channel_name)
+    set_channel_id(channel_name, ident)
+
+async def create_chat_session_channel(guild, player_id : str, discord_channel_name : str):
+    role = players.get_player_role(guild, player_id)
+    overwrites = server.generate_overwrites_private_channel(role)
+    return await create_private_channel(guild, overwrites, discord_channel_name, chats_category_name)
+
+async def delete_all_chats(bot):
+    for channel in get_all_chat_channels(bot):
+        await channel.delete()
+        # TODO: update chat status to closed (probably do this from caller)
+
+def get_all_chat_channels(bot):
+    for channel in bot.get_all_channels():
+        if is_chat_channel(channel):
+            yield channel
 
 
 
