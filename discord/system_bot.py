@@ -18,6 +18,8 @@ import reactions
 import players
 import finances
 import custom_types
+import chats
+import server
 
 
 load_dotenv()
@@ -48,6 +50,7 @@ async def on_ready():
     #handles.init() #TODO: ensure that every user has a handle?
     finances.init_finances()
     players.init(bot, guild)
+    server.init(bot, guild)
     print('Initialization complete.')
 
 @bot.event
@@ -119,18 +122,7 @@ async def on_member_join(member):
 
 @bot.command(name='handle', help='Show current handle, or switch to another handle. To switch, new handle must be free (then it will be created) or controlled by you. Your handle is shown to other users in most other channels.')
 async def switch_handle_command(ctx, new_handle : str=None, burner=False):
-    user_id = str(ctx.message.author.id)
-    if new_handle == None:
-        response = handles.try_switch_to_none_handle(user_id)
-    else:
-        handle_status : HandleStatus = handles.get_handle_status(new_handle)
-        if (handle_status.exists and handle_status.user_id == user_id):
-            response = handles.switch_to_own_existing_handle(user_id, new_handle, handle_status, burner)
-        elif (handle_status.exists):
-            response = 'Error: the handle ' + new_handle + ' is currently registered by someone else'
-        else:
-            response = handles.create_handle_and_switch(user_id, new_handle, burner)
-    await ctx.send(response)
+    await handles.process_handle_command(ctx, new_handle, burner)
 
 @bot.command(name='burner', help='Create a new burner handle, or switch to one that you already that you have not burned yet.')
 async def create_burner_command(ctx, new_id : str=None):
@@ -142,6 +134,7 @@ async def burn_command(ctx, burner_id : str=None):
     if burner_id == None:
         response = 'Error: No burner handle specified. Use \".burn <handle>\"'
     else:
+        burner_id = burner_id.lower()
         user_id = str(ctx.message.author.id)
         handle_status : handles.HandleStatus = handles.get_handle_status(burner_id)
         if (not handle_status.exists):
@@ -174,13 +167,15 @@ async def create_money_command(ctx, handle : str=None, amount : int=0):
 
     if handle == None:
         response = 'Error: no handle specified.'
-    elif amount <= 0:
-        response = 'Error: cannot create less than ¥ 1.'
-    elif handles.handle_exists(handle):
-        await finances.add_funds(ctx.guild, handle, amount)
-        response = 'Added ' + str(amount) + ' to the balance of ' + handle
     else:
-        response = 'Error: handle \"' + handle + '\" does not exist.'
+        handle = handle.lower()
+        if amount <= 0:
+            response = 'Error: cannot create less than ¥ 1.'
+        elif handles.handle_exists(handle):
+            await finances.add_funds(ctx.guild, handle, amount)
+            response = 'Added ' + str(amount) + ' to the balance of ' + handle
+        else:
+            response = 'Error: handle \"' + handle + '\" does not exist.'
     await ctx.send(response)
 
 @bot.command(name='set_money', help='Use \".set_money <handle> <amount>\" to set the balance of an account (will be admin-only during the game)')
@@ -192,13 +187,15 @@ async def set_money_command(ctx, handle : str=None, amount : int=-1):
 
     if handle == None:
         response = 'Error: no handle specified.'
-    elif amount < 0:
-        response = 'Error: you must set a new balance.'
-    elif handles.handle_exists(handle):
-        await finances.overwrite_balance(ctx.guild, handle, amount)
-        response = 'Set the balance of ' + handle + ' to ' + str(amount)
     else:
-        response = 'Error: handle \"' + handle + '\" does not exist.'
+        handle = handle.lower()
+        if amount < 0:
+            response = 'Error: you must set a new balance.'
+        elif handles.handle_exists(handle):
+            await finances.overwrite_balance(ctx.guild, handle, amount)
+            response = 'Set the balance of ' + handle + ' to ' + str(amount)
+        else:
+            response = 'Error: handle \"' + handle + '\" does not exist.'
     await ctx.send(response)
 
 @bot.command(name='pay', help='Pay money (¥) to the owner of another handle')
@@ -209,12 +206,14 @@ async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
 
     if handle_recip == None:
         response = 'Error: no recipient specified. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
-    elif amount <= 0:
-        response = 'Error: cannot transfer less than ¥ 1. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
     else:
-        user_id = str(ctx.message.author.id)
-        transaction : custom_types.Transaction = await finances.try_to_pay(ctx.guild, user_id, handle_recip, amount)
-        response = transaction.report
+        handle_recip = handle_recip.lower()
+        if amount <= 0:
+            response = 'Error: cannot transfer less than ¥ 1. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
+        else:
+            user_id = str(ctx.message.author.id)
+            transaction : custom_types.Transaction = await finances.try_to_pay(ctx.guild, user_id, handle_recip, amount)
+            response = transaction.report
     await ctx.send(response)
 
 @bot.command(name='balance', help='Show current balance (amount of money available) on all available handles.')
@@ -253,6 +252,7 @@ async def message_command(ctx, handle : str = None, content : str = None):
         await ctx.send(response)
         return
 
+    handle = handle.lower()
     await posting.process_email(ctx, handle, content)
 
 # Admin-only commands for testing etc.
@@ -271,6 +271,13 @@ async def fake_join_command(ctx, nick : str):
     member_to_fake_join = discord.utils.find(lambda m: m.name == nick, members)
     await on_member_join(member_to_fake_join)
 
+@bot.command(name='fake_join_nick', help='Admin-only function to test run the new member mechanics')
+@commands.has_role('gm')
+async def fake_join_command(ctx, nick : str):
+    members = await ctx.guild.fetch_members(limit=100).flatten()
+    print(f'{members}')
+    member_to_fake_join = discord.utils.find(lambda m: m.nick == nick, members)
+    await on_member_join(member_to_fake_join)
 
 @bot.command(name='ping', help='Admin-only function to test user-player-channel mappings')
 @commands.has_role('gm')
@@ -280,5 +287,21 @@ async def ping_command(ctx, handle : str):
         await channel.send(f'Testing ping for {handle}')
     else:
         print(f'Error: could not find the command line channel for {handle}')
+
+# Chats
+
+@bot.command(name='chat', help='Admin-only function to test chats')
+@commands.has_role('gm')
+async def chat_command(ctx):
+    #handle = handle.lower()
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    await chats.create_chat(ctx)
+
+@bot.command(name='read_chat', help='Admin-only function to test chats')
+@commands.has_role('gm')
+async def read_chat_command(ctx):
+    await chats.read_chat()
 
 bot.run(TOKEN)

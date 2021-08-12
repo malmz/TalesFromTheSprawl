@@ -3,7 +3,9 @@ import handles
 import reactions
 import finances
 import constants
-from constants import highest_ever_index, player_ids_index, system_role_name
+import server
+
+from constants import highest_ever_index, player_ids_index
 from custom_types import Transaction
 
 import discord
@@ -14,31 +16,21 @@ from configobj import ConfigObj
 players = ConfigObj('players.conf')
 players_input = ConfigObj('players_input.conf')
 
-system_role = None
 
 finance_statement_index = '___finance_statement_msg_id'
 
 def init(bot, guild):
-	global system_role
-	system_role = discord.utils.find(lambda role: role.name == system_role_name, guild.roles)
 	if not player_ids_index in players:
 		players[player_ids_index] = {}
 	if not highest_ever_index in players[player_ids_index]:
 		players[player_ids_index][highest_ever_index] = '2701'
 	players.write()
 
-async def create_personal_channel(member, overwrites, channel_name):
-	category_personal = discord.utils.find(lambda cat: cat.name == channels.personal_category_name, member.guild.channels)
-	overwrites = {
-		member.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-		role: discord.PermissionOverwrite(read_messages=True),
-		system_role: discord.PermissionOverwrite(read_messages=True)
-	}
-	channel_name = channels.get_cmd_line_name(player_id)
-	channel = await member.guild.create_text_channel(channel_name, overwrites=overwrites, category=category_personal)
-	channels.init_personal_channel(channel)
-	return channel
+def get_player_id(user_id : str):
+	return players[player_ids_index][user_id];
 
+def get_player_role(guild, player_id : str):
+	return discord.utils.find(lambda role: role.name == player_id, guild.roles)
 
 async def create_player(member):
 	user_id = str(member.id)
@@ -52,35 +44,26 @@ async def create_player(member):
 	role = await member.guild.create_role(name=new_player_id)
 
 	# Create personal channels for user:
-	overwrites = {
-		member.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-		role: discord.PermissionOverwrite(read_messages=True),
-		system_role: discord.PermissionOverwrite(read_messages=True)
-	}
-
-	overwrites_finance = {
-		member.guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
-		role: discord.PermissionOverwrite(read_messages=True),
-		system_role: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-	}
+	overwrites = server.generate_overwrites_private_channel(role)
+	overwrites_finance = server.generate_overwrites_private_channel(role, read_only=True)
 
 	cmd_line_channel = await channels.create_personal_channel(
-		member,
+		member.guild,
 		overwrites,
 		channels.get_cmd_line_name(new_player_id)
 	)
 	inbox_channel = await channels.create_personal_channel(
-		member,
+		member.guild,
 		overwrites,
 		channels.get_inbox_name(new_player_id)
 	)
 	outbox_channel = await channels.create_personal_channel(
-		member,
+		member.guild,
 		overwrites,
 		channels.get_outbox_name(new_player_id)
 	)
 	finances_channel = await channels.create_personal_channel(
-		member,
+		member.guild,
 		overwrites_finance,
 		channels.get_finance_name(new_player_id)
 	)
@@ -99,20 +82,18 @@ async def create_player(member):
 	except discord.Forbidden:
 		print(f'Probably tried to edit server owner, wont\'t work')
 
-	# TODO: send welcome message in cmd_line
-
 	task1 = asyncio.create_task(send_startup_message_cmd_line(member, new_player_id, cmd_line_channel))
 
 	task2 = asyncio.create_task(
 		send_startup_message_inbox(
 			inbox_channel,
-			get_clickable_channel_ref(member.guild, outbox_channel)
+			channels.clickable_channel_ref(outbox_channel)
 		)
 	)
 	task3 = asyncio.create_task(
 		send_startup_message_outbox(
 			outbox_channel,
-			get_clickable_channel_ref(member.guild, inbox_channel)
+			channels.clickable_channel_ref(inbox_channel)
 		)
 	)
 	task4 = asyncio.create_task(send_startup_message_finance(finances_channel))
@@ -122,9 +103,6 @@ async def create_player(member):
 	await task4
 
 	handles.init_handles_for_user(user_id, base_nick)
-
-def get_clickable_channel_ref(guild, channel):
-	return f'<#{channel.id}>'
 
 async def send_startup_message_cmd_line(member, player_id : str, channel):
 	content = 'Welcome to the matrix_client. This is your command line. To see all commands, type \"**.help**\"\n'
@@ -304,3 +282,18 @@ def get_finance_channel_for_handle(guild, handle : str):
 def get_finance_channel_for_user(guild, user_id : str):
 	player_id = players[player_ids_index][user_id]
 	return channels.get_finance_channel(guild, player_id)
+
+
+
+## Chats
+
+
+async def create_chat_channel(guild, user_id : str, player_id : str, channel_name : str):
+	role = get_player_role(guild, player_id)
+	overwrites = server.generate_overwrites_private_channel(role)
+	chat_channel = await channels.create_chat_channel(
+		guild,
+		overwrites,
+		channel_name
+	)
+	return chat_channel

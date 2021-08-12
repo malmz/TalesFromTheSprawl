@@ -1,7 +1,8 @@
 import finances
-from constants import forbidden_prefix, forbidden_content, forbidden_prefix_print, forbidden_content_print
+from constants import forbidden_content, forbidden_content_print
 
 from configobj import ConfigObj
+import re
 
 ### Module handles.py
 # This module tracks and handles state related to handles, e.g. in-game names/accounts that
@@ -13,6 +14,9 @@ active_index = '___active'
 last_regular_index = '___last_regular'
 
 # TODO: should be able to remove a lot of on-demand initialization now that we init all users
+
+
+alphanumeric_regex = re.compile(f'^[a-z0-9]*$')
 
 class HandleStatus:
     handle : str = ''
@@ -29,12 +33,12 @@ def init_handles_for_user(user_id : str, player_id : str = None ):
     create_regular_handle(user_id, first_handle)
     switch_to_handle(user_id, first_handle)
 
+def is_allowed_handle(new_handle : str):
+	matches = re.search(alphanumeric_regex, new_handle)
+	return matches == None
+
 def create_handle(user_id : str, new_handle : str, burner : bool):
-	if new_handle.startswith(forbidden_prefix):
-		print(f'{user_id} starts with {forbidden_prefix}')
-		return False
-	if forbidden_content in new_handle:
-		print(f'{user_id} contains {forbidden_content}')
+	if is_allowed_handle(new_handle):
 		return False
 	handles[user_id][new_handle] = 'burner' if burner else 'regular'
 	finances.init_finances_for_handle(new_handle)
@@ -114,7 +118,7 @@ def get_handle_status(handle : str):
 
 ### Async methods, directly related to commands
 
-def try_switch_to_none_handle(user_id : str):
+def current_handle_report(user_id : str):
     current_handle = get_handle(user_id)
     handle_status : HandleStatus = get_handle_status(current_handle)
     if (handle_status.handle_type == 'burner'):
@@ -146,5 +150,24 @@ def create_handle_and_switch(user_id : str, new_handle : str, new_shall_be_burne
 		else:
 			response = f'Switched to new handle **{new_handle}** (created now).'
 	else:
-		response = f'Error: cannot create handle {new_handle}. Handles cannot start with \"{forbidden_prefix_print}\" or contain \"{forbidden_content_print}\".'
+		response = f'Error: cannot create handle {new_handle}. Handles can only contain letters a-z (lowercase) and numbers 0-9.'
 	return response
+
+async def process_handle_command(ctx, new_handle : str=None, burner=False):
+    user_id = str(ctx.message.author.id)
+    if new_handle == None:
+        response = current_handle_report(user_id)
+        if burner:
+        	response += ' To create a new burner, use \".burner <new_name>\".'
+    else:
+        new_handle_lower = new_handle.lower()
+        handle_status : HandleStatus = get_handle_status(new_handle_lower)
+        if (handle_status.exists and handle_status.user_id == user_id):
+            response = switch_to_own_existing_handle(user_id, new_handle_lower, handle_status, burner)
+        elif (handle_status.exists):
+            response = f'Error: the handle {new_handle} is currently registered by someone else.'
+        else:
+            response = create_handle_and_switch(user_id, new_handle_lower, burner)
+        if (new_handle_lower != new_handle):
+            response += f'\nNote that handles are lowercase only: {new_handle} -> **{new_handle_lower}**.'
+    await ctx.send(response)

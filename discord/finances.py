@@ -167,7 +167,7 @@ async def try_to_pay(guild, user_id : str, handle_recip : str, amount : int, fro
         if from_reaction:
             transaction.report = f'Tried to transfer ¥ **{amount}** based on your reaction (emoji), but recipient {handle_recip} does not exist.'
         else:
-            transaction.report = f'Failed to transfer ¥ **{amount}** from {handle_payer} to {handle_recip}; recipient does not exist. Check the spelling; lowercase/UPPERCASE matters.'
+            transaction.report = f'Failed to transfer ¥ **{amount}** from {handle_payer} to {handle_recip}; recipient does not exist. Check the spelling.'
     else:
         transaction = transfer_funds(transaction)
         if not transaction.success:

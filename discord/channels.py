@@ -7,6 +7,7 @@ import discord
 # This module tracks and handles state related to channels
 
 personal_category_name = 'personal_account'
+chats_category_name = 'chats'
 off_category_name = 'offline'
 public_category_name = 'public_network'
 shadowlands_category_name = 'shadowlands'
@@ -14,6 +15,9 @@ shadowlands_category_name = 'shadowlands'
 # Channel state: this is the state of the channel, independent of the handles used in it.
 
 channel_states = ConfigObj('channel_states.conf')
+
+def clickable_channel_ref(channel):
+    return f'<#{channel.id}>'
 
 def is_offline_channel(channel):
     if channel.category == None:
@@ -144,11 +148,18 @@ daemon_base = 'daemon_'
 private_base = 'private_chats_'
 # TODO: some sort of dictionary for these, with an enum type
 
-async def create_personal_channel(member, overwrites, channel_name):
-    category_personal = discord.utils.find(lambda cat: cat.name == personal_category_name, member.guild.channels)
-    channel = await member.guild.create_text_channel(channel_name, overwrites=overwrites, category=category_personal)
+async def create_private_channel(guild, overwrites, channel_name : str, category_name : str):
+    category = discord.utils.find(lambda cat: cat.name == category_name, guild.channels)
+    channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
     init_personal_channel(channel)
     return channel
+
+async def create_personal_channel(guild, overwrites, channel_name : str):
+    return await create_private_channel(guild, overwrites, channel_name, personal_category_name)
+
+# TODO: chat channels should have the "last poster" etc in them somehow
+async def create_chat_channel(guild, overwrites, channel_name : str):
+    return await create_private_channel(guild, overwrites, channel_name, chats_category_name)
 
 def init_personal_channel(channel):
     channel_states[channel.name] = {}

@@ -19,7 +19,7 @@ double_hard_space = hard_space + hard_space
 post_header_regex = re.compile(f'^[*][*](.*)[*][*]{double_hard_space}')
 
 def read_handle_from_post(post : str):
-    matches = re.search(post_header_regex, post)
+    matches = re.search(post_header_regex, post.lower())
     if matches != None:
         return matches.group(1)
     else:
