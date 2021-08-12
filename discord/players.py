@@ -27,6 +27,8 @@ def init(bot, guild):
 	players.write()
 
 def get_player_id(user_id : str):
+	if not user_id in players[player_ids_index]:
+		raise RuntimeError(f'User {user_id} has not been initialized as a player. Fix that first.')
 	return players[player_ids_index][user_id];
 
 def get_player_role(guild, player_id : str):
@@ -102,7 +104,7 @@ async def create_player(member):
 	await task3
 	await task4
 
-	handles.init_handles_for_user(user_id, base_nick)
+	handles.init_handles_for_player(player_id, base_nick)
 
 async def send_startup_message_cmd_line(member, player_id : str, channel):
 	content = 'Welcome to the matrix_client. This is your command line. To see all commands, type \"**.help**\"\n'
@@ -172,16 +174,15 @@ async def send_startup_message_finance(channel):
 	content = content + 'A record of every transaction will appear here. You cannot send anything in this channel.'
 	await channel.send(content)
 
-async def update_financial_statement(channel, user_id : str):
-	player_id = players[player_ids_index][user_id]
+async def update_financial_statement(channel, player_id : str):
 	if not player_id in players:
-		players[player_id] = {}
+		raise RuntimeError(f'Player {player_id} has not been initialized correctly.')
 	if finance_statement_index in players[player_id]:
 		msg_id = players[player_id][finance_statement_index]
 		message = await channel.fetch_message(msg_id)
 		await message.delete()
 
-	report = finances.get_all_handles_balance_report(user_id)
+	report = finances.get_all_handles_balance_report(player_id)
 	content = '========================\n' + report
 
 	new_message = await channel.send(content)
@@ -196,17 +197,17 @@ async def record_transaction(guild, transaction : Transaction):
 		if transaction.recip == constants.transaction_collector:
 			await write_financial_record(
 				guild,
-				payer_status.user_id,
+				payer_status.player_id,
 				finances.generate_record_collected(transaction),
 				transaction.last_in_sequence
 			)
 		elif recip_status.exists:
 			# Both payer and recip are normal handles
-			if payer_status.user_id == recip_status.user_id:
+			if payer_status.player_id == recip_status.player_id:
 				# Special case: payer and recip are the same
 				await write_financial_record(
 					guild,
-					payer_status.user_id,
+					payer_status.player_id,
 					finances.generate_record_self_transfer(transaction),
 					transaction.last_in_sequence
 				)
@@ -214,7 +215,7 @@ async def record_transaction(guild, transaction : Transaction):
 				await asyncio.create_task(
 					write_financial_record(
 						guild,
-						payer_status.user_id,
+						payer_status.player_id,
 						finances.generate_record_payer(transaction),
 						transaction.last_in_sequence
 					)
@@ -222,7 +223,7 @@ async def record_transaction(guild, transaction : Transaction):
 				await asyncio.create_task(
 					write_financial_record(
 						guild,
-						recip_status.user_id,
+						recip_status.player_id,
 						finances.generate_record_recip(transaction),
 						transaction.last_in_sequence
 					)
@@ -230,7 +231,7 @@ async def record_transaction(guild, transaction : Transaction):
 		else:
 			# Only payer exists, not recip:
 			await write_financial_record(guild,
-				payer_status.user_id,
+				payer_status.player_id,
 				finances.generate_record_payer(transaction),
 				transaction.last_in_sequence
 			)
@@ -240,55 +241,48 @@ async def record_transaction(guild, transaction : Transaction):
 		if transaction.payer == constants.transaction_collected:
 			await write_financial_record(
 				guild,
-				recip_status.user_id,
+				recip_status.player_id,
 				finances.generate_record_collector(transaction),
 				transaction.last_in_sequence
 			)
 		else:
-			await write_financial_record(guild, recip_status.user_id, finances.generate_record_recip(transaction), transaction.last_in_sequence)
+			await write_financial_record(guild, recip_status.player_id, finances.generate_record_recip(transaction), transaction.last_in_sequence)
 
 
-async def write_financial_record(guild, user_id : str, content : str, last_in_sequence : bool):
-	player_id = players[player_ids_index][user_id]
-	channel = get_finance_channel_for_user(guild, user_id)
+async def write_financial_record(guild, player_id : str, content : str, last_in_sequence : bool):
+	channel = channels.get_finance_channel(guild, player_id)
 	await asyncio.create_task(channel.send(content))
 	if last_in_sequence:
-		await asyncio.create_task(update_financial_statement(channel, user_id))
+		await asyncio.create_task(update_financial_statement(channel, player_id))
 
 
 def get_cmd_line_channel_for_handle(guild, handle : str):
 	status : handles.HandleStatus = handles.get_handle_status(handle)
 	if status.exists:
-		player_id = players[player_ids][status.user_id]
-		return channels.get_cmd_line_channel(guild, player_id)
+		return channels.get_cmd_line_channel(guild, status.player_id)
 	else:
 		return None
 
 def get_inbox_channel_for_handle(guild, handle : str):
 	status : handles.HandleStatus = handles.get_handle_status(handle)
 	if status.exists:
-		player_id = players[player_ids_index][status.user_id]
-		return channels.get_inbox_channel(guild, player_id)
+		return channels.get_inbox_channel(guild, status.player_id)
 	else:
 		return None
 
 def get_finance_channel_for_handle(guild, handle : str):
 	status : handles.HandleStatus = handles.get_handle_status(handle)
 	if status.exists:
-		return get_finance_channel_for_user(guild, status.user_id)
+		return channels.get_finance_channel(guild, status.player_id)
 	else:
 		return None
-
-def get_finance_channel_for_user(guild, user_id : str):
-	player_id = players[player_ids_index][user_id]
-	return channels.get_finance_channel(guild, player_id)
 
 
 
 ## Chats
 
 
-async def create_chat_channel(guild, user_id : str, player_id : str, channel_name : str):
+async def create_chat_channel(guild, player_id : str, channel_name : str):
 	role = get_player_role(guild, player_id)
 	overwrites = server.generate_overwrites_private_channel(role)
 	chat_channel = await channels.create_chat_channel(

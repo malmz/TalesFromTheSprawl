@@ -1,5 +1,6 @@
 # Runtime conf files
 discord/*.conf
+discord/chats/*.conf
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

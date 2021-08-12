@@ -108,7 +108,7 @@ async def on_raw_reaction_add(payload):
         # No bot shenanigans in the off channels
         return
 
-    await reactions.process_reaction_add(payload.message_id, str(payload.user_id), channel, payload.emoji)
+    await reactions.process_reaction_add(payload.message_id, payload.user_id, channel, payload.emoji)
 
 # New players
 
@@ -135,17 +135,17 @@ async def burn_command(ctx, burner_id : str=None):
         response = 'Error: No burner handle specified. Use \".burn <handle>\"'
     else:
         burner_id = burner_id.lower()
-        user_id = str(ctx.message.author.id)
+        player_id = players.get_player_id(str(ctx.message.author.id))
         handle_status : handles.HandleStatus = handles.get_handle_status(burner_id)
         if (not handle_status.exists):
             response = 'Error: the handle ' + burner_id + ' does not exist'
-        elif (handle_status.user_id != user_id):
+        elif (handle_status.player_id != player_id):
             response = 'Error: you do not have access to ' + burner_id
         elif (handle_status.handle_type == 'regular'):
             response = 'Error: **' + burner_id + '** is not a burner handle, cannot be destroyed. To stop using it, simply switch to another handle.'
         elif (handle_status.handle_type == 'burner'):
-            amount = await handles.destroy_burner(ctx.guild, user_id, burner_id)
-            current_handle = handles.get_handle(user_id)
+            amount = await handles.destroy_burner(ctx.guild, player_id, burner_id)
+            current_handle = handles.get_handle(player_id)
             response = 'Destroyed burner handle **' + burner_id + '**.\n'
             response = response + 'If you or someone else uses that name, it may be confusing but cannot be traced to the previous use.\n'
             if amount > 0:
@@ -211,8 +211,8 @@ async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
         if amount <= 0:
             response = 'Error: cannot transfer less than ¥ 1. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
         else:
-            user_id = str(ctx.message.author.id)
-            transaction : custom_types.Transaction = await finances.try_to_pay(ctx.guild, user_id, handle_recip, amount)
+            player_id = players.get_player_id(str(ctx.message.author.id))
+            transaction : custom_types.Transaction = await finances.try_to_pay(ctx.guild, player_id, handle_recip, amount)
             response = transaction.report
     await ctx.send(response)
 
@@ -222,8 +222,8 @@ async def show_balance_command(ctx):
         await swallow(ctx.message);
         return
 
-    user_id = str(ctx.message.author.id)
-    response = finances.get_all_handles_balance_report(user_id)
+    player_id = players.get_player_id(str(ctx.message.author.id))
+    response = finances.get_all_handles_balance_report(player_id)
     await ctx.send(response)
 
 @bot.command(name='collect', help='Collect all your funds from all handles to the current handle\'s account')
@@ -232,10 +232,10 @@ async def collect_command(ctx):
         await swallow(ctx.message);
         return
 
-    user_id = str(ctx.message.author.id)
+    player_id = players.get_player_id(str(ctx.message.author.id))
     response = 'Collecting all funds to the account of the current handle...'
     await asyncio.create_task(ctx.send(response))
-    await asyncio.create_task(finances.collect_all_funds(ctx.guild, user_id))
+    await asyncio.create_task(finances.collect_all_funds(ctx.guild, player_id))
     #await show_balance_command(ctx)
 
 

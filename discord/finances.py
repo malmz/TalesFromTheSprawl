@@ -58,11 +58,11 @@ async def overwrite_balance(guild, handle : str, balance : int):
     transaction.last_in_sequence = True
     await players.record_transaction(guild, transaction)
 
-def get_all_handles_balance_report(user_id : str):
-    current_handle = handles.get_handle(user_id)
+def get_all_handles_balance_report(player_id : str):
+    current_handle = handles.get_handle(player_id)
     report = 'Current balance for all your accounts:\n'
     total = 0
-    for handle in handles.get_handles_for_user(user_id):
+    for handle in handles.get_handles_for_player(player_id):
         balance = get_current_balance(handle)
         total += balance
         balance_str = str(balance)
@@ -104,14 +104,14 @@ async def add_funds(guild, handle : str, amount : int):
     transaction.success = True
     await players.record_transaction(guild, transaction)
 
-async def collect_all_funds(guild, user_id : str):
-    current_handle = handles.get_handle(user_id)
+async def collect_all_funds(guild, player_id : str):
+    current_handle = handles.get_handle(player_id)
     total = 0
     transaction = Transaction()
     transaction.recip = constants.transaction_collector
     transaction.success = True
     balance_on_current = 0
-    for handle in handles.get_handles_for_user(user_id):
+    for handle in handles.get_handles_for_player(player_id):
         collected = get_current_balance(handle)
         if collected > 0:
             total += collected
@@ -149,8 +149,8 @@ def generate_record_collected(transaction : Transaction):
 def generate_record_collector(transaction : Transaction):
     return f'▶️ --> **{transaction.recip}**: total ¥ {transaction.amount} collected from your other handles.'
 
-async def try_to_pay(guild, user_id : str, handle_recip : str, amount : int, from_reaction=False):
-    handle_payer = handles.get_handle(user_id)
+async def try_to_pay(guild, player_id : str, handle_recip : str, amount : int, from_reaction=False):
+    handle_payer = handles.get_handle(player_id)
     transaction = Transaction()
     transaction.payer = handle_payer
     transaction.recip = handle_recip
@@ -180,7 +180,7 @@ async def try_to_pay(guild, user_id : str, handle_recip : str, amount : int, fro
             # Success; no need for report to cmd_line
             await players.record_transaction(guild, transaction)
         else:
-            if recip_status.user_id == user_id:
+            if recip_status.player_id == player_id:
                 transaction.report = 'Successfully transferred ¥ **' + str(amount) + '** from ' + handle_payer + ' to **' + handle_recip + '**. (Note: you control both accounts.)'
             else:
                 transaction.report = 'Successfully transferred ¥ **' + str(amount) + '** from ' + handle_payer + ' to **' + handle_recip + '**.'

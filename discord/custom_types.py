@@ -11,3 +11,6 @@ class Transaction:
     recip : str = None
     last_in_sequence : bool = True
     # cause?
+
+#class ChatChannels:
+#	channel

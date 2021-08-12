@@ -37,11 +37,13 @@ async def find_reaction_recipient_and_message(message_id : int, channel):
 	return result
 
 
-async def process_reaction_add(message_id : int, user_id : str, channel, emoji):
+async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
 	if channels.is_anonymous_channel(channel):
 		# No point in acting on reactions when we can't determine the receiver
 		return
 	print(f'User reacted with {emoji}')
+
+	player_id = players.get_player_id(str(user_id))
 
 	# Currently only one use case for reading reactions, and that is for paying money
 	payment_amount = 0
@@ -59,7 +61,7 @@ async def process_reaction_add(message_id : int, user_id : str, channel, emoji):
 		else:
 			transaction : custom_types.Transaction = await finances.try_to_pay(
 				channel.guild,
-				user_id,
+				player_id,
 				search_result.recipient,
 				payment_amount,
 				from_reaction=True
@@ -67,7 +69,7 @@ async def process_reaction_add(message_id : int, user_id : str, channel, emoji):
 			if not transaction.success:
 				await remove_reaction(search_result.message, emoji, user_id)
 			if transaction.report != None:
-				handle = handles.get_handle(user_id)
+				handle = handles.get_handle(player_id)
 				cmd_line_channel = players.get_cmd_line_channel_for_handle(channel.guild, handle)
 				await cmd_line_channel.send(transaction.report)
 
