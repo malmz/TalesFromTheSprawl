@@ -174,4 +174,28 @@ async def process_handle_command(ctx, new_handle : str=None, burner=False):
             response = create_handle_and_switch(player_id, new_handle_lower, burner)
         if (new_handle_lower != new_handle):
             response += f'\nNote that handles are lowercase only: {new_handle} -> **{new_handle_lower}**.'
-    await ctx.send(response)
+    return response
+
+async def process_burn_command(ctx, burner_id : str=None):
+    if burner_id == None:
+        response = 'Error: No burner handle specified. Use \".burn <handle>\"'
+    else:
+        burner_id = burner_id.lower()
+        player_id = players.get_player_id(str(ctx.message.author.id))
+        handle_status : handles.HandleStatus = handles.get_handle_status(burner_id)
+        if (not handle_status.exists):
+            response = 'Error: the handle ' + burner_id + ' does not exist'
+        elif (handle_status.player_id != player_id):
+            response = 'Error: you do not have access to ' + burner_id
+        elif (handle_status.handle_type == 'regular'):
+            response = 'Error: **' + burner_id + '** is not a burner handle, cannot be destroyed. To stop using it, simply switch to another handle.'
+        elif (handle_status.handle_type == 'burner'):
+            amount = await handles.destroy_burner(ctx.guild, player_id, burner_id)
+            current_handle = handles.get_handle(player_id)
+            response = 'Destroyed burner handle **' + burner_id + '**.\n'
+            response = response + 'If you or someone else uses that name, it may be confusing but cannot be traced to the previous use.\n'
+            if amount > 0:
+                response = response + f'Your current handle is **{current_handle}**; the remaining ¥ {amount} from {burner_id} was transferred there.'
+            else:
+                response = response + 'Your current handle is **' + current_handle + '**.'
+    return response

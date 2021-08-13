@@ -195,7 +195,6 @@ def record_new_post(channel_name : str, poster_id : str, timestamp):
 
 async def create_private_channel(guild, overwrites, channel_name : str, category_name : str):
     category = discord.utils.find(lambda cat: cat.name == category_name, guild.channels)
-    print(f'{category},  {category_name}, {channel_name}, {guild.name}, {overwrites}')
     channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
     init_channel_state(channel)
     return channel
@@ -208,6 +207,7 @@ inbox_base = 'inbox_'
 outbox_base = 'outbox_'
 finance_base = 'finance_'
 daemon_base = 'daemon_'
+chat_hub_base = 'chat_hub_'
 # TODO: some sort of dictionary for these, with an enum type
 
 async def delete_all_personal_channels(bot):
@@ -254,12 +254,24 @@ def is_outbox(channel_name : str):
 def get_finance_name(player_id : str):
     return finance_base + player_id
 
-def is_inbox(channel_name : str):
+def is_finance(channel_name : str):
     return finance_base in channel_name
 
 def get_finance_channel(guild, player_id : str):
     channel_name = get_finance_name(player_id)
     return get_discord_channel_from_name(guild, channel_name)
+
+
+def get_chat_hub_name(player_id : str):
+    return chat_hub_base + player_id
+
+def is_chat_hub(channel_name : str):
+    return chat_hub_base in channel_name
+
+def get_chat_hub_channel(guild, player_id : str):
+    channel_name = get_chat_hub_name(player_id)
+    return get_discord_channel_from_name(guild, channel_name)
+
 
 
 ### Chat channels:

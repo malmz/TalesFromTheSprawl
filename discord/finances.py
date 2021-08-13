@@ -173,7 +173,7 @@ async def try_to_pay(guild, player_id : str, handle_recip : str, amount : int, f
         if not transaction.success:
             avail = get_current_balance(handle_payer)
             if from_reaction:
-                transaction.report = f'Tried to transfer ¥ **{amount}** from {handle_payer} to {handle_recip} based on your reaction (emoji), but your balance is {amount}.'
+                transaction.report = f'Tried to transfer ¥ **{amount}** from {handle_payer} to {handle_recip} based on your reaction (emoji), but your balance is {avail}.'
             else:
                 transaction.report = f'Failed to transfer ¥ **{amount}** from {handle_payer} to {handle_recip}; current balance is ¥ **{avail}**.'
         elif from_reaction:

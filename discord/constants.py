@@ -8,3 +8,13 @@ forbidden_content_print = '\*\*'
 
 transaction_collector = '___collector'
 transaction_collected = '___collected'
+
+# good-to-have emojis:
+# ✅
+# ❇️
+# ❌
+# 🟥
+# 🔥
+emoji_cancel = '❌'
+emoji_open = '❇️'
+emoji_accept = '✅'

@@ -51,7 +51,7 @@ async def on_ready():
     channels.init_channels(bot)
     #handles.init() #TODO: ensure that every user has a handle?
     finances.init_finances()
-    await chats.init(bot)
+    await chats.init(bot, clear_all=True)
     print('Initialization complete.')
 
 @bot.event
@@ -83,7 +83,10 @@ async def on_message(message):
         # No bot shenanigans in the off channel
         return
 
-    if channels.is_cmd_line(message.channel.name) or channels.is_outbox(message.channel.name):
+    if (channels.is_cmd_line(message.channel.name)
+        or channels.is_outbox(message.channel.name)
+        or channels.is_chat_hub(message.channel.name)
+        ):
         await bot.process_commands(message)
         return        
 
@@ -126,7 +129,12 @@ async def on_member_join(member):
 
 @bot.command(name='handle', help='Show current handle, or switch to another handle. To switch, new handle must be free (then it will be created) or controlled by you. Your handle is shown to other users in most other channels.')
 async def switch_handle_command(ctx, new_handle : str=None, burner=False):
-    await handles.process_handle_command(ctx, new_handle, burner)
+    response = await handles.process_handle_command(ctx, new_handle, burner)
+    if channels.is_cmd_line(ctx.channel.name):
+        await ctx.send(response)
+    elif channels.is_chat_hub(ctx.channel.name):
+        # TODO: perform the action, but do not send the report
+        await ctx.send(response)
 
 @bot.command(name='burner', help='Create a new burner handle, or switch to one that you already that you have not burned yet.')
 async def create_burner_command(ctx, new_id : str=None):
@@ -135,27 +143,7 @@ async def create_burner_command(ctx, new_id : str=None):
 
 @bot.command(name='burn', help='Destroy a burner account forever.')
 async def burn_command(ctx, burner_id : str=None):
-    if burner_id == None:
-        response = 'Error: No burner handle specified. Use \".burn <handle>\"'
-    else:
-        burner_id = burner_id.lower()
-        player_id = players.get_player_id(str(ctx.message.author.id))
-        handle_status : handles.HandleStatus = handles.get_handle_status(burner_id)
-        if (not handle_status.exists):
-            response = 'Error: the handle ' + burner_id + ' does not exist'
-        elif (handle_status.player_id != player_id):
-            response = 'Error: you do not have access to ' + burner_id
-        elif (handle_status.handle_type == 'regular'):
-            response = 'Error: **' + burner_id + '** is not a burner handle, cannot be destroyed. To stop using it, simply switch to another handle.'
-        elif (handle_status.handle_type == 'burner'):
-            amount = await handles.destroy_burner(ctx.guild, player_id, burner_id)
-            current_handle = handles.get_handle(player_id)
-            response = 'Destroyed burner handle **' + burner_id + '**.\n'
-            response = response + 'If you or someone else uses that name, it may be confusing but cannot be traced to the previous use.\n'
-            if amount > 0:
-                response = response + f'Your current handle is **{current_handle}**; the remaining ¥ {amount} from {burner_id} was transferred there.'
-            else:
-                response = response + 'Your current handle is **' + current_handle + '**.'
+    response = await process_burn_command(ctx, burner_id)
     await ctx.send(response)
 
 
@@ -274,7 +262,6 @@ async def fake_join_command(ctx, user_id):
 @commands.has_role('gm')
 async def fake_join_command(ctx, name : str):
     members = await ctx.guild.fetch_members(limit=100).flatten()
-    print(f'{members}')
     member_to_fake_join = discord.utils.find(lambda m: m.name == name, members)
     if member_to_fake_join == None:
         await ctx.send(f'Failed: member with name {name} not found.')
@@ -285,7 +272,6 @@ async def fake_join_command(ctx, name : str):
 @commands.has_role('gm')
 async def fake_join_command(ctx, nick : str):
     members = await ctx.guild.fetch_members(limit=100).flatten()
-    print(f'{members}')
     member_to_fake_join = discord.utils.find(lambda m: m.nick == nick, members)
     if member_to_fake_join == None:
         await ctx.send(f'Failed: member with nick {nick} not found.')
@@ -359,7 +345,7 @@ async def close_chat_other_command(ctx, my_handle : str, other_handle : str):
 @bot.command(name='clear_all_chats', help='Admin-only: delete all chats and chat channels for all users.')
 @commands.has_role('gm')
 async def clear_all_chats_command(ctx):
-    await chats.init(bot, reset_all=True)
+    await chats.init(bot, clear_all=True)
     await ctx.send('Done.')
 
 

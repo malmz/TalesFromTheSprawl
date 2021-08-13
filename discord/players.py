@@ -83,6 +83,12 @@ async def create_player(member):
 		overwrites,
 		channels.get_cmd_line_name(new_player_id)
 	)
+	chat_hub_channel = await channels.create_personal_channel(
+		member.guild,
+		overwrites,
+		channels.get_chat_hub_name(new_player_id)
+	)
+
 	#inbox_channel = await channels.create_personal_channel(
 	#	member.guild,
 	#	overwrites,
@@ -101,9 +107,6 @@ async def create_player(member):
 
 	## TODO: give the new role read permission in various locked channels, e.g. anon
 
-	# This is a test:
-	# Hopefully new players get their cmd_line and finance marked as unread, but not inbox and outbox
-	# since the latter had their messages sent before the player had access
 	#task2 = asyncio.create_task(
 	#	send_startup_message_inbox(
 	#		inbox_channel,
@@ -117,6 +120,16 @@ async def create_player(member):
 	#	)
 	#)
 
+	# This is a test:
+	# Hopefully new players get their cmd_line and finance marked as unread, but not chat_hub
+	# since the latter had its message sent before the player had access
+	task5 = asyncio.create_task(
+		send_startup_message_chat_hub(
+			chat_hub_channel
+		)
+	)
+	await asyncio.gather(task5)
+
 	# Edit user (change nick and add role):
 	base_nick = 'u' + new_player_id
 	#await member.guild.create
@@ -128,12 +141,8 @@ async def create_player(member):
 		print(f'Probably tried to edit server owner, which doesn\'t work. Please add role {new_player_id} to user {member.name}.')
 
 	task1 = asyncio.create_task(send_startup_message_cmd_line(member, new_player_id, cmd_line_channel))
-
 	task4 = asyncio.create_task(send_startup_message_finance(finances_channel))
-	await task1
-	#await task2
-	#await task3
-	await task4
+	await asyncio.gather(task1, task4)
 
 	handles.init_handles_for_player(new_player_id, base_nick)
 
@@ -203,6 +212,11 @@ async def send_startup_message_outbox(channel, inbox_channel_name):
 async def send_startup_message_finance(channel):
 	content = 'This is your financial record.\n'
 	content = content + 'A record of every transaction will appear here. You cannot send anything in this channel.'
+	await channel.send(content)
+
+async def send_startup_message_chat_hub(channel):
+	content = 'This is your chat hub. All your chat connections will be visible here, even when the session itself is closed.\n '
+	content = content + 'You can start new chats by typing \".chat <handle>\" or [NOT IMPLEMENTED YET] \".room <room_name>\".'
 	await channel.send(content)
 
 async def update_financial_statement(channel, player_id : str):
@@ -308,4 +322,10 @@ def get_finance_channel_for_handle(guild, handle : str):
 	else:
 		return None
 
+def get_chat_hub_channel_for_handle(guild, handle : str):
+	status : handles.HandleStatus = handles.get_handle_status(handle)
+	if status.exists:
+		return channels.get_chat_hub_channel(guild, status.player_id)
+	else:
+		return None
 
