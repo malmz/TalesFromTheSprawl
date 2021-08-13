@@ -36,9 +36,12 @@ def add_space(content : str):
 def sanitize_bold(content : str):
     return add_space(content) if starts_with_bold(content) else content
 
-async def post_message_with_header(channel, message, sender_info : str):
+def create_header(timestamp, sender : str, recip : str=None):
+    if recip == None:
+        sender_info = f'**{sender}**'
+    else:
+        sender_info = f'**{sender}** to {recip}'
     # Manual DST fix:
-    timestamp = message.created_at
     hour_str = str((timestamp.hour + 2) % 24)
     minute = timestamp.minute
     if minute < 10:
@@ -51,27 +54,20 @@ async def post_message_with_header(channel, message, sender_info : str):
     else:
         second_str = str(second)
     timestamp_str = '(' + hour_str + ':' + minute_str + ':' + second_str + ')'
-    post = sender_info + double_hard_space + timestamp_str + ':\n' + sanitize_bold(message.content)
+    return sender_info + double_hard_space + timestamp_str + ':\n'
+
+def create_post(message, sender : str, recip : str=None):
+    post = sanitize_bold(message.content)
+    if sender == None:
+        return post
+    else:
+        header = create_header(message.created_at, sender, recip)
+        return header + post
+
+async def repost_message_to_channel(channel, message, sender : str, recip : str=None):
+    post = create_post(message, sender, recip)
     files = [await a.to_file() for a in message.attachments]
     await channel.send(post, files=files)
-
-async def post_message_with_header_sender_and_recip(channel, message, sender : str, recip : str):
-    sender_info = f'**{sender}** to {recip}'
-    await post_message_with_header(channel, message, sender_info)
-
-async def post_message_with_header_sender_only(channel, message, sender : str):
-    sender_info = f'**{sender}**'
-    await post_message_with_header(channel, message, sender_info)
-
-async def post_message_without_header(channel, message):
-    files = [await a.to_file() for a in message.attachments]
-    await channel.send(sanitize_bold(message.content), files=files)
-
-async def repost_message_to_channel(channel, message, sender : str):
-    if sender == None:
-        await post_message_without_header(channel, message)
-    else:
-        await post_message_with_header_sender_only(channel, message, sender)
 
 async def repost_message(message, sender : str):
     await repost_message_to_channel(message.channel, message, sender)
@@ -98,34 +94,6 @@ async def process_open_message(message, anonymous=False):
 
 # Private channels:
 
-async def process_chat_message(message):
-    sender_channel = message.channel
-
-    inbox_channel = players.get_inbox_channel_for_handle(ctx.guild, recip_handle)
-    if inbox_channel == None:
-        response = f'Error: cannot send message to {recip_handle}. Handle might not exist. Check the spelling.'
-        await ctx.send(response)
-    else:
-        outbox_channel = ctx.message.channel
-        sender_handle = handles.get_handle(str(ctx.message.author.id))
-        response = f'Message sent to {recip_handle}.'
-        # Post the same message to recipients inbox and senders outbox
-        await post_message_with_header_sender_and_recip(
-            inbox_channel,
-            ctx.message,
-            sender_handle,
-            recip_handle
-        )
-        await post_message_with_header_sender_and_recip(
-            outbox_channel,
-            ctx.message,
-            sender_handle,
-            recip_handle
-        )
-        # Delete the original message with the command
-        await ctx.message.delete()
-
-
 
 # Email:
 # Handle the inbox/outbox dynamic
@@ -143,13 +111,13 @@ async def process_email(ctx, recip_handle : str, content : str):
         sender_handle = handles.get_handle(str(ctx.message.author.id))
         response = f'Message sent to {recip_handle}.'
         # Post the same message to recipients inbox and senders outbox
-        await post_message_with_header_sender_and_recip(
+        await repost_message_to_channel(
             inbox_channel,
             ctx.message,
             sender_handle,
             recip_handle
         )
-        await post_message_with_header_sender_and_recip(
+        await repost_message_to_channel(
             outbox_channel,
             ctx.message,
             sender_handle,

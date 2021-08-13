@@ -195,6 +195,7 @@ def record_new_post(channel_name : str, poster_id : str, timestamp):
 
 async def create_private_channel(guild, overwrites, channel_name : str, category_name : str):
     category = discord.utils.find(lambda cat: cat.name == category_name, guild.channels)
+    print(f'{category},  {category_name}, {channel_name}, {guild.name}, {overwrites}')
     channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
     init_channel_state(channel)
     return channel

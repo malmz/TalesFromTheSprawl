@@ -296,11 +296,13 @@ async def fake_join_command(ctx, nick : str):
 @commands.has_role('gm')
 async def clear_all_players_command(ctx):
     await players.init(bot, guild, clear_all=True)
+    await ctx.send('Done.')
 
 @bot.command(name='init_all_players', help='Admin-only: initialise all current members of the server as players.')
 @commands.has_role('gm')
 async def init_all_players_command(ctx):
     await players.initialise_all_users(guild)
+    await ctx.send('Done.')
 
 @bot.command(name='ping', help='Admin-only function to test user-player-channel mappings')
 @commands.has_role('gm')
@@ -358,6 +360,7 @@ async def close_chat_other_command(ctx, my_handle : str, other_handle : str):
 @commands.has_role('gm')
 async def clear_all_chats_command(ctx):
     await chats.init(bot, reset_all=True)
+    await ctx.send('Done.')
 
 
 #@bot.command(name='read_chat', help='Admin-only function to test chats')
