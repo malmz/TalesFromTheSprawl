@@ -294,14 +294,36 @@ async def ping_command(ctx, handle : str):
 
 # Chats
 
-@bot.command(name='chat', help='Admin-only function to test chats')
-@commands.has_role('gm')
+# TODO: add handling for using .chat and .close_chat without argument
+@bot.command(name='chat', help='Open a chat session with another user.')
 async def chat_command(ctx, handle : str):
     handle = handle.lower()
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
     await chats.create_chat(ctx, handle)
+
+@bot.command(name='close_chat', help='Close a chat session from your end.')
+async def close_chat_command(ctx, handle : str):
+    handle = handle.lower()
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    await chats.close_chat_session_from_ctx(ctx, handle)
+
+
+@bot.command(name='close_chat_other', help='Admin-only: close a chat session for someone else.')
+@commands.has_role('gm')
+async def close_chat_command_other(ctx, my_handle : str, other_handle : str):
+    my_handle = my_handle.lower()
+    other_handle = other_handle.lower()
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = await chats.close_chat_session(my_handle, other_handle)
+    if report != None:
+        await ctx.send(report)
+
 
 #@bot.command(name='read_chat', help='Admin-only function to test chats')
 #@commands.has_role('gm')

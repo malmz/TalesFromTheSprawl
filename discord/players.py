@@ -73,6 +73,22 @@ async def create_player(member):
 
 	## TODO: give the new role read permission in various locked channels, e.g. anon
 
+	# This is a test:
+	# Hopefully new players get their cmd_line and finance marked as unread, but not inbox and outbox
+	# since the latter had their messages sent before the player had access
+	task2 = asyncio.create_task(
+		send_startup_message_inbox(
+			inbox_channel,
+			channels.clickable_channel_ref(outbox_channel)
+		)
+	)
+	task3 = asyncio.create_task(
+		send_startup_message_outbox(
+			outbox_channel,
+			channels.clickable_channel_ref(inbox_channel)
+		)
+	)
+
 	# Edit user (change nick and add role):
 	base_nick = 'u' + new_player_id
 	#await member.guild.create
@@ -87,18 +103,6 @@ async def create_player(member):
 
 	task1 = asyncio.create_task(send_startup_message_cmd_line(member, new_player_id, cmd_line_channel))
 
-	task2 = asyncio.create_task(
-		send_startup_message_inbox(
-			inbox_channel,
-			channels.clickable_channel_ref(outbox_channel)
-		)
-	)
-	task3 = asyncio.create_task(
-		send_startup_message_outbox(
-			outbox_channel,
-			channels.clickable_channel_ref(inbox_channel)
-		)
-	)
 	task4 = asyncio.create_task(send_startup_message_finance(finances_channel))
 	await task1
 	await task2

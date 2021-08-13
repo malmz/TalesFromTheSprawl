@@ -71,6 +71,11 @@ def get_discord_channel_from_name(guild, channel_name : str):
     else:
         raise RuntimeError(f'Tried to find discord channel but channel_id missing: {ident.to_string()}')
 
+async def delete_discord_channel(channel_id : str):
+    guild = server.get_guild()
+    channel = guild.get_channel(int(channel_id))
+    await channel.delete()
+
 ### Common init functions:
 
 def init_discord_channel(discord_channel):
