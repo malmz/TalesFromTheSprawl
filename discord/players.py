@@ -31,6 +31,7 @@ async def init(bot, guild, clear_all=False):
 		for player_id in get_all_players():
 			del players[player_id]
 		await channels.delete_all_personal_channels(bot)
+		handles.clear_all_handles()
 	await delete_all_player_roles(guild, spare_used=(not clear_all))
 
 	players.write()
@@ -120,13 +121,11 @@ async def create_player(member):
 	base_nick = 'u' + new_player_id
 	#await member.guild.create
 	try:
-		print(f'{member.roles}')
 		new_roles = member.roles
 		new_roles.append(role)
-		print(f'{new_roles[0]}, {new_roles[1]}')
 		await member.edit(nick = base_nick, roles=new_roles)
 	except discord.Forbidden:
-		print(f'Probably tried to edit server owner, which doesn\'t work. Please add role {new_player_id} to user {member.nick}.')
+		print(f'Probably tried to edit server owner, which doesn\'t work. Please add role {new_player_id} to user {member.name}.')
 
 	task1 = asyncio.create_task(send_startup_message_cmd_line(member, new_player_id, cmd_line_channel))
 

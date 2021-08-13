@@ -25,6 +25,13 @@ class HandleStatus:
     player_id : str = ''
     handle_type : str = ''
 
+def clear_all_handles():
+	for player_id in handles:
+		for handle in get_handles_for_player(player_id):
+			finances.deinit_finances_for_handle(handle)
+		del handles[player_id]
+	handles.write()
+
 def init_handles_for_player(player_id : str, first_handle : str):
     handles[player_id] = {}
     create_regular_handle(player_id, first_handle)
