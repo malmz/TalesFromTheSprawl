@@ -297,6 +297,11 @@ async def fake_join_command(ctx, nick : str):
 async def clear_all_players_command(ctx):
     await players.init(bot, guild, clear_all=True)
 
+@bot.command(name='init_all_players', help='Admin-only: initialise all current members of the server as players.')
+@commands.has_role('gm')
+async def init_all_players_command(ctx):
+    await players.initialise_all_users(guild)
+
 @bot.command(name='ping', help='Admin-only function to test user-player-channel mappings')
 @commands.has_role('gm')
 async def ping_command(ctx, handle : str):

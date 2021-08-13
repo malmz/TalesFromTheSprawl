@@ -35,9 +35,9 @@ async def init(bot, guild, clear_all=False):
 
 	players.write()
 
-#async def initialise_all_users(guild):
-#	for member in guild.members:
-
+async def initialise_all_users(guild):
+	task_list = (asyncio.create_task(create_player(m)) for m in guild.members if not m.bot)
+	await asyncio.gather(*task_list)
 
 async def delete_all_player_roles(guild, spare_used : bool):
 	task_list = (asyncio.create_task(delete_if_player_role(r, spare_used)) for r in guild.roles)
