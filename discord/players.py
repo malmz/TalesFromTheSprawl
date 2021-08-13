@@ -11,21 +11,48 @@ from custom_types import Transaction
 import discord
 import asyncio
 from configobj import ConfigObj
+import re
 
 
 players = ConfigObj('players.conf')
 players_input = ConfigObj('players_input.conf')
 
+personal_role_regex = re.compile(f'^2[0-9][0-9][0-9]$')
 
 finance_statement_index = '___finance_statement_msg_id'
 
 # TODO: loop through all users, find their player_ids and re-map personal channels if not available
-def init(bot, guild):
-	if not player_ids_index in players:
+async def init(bot, guild, clear_all=False):
+	if not player_ids_index in players or clear_all:
 		players[player_ids_index] = {}
-	if not highest_ever_index in players[player_ids_index]:
+	if not highest_ever_index in players[player_ids_index] or clear_all:
 		players[player_ids_index][highest_ever_index] = '2701'
+	if clear_all:
+		for player_id in get_all_players():
+			del players[player_id]
+		await channels.delete_all_personal_channels(bot)
+	await delete_all_player_roles(guild, spare_used=(not clear_all))
+
 	players.write()
+
+#async def initialise_all_users(guild):
+#	for member in guild.members:
+
+
+async def delete_all_player_roles(guild, spare_used : bool):
+	task_list = (asyncio.create_task(delete_if_player_role(r, spare_used)) for r in guild.roles)
+	await asyncio.gather(*task_list)
+
+async def delete_if_player_role(role, spare_used : bool):
+	matches = re.search(personal_role_regex, role.name)
+	if matches != None:
+		if not spare_used or len(role.members) == 0:
+			await role.delete()
+
+def get_all_players():
+	for player in players:
+		if not player in [highest_ever_index, player_ids_index]:
+			yield player
 
 def get_player_id(user_id : str):
 	if not user_id in players[player_ids_index]:
@@ -55,16 +82,16 @@ async def create_player(member):
 		overwrites,
 		channels.get_cmd_line_name(new_player_id)
 	)
-	inbox_channel = await channels.create_personal_channel(
-		member.guild,
-		overwrites,
-		channels.get_inbox_name(new_player_id)
-	)
-	outbox_channel = await channels.create_personal_channel(
-		member.guild,
-		overwrites,
-		channels.get_outbox_name(new_player_id)
-	)
+	#inbox_channel = await channels.create_personal_channel(
+	#	member.guild,
+	#	overwrites,
+	#	channels.get_inbox_name(new_player_id)
+	#)
+	#outbox_channel = await channels.create_personal_channel(
+	#	member.guild,
+	#	overwrites,
+	#	channels.get_outbox_name(new_player_id)
+	#)
 	finances_channel = await channels.create_personal_channel(
 		member.guild,
 		overwrites_finance,
@@ -76,18 +103,18 @@ async def create_player(member):
 	# This is a test:
 	# Hopefully new players get their cmd_line and finance marked as unread, but not inbox and outbox
 	# since the latter had their messages sent before the player had access
-	task2 = asyncio.create_task(
-		send_startup_message_inbox(
-			inbox_channel,
-			channels.clickable_channel_ref(outbox_channel)
-		)
-	)
-	task3 = asyncio.create_task(
-		send_startup_message_outbox(
-			outbox_channel,
-			channels.clickable_channel_ref(inbox_channel)
-		)
-	)
+	#task2 = asyncio.create_task(
+	#	send_startup_message_inbox(
+	#		inbox_channel,
+	#		channels.clickable_channel_ref(outbox_channel)
+	#	)
+	#)
+	#task3 = asyncio.create_task(
+	#	send_startup_message_outbox(
+	#		outbox_channel,
+	#		channels.clickable_channel_ref(inbox_channel)
+	#	)
+	#)
 
 	# Edit user (change nick and add role):
 	base_nick = 'u' + new_player_id
@@ -99,17 +126,17 @@ async def create_player(member):
 		print(f'{new_roles[0]}, {new_roles[1]}')
 		await member.edit(nick = base_nick, roles=new_roles)
 	except discord.Forbidden:
-		print(f'Probably tried to edit server owner, wont\'t work')
+		print(f'Probably tried to edit server owner, which doesn\'t work. Please add role {new_player_id} to user {member.nick}.')
 
 	task1 = asyncio.create_task(send_startup_message_cmd_line(member, new_player_id, cmd_line_channel))
 
 	task4 = asyncio.create_task(send_startup_message_finance(finances_channel))
 	await task1
-	await task2
-	await task3
+	#await task2
+	#await task3
 	await task4
 
-	handles.init_handles_for_player(player_id, base_nick)
+	handles.init_handles_for_player(new_player_id, base_nick)
 
 async def send_startup_message_cmd_line(member, player_id : str, channel):
 	content = 'Welcome to the matrix_client. This is your command line. To see all commands, type \"**.help**\"\n'

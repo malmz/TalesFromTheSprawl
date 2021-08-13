@@ -47,11 +47,11 @@ async def on_ready():
     global guild_name
     guild = discord.utils.find(lambda g: g.name == guild_name, bot.guilds)
     server.init(bot, guild)
-    players.init(bot, guild)
+    await players.init(bot, guild, clear_all=False)
     channels.init_channels(bot)
     #handles.init() #TODO: ensure that every user has a handle?
     finances.init_finances()
-    await chats.init(bot, reset_all=True)
+    await chats.init(bot)
     print('Initialization complete.')
 
 @bot.event
@@ -265,15 +265,21 @@ async def message_command(ctx, handle : str = None, content : str = None):
 @commands.has_role('gm')
 async def fake_join_command(ctx, user_id):
     member_to_fake_join = await ctx.guild.fetch_member(user_id)
-    await on_member_join(member_to_fake_join)
+    if member_to_fake_join == None:
+        await ctx.send(f'Failed: member with user_id {user_id} not found.')
+    else:
+        await on_member_join(member_to_fake_join)
 
 @bot.command(name='fake_join_name', help='Admin-only function to test run the new member mechanics')
 @commands.has_role('gm')
-async def fake_join_command(ctx, nick : str):
+async def fake_join_command(ctx, name : str):
     members = await ctx.guild.fetch_members(limit=100).flatten()
     print(f'{members}')
-    member_to_fake_join = discord.utils.find(lambda m: m.name == nick, members)
-    await on_member_join(member_to_fake_join)
+    member_to_fake_join = discord.utils.find(lambda m: m.name == name, members)
+    if member_to_fake_join == None:
+        await ctx.send(f'Failed: member with name {name} not found.')
+    else:
+        await on_member_join(member_to_fake_join)
 
 @bot.command(name='fake_join_nick', help='Admin-only function to test run the new member mechanics')
 @commands.has_role('gm')
@@ -281,16 +287,24 @@ async def fake_join_command(ctx, nick : str):
     members = await ctx.guild.fetch_members(limit=100).flatten()
     print(f'{members}')
     member_to_fake_join = discord.utils.find(lambda m: m.nick == nick, members)
-    await on_member_join(member_to_fake_join)
+    if member_to_fake_join == None:
+        await ctx.send(f'Failed: member with nick {nick} not found.')
+    else:
+        await on_member_join(member_to_fake_join)
+
+@bot.command(name='clear_all_players', help='Admin-only: de-initialise all players.')
+@commands.has_role('gm')
+async def clear_all_players_command(ctx):
+    await players.init(bot, guild, clear_all=True)
 
 @bot.command(name='ping', help='Admin-only function to test user-player-channel mappings')
 @commands.has_role('gm')
 async def ping_command(ctx, handle : str):
-    channel = players.get_inbox_channel_for_handle(ctx.guild, handle)
+    channel = players.get_cmd_line_channel_for_handle(ctx.guild, handle)
     if channel != None:
         await channel.send(f'Testing ping for {handle}')
     else:
-        print(f'Error: could not find the command line channel for {handle}')
+        ctx.send(f'Error: could not find the command line channel for {handle}')
 
 # Chats
 
@@ -301,7 +315,18 @@ async def chat_command(ctx, handle : str):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    await chats.create_chat(ctx, handle)
+    await chats.create_chat_from_command(ctx, handle)
+
+@bot.command(name='chat_other', help='Admin-only: open a chat session for someone else.')
+async def chat_other_command(ctx,  my_handle : str, other_handle : str):
+    my_handle = my_handle.lower()
+    other_handle = other_handle.lower()
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = await chats.create_chat(my_handle, other_handle)
+    if report != None:
+        await ctx.send(report)
 
 @bot.command(name='close_chat', help='Close a chat session from your end.')
 async def close_chat_command(ctx, handle : str):
@@ -309,12 +334,12 @@ async def close_chat_command(ctx, handle : str):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    await chats.close_chat_session_from_ctx(ctx, handle)
+    await chats.close_chat_session_from_command(ctx, handle)
 
 
 @bot.command(name='close_chat_other', help='Admin-only: close a chat session for someone else.')
 @commands.has_role('gm')
-async def close_chat_command_other(ctx, my_handle : str, other_handle : str):
+async def close_chat_other_command(ctx, my_handle : str, other_handle : str):
     my_handle = my_handle.lower()
     other_handle = other_handle.lower()
     if not channels.is_cmd_line(ctx.channel.name):
@@ -323,6 +348,11 @@ async def close_chat_command_other(ctx, my_handle : str, other_handle : str):
     report = await chats.close_chat_session(my_handle, other_handle)
     if report != None:
         await ctx.send(report)
+
+@bot.command(name='clear_all_chats', help='Admin-only: delete all chats and chat channels for all users.')
+@commands.has_role('gm')
+async def clear_all_chats_command(ctx):
+    await chats.init(bot, reset_all=True)
 
 
 #@bot.command(name='read_chat', help='Admin-only function to test chats')

@@ -5,6 +5,7 @@ import discord
 from custom_types import PostTimestamp, ChannelIdentifier
 import players
 import server
+import asyncio
 
 ### Module common_channels.py
 # This module tracks and handles state related to channels
@@ -48,6 +49,12 @@ def is_chat_channel(discord_channel):
     else:
         return discord_channel.category.name == chats_category_name
 
+def is_personal_channel(discord_channel):
+    if discord_channel.category == None:
+        return False
+    else:
+        return discord_channel.category.name == personal_category_name
+
 def is_pseudonymous_channel(discord_channel):
     if discord_channel.category == None:
         return False
@@ -70,6 +77,11 @@ def get_discord_channel_from_name(guild, channel_name : str):
         return guild.get_channel(ident.discord_channel_id)
     else:
         raise RuntimeError(f'Tried to find discord channel but channel_id missing: {ident.to_string()}')
+
+def get_discord_channel(channel_id : str):
+    guild = server.get_guild()
+    return guild.get_channel(int(channel_id))
+
 
 async def delete_discord_channel(channel_id : str):
     guild = server.get_guild()
@@ -197,6 +209,15 @@ finance_base = 'finance_'
 daemon_base = 'daemon_'
 # TODO: some sort of dictionary for these, with an enum type
 
+async def delete_all_personal_channels(bot):
+    task_list = (asyncio.create_task(c.delete()) for c in get_all_personal_channels(bot))
+    await asyncio.gather(*task_list)
+
+def get_all_personal_channels(bot):
+    for channel in bot.get_all_channels():
+        if is_personal_channel(channel):
+            yield channel
+
 async def create_personal_channel(guild, overwrites, channel_name : str):
     return await create_private_channel(guild, overwrites, channel_name, personal_category_name)
 
@@ -257,9 +278,8 @@ async def create_chat_session_channel(guild, player_id : str, discord_channel_na
     return await create_private_channel(guild, overwrites, discord_channel_name, chats_category_name)
 
 async def delete_all_chats(bot):
-    for channel in get_all_chat_channels(bot):
-        await channel.delete()
-        # TODO: update chat status to closed (probably do this from caller)
+    task_list = (asyncio.create_task(c.delete()) for c in get_all_chat_channels(bot))
+    await asyncio.gather(*task_list)
 
 def get_all_chat_channels(bot):
     for channel in bot.get_all_channels():

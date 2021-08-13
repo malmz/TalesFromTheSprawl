@@ -25,7 +25,7 @@ class HandleStatus:
     player_id : str = ''
     handle_type : str = ''
 
-def init_handles_for_player(player_id : str):
+def init_handles_for_player(player_id : str, first_handle : str):
     handles[player_id] = {}
     create_regular_handle(player_id, first_handle)
     switch_to_handle(player_id, first_handle)

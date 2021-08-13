@@ -132,6 +132,8 @@ async def process_chat_message(message):
 # (will likely be removed)
 
 async def process_email(ctx, recip_handle : str, content : str):
+    await ctx.send('Email functionality currently not available.')
+    return
     inbox_channel = players.get_inbox_channel_for_handle(ctx.guild, recip_handle)
     if inbox_channel == None:
         response = f'Error: cannot send message to {recip_handle}. Handle might not exist. Check the spelling.'
