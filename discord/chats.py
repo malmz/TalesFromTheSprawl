@@ -17,14 +17,15 @@ channel_id_index = '___channel_id'
 handle_index = '___handle'
 player_id_index = '___player_id'
 chat_channel_data_index = '___chat_channel_data'
+chat_hub_msg_data_index = '___chat_hub_msg_data'
 chat_content_index = '___chat_content'
 chats_with_logs_index = '___chat_log_length'
-chat_connection_index = '___chat_connection'
-
+chat_participants_index = '___chat_participants'
 
 ### Classes, init and basic utilities
 
-class ChatConnection(object):
+# This is stored indexed by player (TODO: handle), and points out the various connections that player has to the chat
+class ChatParticipant(object):
 	def __init__(self, chat_name : str, channel_name : str, player_id : str, handle : str, chat_hub_msg_id : str, channel_id : str=None):
 		self.chat_name = chat_name
 		# Regardless of whether the channel currently exists or not
@@ -39,7 +40,7 @@ class ChatConnection(object):
 
 	@staticmethod
 	def from_string(string : str):
-		obj = ChatConnection(None, None, None, None, None)
+		obj = ChatParticipant(None, None, None, None, None)
 		obj.__dict__ = simplejson.loads(string)
 		return obj
 
@@ -47,17 +48,16 @@ class ChatConnection(object):
 		return simplejson.dumps(self.__dict__)
 
 
-# TODO: rename ChannelToChatMapping
-class ChatChannelData(object):
-	def __init__(self, channel_id : str, chat_name : str, player_id : str, handle : str):
-		self.channel_id = channel_id
+# This is stored per channel/msg ID, and maps back to the chat
+class ChatConnectionMapping(object):
+	def __init__(self, chat_name : str, player_id : str, handle : str):
 		self.chat_name = chat_name
 		self.player_id = player_id
 		self.handle = handle
 
 	@staticmethod
 	def from_string(string : str):
-		obj = ChatChannelData(None, None, None, None)
+		obj = ChatConnectionMapping(None, None, None)
 		obj.__dict__ = simplejson.loads(string)
 		return obj
 
@@ -86,25 +86,26 @@ async def init(bot, clear_all : bool=False):
 
 	if not chat_channel_data_index in chats:
 		chats[chat_channel_data_index] = {}
+	if not chat_hub_msg_data_index in chats:
+		chats[chat_hub_msg_data_index] = {}
 	if not chats_with_logs_index in chats:
 		chats[chats_with_logs_index] = {}
 	# Loop through all chats that are supposed to exist according to conf files
 	for chat_name in chats[chats_with_logs_index]:
 		chat_state = get_chat_state(chat_name)
 		if clear_all:
-			del chat_state[chat_connection_index]
+			del chat_state[chat_participants_index]
 			del chat_state[chat_content_index]
 			chat_state.write()
 		else:
 			# Re-init the chats (posting-wise) like any open channel
 			channels.init_chat_channel(chat_name)
-			# Only remove the channel refs, to indicate that all discord channels are deleted
-			if not chat_connection_index in chat_state:
+			# Keep the participants data but reset the channel IDs, to indicate that all discord channels are deleted
+			if not chat_participants_index in chat_state:
 				init_chat_state(chat_state)
-			for player_id in chat_state[chat_connection_index]:
-				chat_connection : ChatConnection = read_chat_connection(chat_state, player_id)
-				chat_connection.channel_id = None
-				store_chat_connection(chat_state, player_id, chat_connection)
+			for participant in get_participants(chat_state):
+				participant.channel_id = None
+				store_participant(chat_state, player_id, participant)
 	if clear_all:
 		chats[chat_channel_data_index] = {}
 		chats[chats_with_logs_index] = {}
@@ -117,18 +118,33 @@ def create_2party_chat_name(handle1 : str, handle2 : str):
 	return f'{handles_ordered[0]}_{handles_ordered[1]}'
 
 
-def read_chat_channel_data(channel_id : str):
+def read_chat_connection_from_channel(channel_id : str):
 	string = chats[chat_channel_data_index][channel_id]
-	chat_channel_data : ChatChannelData = ChatChannelData.from_string(string)
-	return chat_channel_data
+	chat_connection : ChatConnectionMapping = ChatConnectionMapping.from_string(string)
+	return chat_connection
 
-def store_chat_channel_data(channel_id : str, chat_channel_data : ChatChannelData):
-	chats[chat_channel_data_index][channel_id] = chat_channel_data.to_string()
+def store_chat_connection_for_channel(channel_id : str, chat_connection : ChatConnectionMapping):
+	chats[chat_channel_data_index][channel_id] = chat_connection.to_string()
 	chats.write()
 
-def clear_chat_channel_data(channel_id):
+def clear_channel_connection_mappings(channel_id):
 	del chats[chat_channel_data_index][channel_id]
 	chats.write()
+
+
+def read_chat_connection_from_hub_msg(msg_id : str):
+	string = chats[chat_hub_msg_data_index][msg_id]
+	chat_connection : ChatConnectionMapping = ChatConnectionMapping.from_string(string)
+	return chat_connection
+
+def store_chat_connection_for_hub_msg(msg_id : str, chat_connection : ChatConnectionMapping):
+	chats[chat_hub_msg_data_index][msg_id] = chat_connection.to_string()
+	chats.write()
+
+def clear_hub_msg_connection_mappings(msg_id):
+	del chats[chat_hub_msg_data_index][msg_id]
+	chats.write()
+
 
 
 def chat_exists(chat_name : str):
@@ -138,18 +154,21 @@ def get_chat_state(chat_name : str):
 	chat_file_name = f'{chat_name}.conf'
 	return ConfigObj(f'{chats_dir}/{chat_file_name}')
 
+def get_participants(chat_state):
+	for participant_id in chat_state[chat_participants_index]:
+		yield read_participant(chat_state, participant_id)
 
-# TODO: use handle instead of player_id to index chat connections
-def read_chat_connection(chat_state, player_id : str):
-	if player_id in chat_state[chat_connection_index]:
-		string = chat_state[chat_connection_index][player_id]
-		chat_connection : ChatConnection = ChatConnection.from_string(string)
-		return chat_connection
+# TODO: use handle instead of player_id to index chat participants
+def read_participant(chat_state, player_id : str):
+	if player_id in chat_state[chat_participants_index]:
+		string = chat_state[chat_participants_index][player_id]
+		participant : ChatParticipant = ChatParticipant.from_string(string)
+		return participant
 	else:
 		return None
 
-def store_chat_connection(chat_state, player_id : str, chat_connection : ChatConnection):
-	chat_state[chat_connection_index][player_id] = chat_connection.to_string()
+def store_participant(chat_state, player_id : str, participant : ChatParticipant):
+	chat_state[chat_participants_index][player_id] = participant.to_string()
 	chat_state.write()
 
 
@@ -204,8 +223,8 @@ def init_chat_log(chat_name : str):
 		return False
 	
 def init_chat_state(chat_state):
-	if not chat_connection_index in chat_state:
-		chat_state[chat_connection_index] = {}
+	if not chat_participants_index in chat_state:
+		chat_state[chat_participants_index] = {}
 		chat_state[chat_content_index] = {}
 		chat_state.write()
 	else:
@@ -297,12 +316,12 @@ async def create_chat_from_command(ctx, partner_handle):
 ### Common method used both when creating and re-opening chats
 
 async def get_chat_session_if_open(chat_state, my_player_id : str):
-	chat_connection : ChatConnection = read_chat_connection(chat_state, my_player_id)
-	if chat_connection != None:
+	participant : ChatParticipant = read_participant(chat_state, my_player_id)
+	if participant != None:
 		# Chat already exists
-		if chat_connection.channel_id != None:
+		if participant.channel_id != None:
 			# Chat not only exists, but is already open
-			return channels.get_discord_channel(chat_connection.channel_id)
+			return channels.get_discord_channel(participant.channel_id)
 
 
 async def open_chat_session(
@@ -319,32 +338,34 @@ async def open_chat_session(
 	# we should FIRST post all the message history, and THEN add the role to give visibility
 	channel_name = f'{my_handle}_to_{partner_handle}'
 	
-	chat_connection : ChatConnection = read_chat_connection(chat_state, my_player_id)
-	if chat_connection == None:
+	participant : ChatParticipant = read_participant(chat_state, my_player_id)
+	if participant == None:
 		# This is a newly added participant
 		return await create_chat_session(guild, chat_state, chat_name, channel_name, my_player_id, my_handle)
 	else:
 		# Chat session already exists, but may not be open
-		return await open_chat_session_for_current_participant(guild, chat_state, chat_connection)
+		return await open_chat_session_for_current_participant(guild, chat_state, participant)
 
 
-async def open_chat_session_for_current_participant(guild, chat_state, chat_connection : ChatConnection):
+async def open_chat_session_for_current_participant(guild, chat_state, participant : ChatParticipant):
 	# Chat already exists
-	if chat_connection.channel_id != None:
+	if participant.channel_id != None:
 		# Chat not only exists, but is already open
-		return channels.get_discord_channel(chat_connection.channel_id)
+		return channels.get_discord_channel(participant.channel_id)
 	else:
 		# Chat exists but channel has been closed
 		return await create_chat_session(
 			guild,
 			chat_state,
-			chat_connection.chat_name,
-			chat_connection.channel_name,
-			chat_connection.player_id,
-			chat_connection.handle,
+			participant.chat_name,
+			participant.channel_name,
+			participant.player_id,
+			participant.handle,
 			reopened=True
 		)
 
+
+# TODO: implement limit on open chat sessions!
 
 async def create_chat_session(
 	guild,
@@ -356,30 +377,34 @@ async def create_chat_session(
 	reopened : bool=False):
 	channel = await channels.create_chat_session_channel(guild, my_player_id, channel_name)
 	await channel.send(
-		f'```This is the start of {channel_name}. In this chat, you will always appear as {my_handle}, even if you switch handles elsewhere.```'
+		f'```This is the start of {channel_name}. In this chat, you will always appear as \"{my_handle}\", even if you switch handles elsewhere.```'
 	)
 
 	channel_id = str(channel.id)
 
 	# channel ID -> chat mapping
-	chat_channel_data = ChatChannelData(channel_id, chat_name, my_player_id, my_handle)
-	store_chat_channel_data(channel_id, chat_channel_data)	# chat name -> full chat log file name mapping
+	chat_channel_connection = ChatConnectionMapping(chat_name, my_player_id, my_handle)
+	store_chat_connection_for_channel(channel_id, chat_channel_connection)	# chat name -> full chat log file name mapping
 	chats.write()
 
 	if reopened:
-		pass
 		# TODO: update msg by deleting and re-posting (will cause it to jump to the bottom)
-		#chat_hub_msg_id = await update_chat_hub_message()
+		chat_hub_msg_id = None #await update_chat_hub_message()
 	else:
 		chat_hub_msg_id = await create_chat_hub_message(guild, channel, my_player_id, my_handle)
+
+	# channel ID -> chat mapping
+	chat_hub_msg_connection = ChatConnectionMapping(chat_name, my_player_id, my_handle)
+	store_chat_connection_for_hub_msg(channel_id, chat_hub_msg_connection)	# chat name -> full chat log file name mapping
+	chats.write()
 
 	# TODO: msg ID -> chat mapping
 	# We have posted a new chat hub message (either for the first time or deleted+reposted one)
 	# must update the mapping
 
 	# chat -> channel ID, msg ID mapping
-	chat_connection = ChatConnection(chat_name, channel_name, my_player_id, my_handle, chat_hub_msg_id, channel_id)
-	store_chat_connection(chat_state, my_player_id, chat_connection)
+	participant = ChatParticipant(chat_name, channel_name, my_player_id, my_handle, chat_hub_msg_id, channel_id)
+	store_participant(chat_state, my_player_id, participant)
 	chat_state.write()
 
 	await repost_message_history(channel, chat_name)
@@ -434,7 +459,7 @@ async def process_reaction_in_chat_hub(message, player_id : str, emoji):
 ### Closing chats
 
 async def close_chat_session(my_handle : str, partner_handle : str):
-	if creator_handle == partner_handle:
+	if my_handle == partner_handle:
 		return f'Error: {partner_handle} is your current handle – there is no chat.'
 
 	my_status : handles.HandleStatus = handles.get_handle_status(my_handle)
@@ -452,16 +477,16 @@ async def close_chat_session(my_handle : str, partner_handle : str):
 	chat_state = get_chat_state(chat_name)
 
 	# update chat -> channel ID mapping
-	chat_connection : ChatConnection = read_chat_connection(chat_state, my_status.player_id)
-	channel_id_to_close = chat_connection.channel_id
-	chat_connection.channel_id = None
-	store_chat_connection(chat_state, my_status.player_id, chat_connection)
+	participant : ChatParticipant = read_participant(chat_state, my_status.player_id)
+	channel_id_to_close = participant.channel_id
+	participant.channel_id = None
+	store_participant(chat_state, my_status.player_id, participant)
 
 	# Close the session, i.e. delete the player's discord channel
 	await channels.delete_discord_channel(channel_id_to_close)
 
 	# Remove channel ID -> chat mapping
-	clear_chat_channel_data(channel_id_to_close)
+	clear_channel_connection_mappings(channel_id_to_close)
 
 	# TODO: Edit chat hub message to say "disconnected" and have option to open again
 	# msg ID will not change
@@ -481,28 +506,27 @@ async def close_chat_session_from_command(ctx, partner_handle : str):
 
 ### Messages in chat
 
-async def find_chat_channel_and_post(guild, chat_state, message, chat_connection : ChatConnection, sender_handle : str, full_post : bool):
-	if chat_connection.channel_id == None:
+async def find_chat_channel_and_post(guild, chat_state, message, participant : ChatParticipant, sender_handle : str, full_post : bool):
+	if participant.channel_id == None:
 		# A new channel will be created => we should always include the full header on the first message
 		full_post = True
-	discord_channel = await open_chat_session_for_current_participant(guild, chat_state, chat_connection)
+	discord_channel = await open_chat_session_for_current_participant(guild, chat_state, participant)
 	if discord_channel == None:
-		raise RuntimeError(f'Could not find channel with ID {chat_connection.channel_id}')
+		raise RuntimeError(f'Could not find channel with ID {participant.channel_id}')
 	else:
 		poster_id = sender_handle if full_post else None
 		await posting.repost_message_to_channel(discord_channel, message, poster_id)
 
 def create_reposting_tasks(guild, chat_name : str, message, sender_handle : str, full_post : bool):
 	chat_state = get_chat_state(chat_name)
-	for player_id in chat_state[chat_connection_index]:
-		chat_connection : ChatConnection = read_chat_connection(chat_state, player_id)
-		yield asyncio.create_task(find_chat_channel_and_post(guild, chat_state, message, chat_connection, sender_handle, full_post))
+	for participant in get_participants(chat_state):
+		yield asyncio.create_task(find_chat_channel_and_post(guild, chat_state, message, participant, sender_handle, full_post))
 
 async def process_message(message):
 	task1 = asyncio.create_task(message.delete())
 
 	sender_channel = message.channel
-	chat_channel_data : ChatChannelData = read_chat_channel_data(str(sender_channel.id))
+	chat_channel_data : ChatConnectionMapping = read_chat_connection_from_channel(str(sender_channel.id))
 	sender_handle = chat_channel_data.handle
 	chat_name = chat_channel_data.chat_name
 
