@@ -76,9 +76,8 @@ async def process_reaction_for_payment(message_id : int, user_id : int, channel,
 			await cmd_line_channel.send(transaction.report)
 
 async def process_reaction_in_chat_hub(message_id : int, user_id : int, channel, emoji):
-	player_id = players.get_player_id(str(user_id))
 	message = await channel.fetch_message(message_id)
-	await chats.process_reaction_in_chat_hub(message, player_id, str(emoji))
+	await chats.process_reaction_in_chat_hub(message, str(emoji))
 
 
 async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
