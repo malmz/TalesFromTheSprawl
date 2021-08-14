@@ -197,7 +197,8 @@ def read_participant(chat_state, handle : str):
 	else:
 		return None
 
-def store_participant(chat_state, participant : ChatParticipant):
+def store_participant(chat_name : str, participant : ChatParticipant):
+	chat_state = get_chat_state(chat_name)
 	chat_state[chat_participants_index][participant.handle] = participant.to_string()
 	chat_state.write()
 
@@ -223,20 +224,22 @@ def get_chat_log_iterable(chat_state, chat_name : str):
 		else:
 			print(f'Missing value {index_str} in log for {chat_name}')
 
-def store_chat_log_entry(chat_state, index : int, entry : ChatLogEntry):
+def store_chat_log_entry(chat_name : str, index : int, entry : ChatLogEntry):
+	chat_state = get_chat_state(chat_name)
 	chat_state[chat_content_index][str(index)] = entry.to_string()
 	chat_state.write()
 
-def remove_entry_from_chat_log(chat_state, index : int):
+def remove_entry_from_chat_log(chat_state, chat_name : str, index : int):
 	index_str = str(index)
 	if index_str in chat_state[chat_content_index]:
+		# Re-read the log (minimize time between read and write)
+		chat_state = get_chat_state(chat_name)
 		del chat_state[chat_content_index][index_str]
-	chat_state.write()
+		chat_state.write()
 
 def write_new_chat_log_entry(chat_name : str, entry : ChatLogEntry):
-	chat_state = get_chat_state(chat_name)
 	next_index = get_log_length(chat_name)
-	store_chat_log_entry(chat_state, next_index, entry)
+	store_chat_log_entry(chat_name, next_index, entry)
 	increment_log_length(chat_name)
 
 
@@ -468,7 +471,7 @@ async def get_chat_ui_for_inactive_session(guild, chat_state, participant : Chat
 
 	# chat -> player, channel ID, msg ID mapping
 	# 'participant' may have been updated: 
-	store_participant(chat_state, participant)
+	store_participant(participant.chat_name, participant)
 
 	return ChatUI(
 		participant.chat_name,
@@ -623,7 +626,7 @@ async def close_chat_session(chat_state, participant : ChatParticipant):
 	store_chat_connection_for_hub_msg(participant.chat_hub_msg_id, chat_connection)
 
 	# 'participant' is the chat -> player, channel ID, msg ID mapping
-	store_participant(chat_state, participant)
+	store_participant(participant.chat_name, participant)
 
 async def close_chat_session_from_command(ctx, partner_handle : str):
 	my_user_id = str(ctx.message.author.id)
