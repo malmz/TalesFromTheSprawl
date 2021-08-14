@@ -51,7 +51,7 @@ async def on_ready():
     channels.init_channels(bot)
     #handles.init() #TODO: ensure that every user has a handle?
     finances.init_finances()
-    await chats.init(bot, clear_all=True)
+    await chats.init(bot, clear_all=False)
     print('Initialization complete.')
 
 @bot.event
@@ -317,7 +317,7 @@ async def chat_other_command(ctx,  my_handle : str, other_handle : str):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = await chats.create_chat(my_handle, other_handle)
+    report = await chats.create_2party_chat(my_handle, other_handle)
     if report != None:
         await ctx.send(report)
 
