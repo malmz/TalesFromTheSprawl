@@ -54,15 +54,14 @@ class ChatParticipant(object):
 
 # This is stored per channel/msg ID, and maps back to the chat
 class ChatConnectionMapping(object):
-	def __init__(self, chat_name : str, player_id : str, handle : str, session_status : str):
+	def __init__(self, chat_name : str, player_id : str, handle : str):
 		self.chat_name = chat_name
 		self.player_id = player_id
 		self.handle = handle
-		self.session_status = session_status
 
 	@staticmethod
 	def from_string(string : str):
-		obj = ChatConnectionMapping(None, None, None, None)
+		obj = ChatConnectionMapping(None, None, None)
 		obj.__dict__ = simplejson.loads(string)
 		return obj
 
@@ -108,9 +107,6 @@ def init_chats_confobj():
 
 
 async def init(bot, clear_all : bool=False):
-	# Always delete all channels
-	await channels.delete_all_chats(bot)
-
 	init_chats_confobj()
 	# Loop through all chats that are supposed to exist according to conf files
 	for chat_name in chats[chats_with_logs_index]:
@@ -126,13 +122,17 @@ async def init(bot, clear_all : bool=False):
 			if not chat_participants_index in chat_state:
 				init_chat_state(chat_state)
 			for participant in get_participants(chat_state):
-				# Perhaps go through chat hub messages? Ideally those should still exist after warm restart
-				participant.channel_id = None
-				store_participant(chat_state, participant)
+				# Close all chat sessions. If the discord and config files are still in sync,
+				# this will update all chat hub messages so that chats can be easily re-opened
+				await close_chat_session(chat_state, participant)
+	# Remove all channel mappings
+	chats[chat_channel_data_index] = {}
 	if clear_all:
-		chats[chat_channel_data_index] = {}
 		chats[chat_hub_msg_data_index] = {}
 		chats[chats_with_logs_index] = {}
+
+	# Any left-over channels after this should be deleted
+	await channels.delete_all_chats(bot)
 
 	chats.write()
 
@@ -155,8 +155,9 @@ def store_chat_connection_for_channel(channel_id : str, chat_connection : ChatCo
 	chats.write()
 
 def clear_channel_connection_mappings(channel_id):
-	del chats[chat_channel_data_index][channel_id]
-	chats.write()
+	if channel_id in chats[chat_channel_data_index]:
+		del chats[chat_channel_data_index][channel_id]
+		chats.write()
 
 
 def read_chat_connection_from_hub_msg(msg_id : str):
@@ -421,7 +422,7 @@ async def get_chat_ui_for_active_session(guild, participant):
 		participant.chat_name,
 		chat_channel,
 		chat_hub_message,
-		session_status_active,
+		participant.session_status,
 		participant.handle,
 		participant.player_id)
 
@@ -433,7 +434,7 @@ async def get_chat_ui_for_inactive_session(guild, chat_state, participant : Chat
 		raise RuntimeError(f'Instructed to open session but it appears to be active. Dump: {participant.to_string()}')
 
 	channel = None
-	chat_connection = ChatConnectionMapping(participant.chat_name, participant.player_id, participant.handle, session_status_inactive)
+	chat_connection = ChatConnectionMapping(participant.chat_name, participant.player_id, participant.handle)
 
 	# TODO: we also need to check if there is room to create another channel
 	# If there is not, we should fail activation, and adapt the hub msg accordingly
@@ -455,10 +456,8 @@ async def get_chat_ui_for_inactive_session(guild, chat_state, participant : Chat
 		participant.channel_id = str(channel.id)
 
 		# channel ID -> chat mapping
-		chat_connection.session_status = session_status_active
+		participant.session_status = session_status_active
 		store_chat_connection_for_channel(participant.channel_id, chat_connection)
-
-	participant.session_status = chat_connection.session_status
 
 	chat_hub_message = await update_chat_hub_message(guild, channel, participant)
 	participant.chat_hub_msg_id = str(chat_hub_message.id)
@@ -475,7 +474,7 @@ async def get_chat_ui_for_inactive_session(guild, chat_state, participant : Chat
 		participant.chat_name,
 		channel,
 		chat_hub_message,
-		chat_connection.session_status,
+		participant.session_status,
 		participant.handle,
 		participant.player_id
 	)
@@ -620,7 +619,7 @@ async def close_chat_session(chat_state, participant : ChatParticipant):
 
 	# Update message ID -> chat mapping
 	# We have updated the hub message, so must update its mapping
-	chat_connection = ChatConnectionMapping(participant.chat_name, participant.player_id, participant.handle, session_status_inactive)
+	chat_connection = ChatConnectionMapping(participant.chat_name, participant.player_id, participant.handle)
 	store_chat_connection_for_hub_msg(participant.chat_hub_msg_id, chat_connection)
 
 	# 'participant' is the chat -> player, channel ID, msg ID mapping

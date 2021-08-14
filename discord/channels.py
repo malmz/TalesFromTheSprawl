@@ -86,7 +86,8 @@ def get_discord_channel(channel_id : str):
 async def delete_discord_channel(channel_id : str):
     guild = server.get_guild()
     channel = guild.get_channel(int(channel_id))
-    await channel.delete()
+    if channel is not None:
+        await channel.delete()
 
 ### Common init functions:
 
