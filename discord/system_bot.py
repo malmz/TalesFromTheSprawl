@@ -338,7 +338,7 @@ async def close_chat_other_command(ctx, my_handle : str, other_handle : str):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = await chats.close_chat_session(my_handle, other_handle)
+    report = await chats.close_2party_chat_session(my_handle, other_handle)
     if report != None:
         await ctx.send(report)
 
