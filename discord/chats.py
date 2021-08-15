@@ -130,6 +130,7 @@ async def init(bot, clear_all : bool=False):
 	if clear_all:
 		chats[chat_hub_msg_data_index] = {}
 		chats[chats_with_logs_index] = {}
+		# TODO: loop through all chat_hub channels and use purge()
 
 	# Any left-over channels after this should be deleted
 	await channels.delete_all_chats(bot)
@@ -210,6 +211,9 @@ def increment_log_length(chat_name : str):
 	prev_length = int(chats[chats_with_logs_index][chat_name])
 	chats[chats_with_logs_index][chat_name] = str(prev_length + 1)
 	chats.write()
+
+# TODO: move the chat log to a separate file, so that writing an entry
+# and opening/closing a sesson don't need to interfere
 
 def read_chat_log_entry(chat_state, index : int):
 	string = chat_state[chat_content_index][str(index)]
@@ -374,8 +378,6 @@ async def add_participant_to_chat(
 	port_name : str,
 	activate : bool=False
 	):
-	# TODO: when reopening an existing chat, we should FIRST post all the message history, 
-	# and THEN add the role to give visibility
 	channel_name = f'{handle}_to_{port_name}'
 	
 	participant : ChatParticipant = read_participant(chat_state, handle)
@@ -394,7 +396,6 @@ def create_new_participant(chat_name : str, channel_name : str, session_status :
 		handle,
 		chat_hub_msg_id=None,
 		channel_id=None)
-
 
 async def get_chat_ui(guild, chat_state, participant : ChatParticipant, activate : bool):
 	# Chat already exists
@@ -442,7 +443,7 @@ async def get_chat_ui_for_inactive_session(guild, chat_state, participant : Chat
 	# TODO: we also need to check if there is room to create another channel
 	# If there is not, we should fail activation, and adapt the hub msg accordingly
 	if activate:
-		channel = await channels.create_chat_session_channel(guild, participant.player_id, participant.channel_name)
+		channel = await channels.create_chat_session_channel_no_role(guild, participant.channel_name)
 		await channel.send(
 			(
 				f'```This is the start of {participant.channel_name}. '
@@ -455,6 +456,9 @@ async def get_chat_ui_for_inactive_session(guild, chat_state, participant : Chat
 			await channel.send(
 				f'```====== re-opened chat {participant.channel_name} ======```'
 			)
+
+		# At this point we want to give permissions (prevent unread from before)
+		await players.give_player_access(guild, channel, participant.player_id)
 
 		participant.channel_id = str(channel.id)
 

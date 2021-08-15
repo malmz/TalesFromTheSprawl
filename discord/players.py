@@ -63,6 +63,10 @@ def get_player_id(user_id : str):
 def get_player_role(guild, player_id : str):
 	return discord.utils.find(lambda role: role.name == player_id, guild.roles)
 
+async def give_player_access(guild, channel, player_id : str):
+	role = get_player_role(guild, player_id)
+	await channel.set_permissions(role, read_messages=True)
+
 async def create_player(member):
 	user_id = str(member.id)
 	prev_highest = int(players[player_ids_index][highest_ever_index])

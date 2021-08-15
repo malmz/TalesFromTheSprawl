@@ -291,6 +291,10 @@ async def create_chat_session_channel(guild, player_id : str, discord_channel_na
     overwrites = server.generate_overwrites_private_channel(role)
     return await create_private_channel(guild, overwrites, discord_channel_name, chats_category_name)
 
+async def create_chat_session_channel_no_role(guild, discord_channel_name : str):
+    base_overwrites = server.generate_base_overwrites_new_channel()
+    return await create_private_channel(guild, base_overwrites, discord_channel_name, chats_category_name)
+
 async def delete_all_chats(bot):
     task_list = (asyncio.create_task(c.delete()) for c in get_all_chat_channels(bot))
     await asyncio.gather(*task_list)
