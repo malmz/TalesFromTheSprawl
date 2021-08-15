@@ -224,7 +224,7 @@ def get_chat_log_iterable(chat_state, chat_name : str):
 	for index in range(log_length):
 		index_str = str(index)
 		if index_str in chat_state[chat_content_index]:
-			yield read_chat_log_entry(chat_state, index)
+			yield (index, read_chat_log_entry(chat_state, index))
 		else:
 			print(f'Missing value {index_str} in log for {chat_name}')
 
@@ -443,22 +443,7 @@ async def get_chat_ui_for_inactive_session(guild, chat_state, participant : Chat
 	# TODO: we also need to check if there is room to create another channel
 	# If there is not, we should fail activation, and adapt the hub msg accordingly
 	if activate:
-		channel = await channels.create_chat_session_channel_no_role(guild, participant.channel_name)
-		await channel.send(
-			(
-				f'```This is the start of {participant.channel_name}. '
-				+ f'In this chat, you will always appear as \"{participant.handle}\", even if you switch handles elsewhere.```'
-			)
-		)
-
-		any_history = await repost_message_history(channel, chat_state, participant.chat_name)
-		if any_history:
-			await channel.send(
-				f'```====== re-opened chat {participant.channel_name} ======```'
-			)
-
-		# At this point we want to give permissions (prevent unread from before)
-		await players.give_player_access(guild, channel, participant.player_id)
+		channel = await create_channel_for_chat_session(guild, chat_state, participant)
 
 		participant.channel_id = str(channel.id)
 
@@ -485,6 +470,21 @@ async def get_chat_ui_for_inactive_session(guild, chat_state, participant : Chat
 		participant.handle,
 		participant.player_id
 	)
+
+async def create_channel_for_chat_session(guild, chat_state, participant : ChatParticipant):
+	channel = await channels.create_chat_session_channel_no_role(guild, participant.channel_name)
+	await channel.send(
+		(
+			f'```This is the start of {participant.channel_name}. '
+			+ f'In this chat, you will always appear as \"{participant.handle}\", even if you switch handles elsewhere.```'
+		)
+	)
+
+	await repost_message_history(channel, chat_state, participant)
+
+	# At this point we want to give permissions (prevent unread from before)
+	await players.give_player_access(guild, channel, participant.player_id)
+	return channel
 
 async def open_chat_from_reaction(chat_state, participant : ChatParticipant):
 	guild = server.get_guild()
@@ -632,6 +632,10 @@ async def close_chat_session(chat_state, participant : ChatParticipant):
 	# 'participant' is the chat -> player, channel ID, msg ID mapping
 	store_participant(participant.chat_name, participant)
 
+	# Add chat log entry for this event
+	entry = ChatLogEntry(None, closed_handle=participant.handle)
+	write_new_chat_log_entry(participant.chat_name, entry)
+
 async def close_chat_session_from_command(ctx, partner_handle : str):
 	my_user_id = str(ctx.message.author.id)
 	my_player_id = players.get_player_id(my_user_id)
@@ -690,23 +694,49 @@ async def process_message(message):
 	chat_state = get_chat_state(chat_name)
 	write_new_chat_log_entry(chat_name, entry)
 
-async def repost_message_history(channel, chat_state, chat_name : str):
-	history_empty = True
+async def repost_string_buffer(channel, string_buffer : str):
+	if string_buffer != '':
+		await channel.send(string_buffer)
+		string_buffer = ''
+	return string_buffer
+
+async def repost_message_history(channel, chat_state, participant : ChatParticipant):
+	any_history = False
+	index_to_remove : int = -1
 	# each entry is a ChatLogEntry
 	string_buffer = ''
-	for entry in get_chat_log_iterable(chat_state, chat_name):
-		if entry.message != None:
-			history_empty = False
+	for (index, entry) in get_chat_log_iterable(chat_state, participant.chat_name):
+		if (entry.closed_handle is not None
+			and entry.closed_handle == participant.handle
+			and any_history):
+			# This entry denotes the point where closed_handle stopped listening
+			# and there has been history before this point.
+			# Empty the current buffer:
+			string_buffer = await repost_string_buffer(channel, string_buffer)
+			# Print delimiter:
+			await channel.send(
+				f'```====== last chat session was closed here ======```'
+			)
+			index_to_remove = index
+		elif entry.message is not None:
+			any_history = True
 			if entry.header:
 				# Send the buffer we have built up so far
-				if string_buffer != '':
-					await channel.send(string_buffer)
-					string_buffer = ''
+				string_buffer = await repost_string_buffer(channel, string_buffer)
 			if string_buffer == '':
 				string_buffer = entry.message
 			else:
 				string_buffer += f'\n{entry.message}'
 	# Finish by sending anything that is left over
-	if string_buffer != '':
-		await channel.send(string_buffer)
-	return not history_empty
+	await repost_string_buffer(channel, string_buffer)
+	if any_history:
+		await channel.send(
+			f'```====== re-opened chat {participant.channel_name} ======```'
+		)
+
+	# Remove the entry that denoted last time session was closed
+	# TODO: chat_log_length_at_last_close could also be tracked on a participant level
+	# would probably be cleaner
+	if index_to_remove != -1:
+		remove_entry_from_chat_log(chat_state, participant.chat_name, index_to_remove)
+		
