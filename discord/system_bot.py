@@ -19,7 +19,7 @@ import finances
 import custom_types
 import chats
 import server
-import stores
+import shops
 
 
 load_dotenv()
@@ -46,12 +46,13 @@ async def on_ready():
     global guild
     global guild_name
     guild = discord.utils.find(lambda g: g.name == guild_name, bot.guilds)
-    server.init(bot, guild)
+    await server.init(bot, guild)
     await players.init(bot, guild, clear_all=False)
     await channels.init_channels(bot)
     #handles.init() #TODO: ensure that every user has a handle?
     finances.init_finances()
     await chats.init(bot, clear_all=False)
+    shops.init()
     print('Initialization complete.')
 
 @bot.event
@@ -84,7 +85,6 @@ async def on_message(message):
         return
 
     if (channels.is_cmd_line(message.channel.name)
-        or channels.is_outbox(message.channel.name)
         or channels.is_chat_hub(message.channel.name)
         ):
         await bot.process_commands(message)
@@ -125,7 +125,7 @@ async def on_member_join(member):
 
 
 # Commands related to handles
-# These work in both cmd_line and outbox channels
+# These work in both cmd_line and chat_hub channels
 
 @bot.command(name='handle', help='Show current handle, or switch to another handle. To switch, new handle must be free (then it will be created) or controlled by you. Your handle is shown to other users in most other channels.')
 async def switch_handle_command(ctx, new_handle : str=None, burner=False):
@@ -231,22 +231,6 @@ async def collect_command(ctx):
     #await show_balance_command(ctx)
 
 
-# Commands for passing messages / email
-
-@bot.command(name='message', help='Send message to another handle. Only works in your \"outbox\" channel.')
-async def message_command(ctx, handle : str = None, content : str = None):
-    if not channels.is_outbox(ctx.channel.name):
-        response = 'Error: you cannot send messages from here. Go to your #outbox channel and use .message there.'
-        await ctx.send(response)
-        return
-    if handle == None or content == None:
-        response = 'Error: use \'.message <recipient> \"message\"\', e.g. \'.message Shadow_Weaver \"Oi chummer!\"\'.'
-        await ctx.send(response)
-        return
-
-    handle = handle.lower()
-    await posting.process_email(ctx, handle, content)
-
 # Admin-only commands for testing etc.
 
 @bot.command(name='fake_join', help='Admin-only function to test run the new member mechanics')
@@ -282,7 +266,13 @@ async def fake_join_command(ctx, nick : str):
 @commands.has_role('gm')
 async def clear_all_players_command(ctx):
     await players.init(bot, guild, clear_all=True)
-    await ctx.send('Done.')
+    try:
+        await ctx.send('Done.')
+    except discord.errors.NotFound:
+        print('Cleared all players. Could not send report because channel is missing – '
+            +'the command was probably given in a player-only command line that was deleted.')
+
+    
 
 @bot.command(name='init_all_players', help='Admin-only: initialise all current members of the server as players.')
 @commands.has_role('gm')
@@ -349,15 +339,15 @@ async def clear_all_chats_command(ctx):
     await ctx.send('Done.')
 
 
-### Stores:
+### shops:
 
-@bot.command(name='create_store', help='Admin-only: create a new store, run by a certain player.')
+@bot.command(name='create_shop', help='Admin-only: create a new shop, run by a certain player.')
 @commands.has_role('gm')
-async def create_store_command(ctx, store_name : str=None, player_id : str=None):
+async def create_shop_command(ctx, shop_name : str=None, player_id : str=None):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = await stores.create_store(guild, store_name, player_id)
+    report = await shops.create_shop(guild, shop_name, player_id)
     if report is not None:
         await ctx.send(report)
 

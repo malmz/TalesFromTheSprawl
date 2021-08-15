@@ -48,6 +48,7 @@ async def delete_if_player_role(role, spare_used : bool):
 	matches = re.search(personal_role_regex, role.name)
 	if matches != None:
 		if not spare_used or len(role.members) == 0:
+			print(f'Deleting unused role with name {role.name}')
 			await role.delete()
 
 def get_all_players():
@@ -63,6 +64,7 @@ def get_player_id(user_id : str):
 def get_player_role(guild, player_id : str):
 	return discord.utils.find(lambda role: role.name == player_id, guild.roles)
 
+# TODO: this could perhaps be refactored to use the overwrite generation functions in server.py
 async def give_role_access(channel, role):
 	await channel.set_permissions(role, read_messages=True)
 
@@ -82,8 +84,8 @@ async def create_player(member):
 	role = await member.guild.create_role(name=new_player_id)
 
 	# Create personal channels for user:
-	overwrites = server.generate_overwrites_private_channel(role)
-	overwrites_finance = server.generate_overwrites_private_channel(role, read_only=True)
+	overwrites = server.generate_overwrites_own_new_private_channel(role)
+	overwrites_finance = server.generate_overwrites_own_new_private_channel(role, read_only=True)
 
 	cmd_line_creation = asyncio.create_task(channels.create_personal_channel(
 		member.guild,
@@ -99,19 +101,13 @@ async def create_player(member):
 
 	finances_creation = asyncio.create_task(channels.create_personal_channel(
 		member.guild,
-		overwrites,
+		overwrites_finance,
 		channels.get_finance_name(new_player_id)
 	))
 
-	anon_channel = get_public_anon_channel(guild)
-	anon_access = asyncio.create_task(give_role_access(channel, role))
-
-	[cmd_line_channel, chat_hub_channel, finances_channel, _] = (
-		await asyncio.gather(cmd_line_creation, chat_hub_creation, finances_creation, anon_access)
+	[cmd_line_channel, chat_hub_channel, finances_channel] = (
+		await asyncio.gather(cmd_line_creation, chat_hub_creation, finances_creation)
 	)
-
-
-	## TODO: give the new role read permission in various locked channels, e.g. anon
 
 	# This is a test:
 	# Hopefully new players won't get notifications from chat_hub welcome message,
@@ -124,6 +120,9 @@ async def create_player(member):
 	try:
 		new_roles = member.roles
 		new_roles.append(role)
+		all_players_role = server.get_all_players_role()
+		if all_players_role not in new_roles:
+			new_roles.append(server.get_all_players_role())
 		await member.edit(nick = base_nick, roles=new_roles)
 	except discord.Forbidden:
 		print(f'Probably tried to edit server owner, which doesn\'t work. Please add role {new_player_id} to user {member.name}.')
@@ -184,17 +183,6 @@ async def send_startup_message_cmd_line(member, player_id : str, channel):
 	for emoji, amount in reactions.reactions_worth_money.items():
 		content = content + '  ' + emoji + ' = ¥' + str(amount) + '\n'
 
-	await channel.send(content)
-
-async def send_startup_message_inbox(channel, outbox_channel_name):
-	content = 'This is your inbox. Private messages from other users will appear here.\n'
-	content = content + f'Note: you cannot respond here. To respond, you have to send a message from your outbox: {outbox_channel_name}.\n'
-	await channel.send(content)
-
-async def send_startup_message_outbox(channel, inbox_channel_name):
-	content = 'This is your outbox. Think of it as an email client.\n'
-	content = content + 'Send messages by typing \'.message <recipient> \"message\"\', e.g. \'.message Shadow_Weaver \"Oi chummer!\"\'.\n'
-	content = content + f'The message will show up in recipient\'s inbox. You have your inbox in {inbox_channel_name}.'
 	await channel.send(content)
 
 async def send_startup_message_finance(channel):
@@ -293,13 +281,6 @@ def get_cmd_line_channel_for_handle(guild, handle : str):
 	status : handles.HandleStatus = handles.get_handle_status(handle)
 	if status.exists:
 		return channels.get_cmd_line_channel(guild, status.player_id)
-	else:
-		return None
-
-def get_inbox_channel_for_handle(guild, handle : str):
-	status : handles.HandleStatus = handles.get_handle_status(handle)
-	if status.exists:
-		return channels.get_inbox_channel(guild, status.player_id)
 	else:
 		return None
 

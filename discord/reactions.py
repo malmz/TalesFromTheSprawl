@@ -85,11 +85,10 @@ async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
 	if channels.is_anonymous_channel(channel):
 		# Reactions are allowed in anonymous channels, but trigger no effects
 		return
-	if (channels.is_outbox(channel.name)
-		or channels.is_cmd_line(channel.name)
+	if (channels.is_cmd_line(channel.name)
 		or channels.is_finance(channel.name)
 		):
-		# Reactions in outbox, cmd_line and finance channels will be silently swallowed
+		# Reactions in cmd_line and finance channels will be silently swallowed
 		await remove_reaction(search_result.message, emoji, user_id)
 		return
 

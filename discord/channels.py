@@ -13,7 +13,7 @@ import asyncio
 personal_category_name = 'personal_account'
 chats_category_name = 'chats'
 off_category_name = 'offline'
-public_category_name = 'public_network'
+public_open_category_name = 'public_network'
 shadowlands_category_name = 'shadowlands'
 
 public_anon_channel_name = 'anon'
@@ -45,7 +45,7 @@ def is_public_channel(discord_channel):
     if discord_channel.category == None:
         return False
     else:
-        return discord_channel.category.name == public_category_name
+        return discord_channel.category.name == public_open_category_name
 
 def is_chat_channel(discord_channel):
     if discord_channel.category == None:
@@ -63,7 +63,7 @@ def is_pseudonymous_channel(discord_channel):
     if discord_channel.category == None:
         return False
     else:
-        return discord_channel.category.name == public_category_name or discord_channel.category.name == shadowlands_category_name
+        return discord_channel.category.name == public_open_category_name or discord_channel.category.name == shadowlands_category_name
 
 def is_anonymous_channel(discord_channel):
     return discord_channel.name == public_anon_channel_name
@@ -103,8 +103,8 @@ async def init_discord_channel(discord_channel):
     if discord_channel.category != None:
         if discord_channel.category.name == personal_category_name:
             await init_personal_channel(discord_channel)
-        elif discord_channel.category.name == public_category_name:
-            await init_common_channel(discord_channel)
+        elif discord_channel.category.name == public_open_category_name:
+            await init_public_open_channel(discord_channel)
     else:
         print(f'Will not create channel state for channel {discord_channel.name} which has no category')
 
@@ -118,22 +118,27 @@ async def init_channels(bot):
 
 async def init_channel_state(discord_channel):
     await discord_channel.edit(slowmode_delay=slowmode_delay)
-    add_roles_tasks = (
-        [asyncio.create_task(discord_channel.set_permissions(role, overwrite=overwrites))
-        for (role, overwrites)
-        in server.generate_base_overwrites_new_channel().items()])
-    await asyncio.gather(*add_roles_tasks)
     channel_name = discord_channel.name
     channel_states[channel_name] = {}
     channel_states.write()
     ident = ChannelIdentifier(discord_channel_id=discord_channel.id)
     set_channel_id(discord_channel.name, ident)    
 
-async def init_common_channel(discord_channel):
+async def set_base_permissions(discord_channel, private : bool, read_only : bool):
+    add_roles_tasks = (
+        [asyncio.create_task(discord_channel.set_permissions(role, overwrite=overwrites))
+        for (role, overwrites)
+        in server.generate_base_overwrites(private, read_only).items()])
+    await asyncio.gather(*add_roles_tasks)
+
+async def init_public_open_channel(discord_channel):
+    await set_base_permissions(discord_channel, private=False, read_only=False)
     await init_channel_state(discord_channel)
     init_pseudonymous_channel(discord_channel.name)
 
 async def init_personal_channel(discord_channel):
+    read_only = is_read_only_private_channel(discord_channel.name)
+    await set_base_permissions(discord_channel, private=True, read_only=read_only)
     await init_channel_state(discord_channel)
 
 ### Anonymous channels:
@@ -209,7 +214,7 @@ def record_new_post(channel_name : str, poster_id : str, timestamp):
 ### Private channels:
 # Only visible to some players
 
-async def create_private_channel(guild, overwrites, channel_name : str, category_name : str):
+async def create_discord_channel(guild, overwrites, channel_name : str, category_name : str):
     category = discord.utils.find(lambda cat: cat.name == category_name, guild.channels)
     channel = await guild.create_text_channel(
         channel_name,
@@ -217,15 +222,13 @@ async def create_private_channel(guild, overwrites, channel_name : str, category
         category=category,
         slowmode_delay=slowmode_delay
     )
-    init_channel_state(channel)
+    await init_channel_state(channel)
     return channel
 
 
 ### Personal channels: completely belonging to and owned by one player
 
 cmd_line_base = 'cmd_line_'
-inbox_base = 'inbox_'
-outbox_base = 'outbox_'
 finance_base = 'finance_'
 daemon_base = 'daemon_'
 chat_hub_base = 'chat_hub_'
@@ -241,7 +244,7 @@ def get_all_personal_channels(bot):
             yield channel
 
 async def create_personal_channel(guild, overwrites, channel_name : str):
-    return await create_private_channel(guild, overwrites, channel_name, personal_category_name)
+    return await create_discord_channel(guild, overwrites, channel_name, personal_category_name)
 
 def get_cmd_line_name(player_id : str):
     return cmd_line_base + player_id
@@ -252,24 +255,6 @@ def is_cmd_line(channel_name : str):
 def get_cmd_line_channel(guild, player_id : str):
     channel_name = get_cmd_line_name(player_id)
     return get_discord_channel_from_name(guild, channel_name)
-
-
-def get_inbox_name(player_id : str):
-    return inbox_base + player_id
-
-def is_inbox(channel_name : str):
-    return inbox_base in channel_name
-
-def get_inbox_channel(guild, player_id : str):
-    channel_name = get_inbox_name(player_id)
-    return get_discord_channel_from_name(guild, channel_name)
-
-
-def get_outbox_name(player_id : str):
-    return outbox_base + player_id
-
-def is_outbox(channel_name : str):
-    return outbox_base in channel_name
 
 
 def get_finance_name(player_id : str):
@@ -283,6 +268,7 @@ def get_finance_channel(guild, player_id : str):
     return get_discord_channel_from_name(guild, channel_name)
 
 
+
 def get_chat_hub_name(player_id : str):
     return chat_hub_base + player_id
 
@@ -292,6 +278,11 @@ def is_chat_hub(channel_name : str):
 def get_chat_hub_channel(guild, player_id : str):
     channel_name = get_chat_hub_name(player_id)
     return get_discord_channel_from_name(guild, channel_name)
+
+
+# Currently, the only read-only private channels are the finance channels
+def is_read_only_private_channel(channel_name : str):
+    return is_finance(channel_name)
 
 
 
@@ -308,12 +299,12 @@ def init_chat_channel(channel_name : str):
 
 async def create_chat_session_channel(guild, player_id : str, discord_channel_name : str):
     role = players.get_player_role(guild, player_id)
-    overwrites = server.generate_overwrites_private_channel(role)
-    return await create_private_channel(guild, overwrites, discord_channel_name, chats_category_name)
+    overwrites = server.generate_overwrites_own_new_private_channel(role)
+    return await create_discord_channel(guild, overwrites, discord_channel_name, chats_category_name)
 
 async def create_chat_session_channel_no_role(guild, discord_channel_name : str):
-    base_overwrites = server.generate_base_overwrites_new_channel()
-    return await create_private_channel(guild, base_overwrites, discord_channel_name, chats_category_name)
+    base_overwrites = server.generate_base_overwrites(private = True, read_only = False)
+    return await create_discord_channel(guild, base_overwrites, discord_channel_name, chats_category_name)
 
 async def delete_all_chats(bot):
     task_list = (asyncio.create_task(c.delete()) for c in get_all_chat_channels(bot))

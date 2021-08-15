@@ -25,6 +25,8 @@ session_status_active = '___active'
 session_status_inactive = '___inactive'
 #session_status_muted = '___muted'
 
+# TODO: support for burning a burner that was involved in a chat!
+
 ### Classes, init and basic utilities
 
 # This is stored indexed by handle, and points out the various connections that handle has to the chat
@@ -40,7 +42,6 @@ class ChatParticipant(object):
 		self.chat_hub_msg_id = chat_hub_msg_id
 		# Set to None when the channel is temporarily closed
 		self.channel_id = channel_id
-		#TODO: message_id pointing to a message in player's cmd_line or similar, with open/close buttons
 
 	@staticmethod
 	def from_string(string : str):

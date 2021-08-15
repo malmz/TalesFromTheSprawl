@@ -91,37 +91,3 @@ async def process_open_message(message, anonymous=False):
     await task1
     await task2
 
-
-# Private channels:
-
-
-# Email:
-# Handle the inbox/outbox dynamic
-# (will likely be removed)
-
-async def process_email(ctx, recip_handle : str, content : str):
-    await ctx.send('Email functionality currently not available.')
-    return
-    inbox_channel = players.get_inbox_channel_for_handle(ctx.guild, recip_handle)
-    if inbox_channel == None:
-        response = f'Error: cannot send message to {recip_handle}. Handle might not exist. Check the spelling.'
-        await ctx.send(response)
-    else:
-        outbox_channel = ctx.message.channel
-        sender_handle = handles.get_handle(str(ctx.message.author.id))
-        response = f'Message sent to {recip_handle}.'
-        # Post the same message to recipients inbox and senders outbox
-        await repost_message_to_channel(
-            inbox_channel,
-            ctx.message,
-            sender_handle,
-            recip_handle
-        )
-        await repost_message_to_channel(
-            outbox_channel,
-            ctx.message,
-            sender_handle,
-            recip_handle
-        )
-        # Delete the original message with the command
-        await ctx.message.delete()
