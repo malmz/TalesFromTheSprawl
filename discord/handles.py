@@ -16,8 +16,11 @@ last_regular_index = '___last_regular'
 
 # TODO: should be able to remove a lot of on-demand initialization now that we init all users
 
-
-alphanumeric_regex = re.compile(f'^[a-z0-9]*$')
+# May contain lowercase letters, numbers and underscores
+# Must start and end with letter or number
+# Must be at least two characters (TODO: not necessary, but makes for an easier regex)
+alphanumeric_regex = re.compile(f'^[a-z0-9][a-z0-9_]*[a-z0-9]$')
+double_underscore = '__'
 
 class HandleStatus:
     handle : str = ''
@@ -37,12 +40,17 @@ def init_handles_for_player(player_id : str, first_handle : str):
     create_regular_handle(player_id, first_handle)
     switch_to_handle(player_id, first_handle)
 
-def is_allowed_handle(new_handle : str):
-	matches = re.search(alphanumeric_regex, new_handle)
-	return matches == None
+def is_forbidden_handle(new_handle : str):
+    matches = re.search(alphanumeric_regex, new_handle)
+    if matches is None:
+        return True
+    elif double_underscore in new_handle:
+        return True
+    else:
+        return False
 
 def create_handle(player_id : str, new_handle : str, burner : bool):
-	if is_allowed_handle(new_handle):
+	if is_forbidden_handle(new_handle):
 		return False
 	handles[player_id][new_handle] = 'burner' if burner else 'regular'
 	finances.init_finances_for_handle(new_handle)
@@ -154,7 +162,10 @@ def create_handle_and_switch(player_id : str, new_handle : str, new_shall_be_bur
 		else:
 			response = f'Switched to new handle **{new_handle}** (created now).'
 	else:
-		response = f'Error: cannot create handle {new_handle}. Handles can only contain letters a-z (lowercase) and numbers 0-9.'
+		response = (f'Error: cannot create handle {new_handle}. '
+            + 'Handles can only contain letters a-z (lowercase), numbers 0-9, and \_ (underscore). '
+            + 'May not start or end with \_, may not have more than one \_ in a row.'
+        )
 	return response
 
 async def process_handle_command(ctx, new_handle : str=None, burner=False):

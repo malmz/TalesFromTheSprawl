@@ -63,9 +63,12 @@ def get_player_id(user_id : str):
 def get_player_role(guild, player_id : str):
 	return discord.utils.find(lambda role: role.name == player_id, guild.roles)
 
+async def give_role_access(channel, role):
+	await channel.set_permissions(role, read_messages=True)
+
 async def give_player_access(guild, channel, player_id : str):
 	role = get_player_role(guild, player_id)
-	await channel.set_permissions(role, read_messages=True)
+	await give_role_access(channel, role)
 
 async def create_player(member):
 	user_id = str(member.id)
@@ -82,57 +85,38 @@ async def create_player(member):
 	overwrites = server.generate_overwrites_private_channel(role)
 	overwrites_finance = server.generate_overwrites_private_channel(role, read_only=True)
 
-	cmd_line_channel = await channels.create_personal_channel(
+	cmd_line_creation = asyncio.create_task(channels.create_personal_channel(
 		member.guild,
 		overwrites,
 		channels.get_cmd_line_name(new_player_id)
-	)
-	chat_hub_channel = await channels.create_personal_channel(
+	))
+
+	chat_hub_creation = asyncio.create_task(channels.create_personal_channel(
 		member.guild,
 		overwrites,
 		channels.get_chat_hub_name(new_player_id)
+	))
+
+	finances_creation = asyncio.create_task(channels.create_personal_channel(
+		member.guild,
+		overwrites,
+		channels.get_finance_name(new_player_id)
+	))
+
+	anon_channel = get_public_anon_channel(guild)
+	anon_access = asyncio.create_task(give_role_access(channel, role))
+
+	[cmd_line_channel, chat_hub_channel, finances_channel, _] = (
+		await asyncio.gather(cmd_line_creation, chat_hub_creation, finances_creation, anon_access)
 	)
 
-	#inbox_channel = await channels.create_personal_channel(
-	#	member.guild,
-	#	overwrites,
-	#	channels.get_inbox_name(new_player_id)
-	#)
-	#outbox_channel = await channels.create_personal_channel(
-	#	member.guild,
-	#	overwrites,
-	#	channels.get_outbox_name(new_player_id)
-	#)
-	finances_channel = await channels.create_personal_channel(
-		member.guild,
-		overwrites_finance,
-		channels.get_finance_name(new_player_id)
-	)
 
 	## TODO: give the new role read permission in various locked channels, e.g. anon
 
-	#task2 = asyncio.create_task(
-	#	send_startup_message_inbox(
-	#		inbox_channel,
-	#		channels.clickable_channel_ref(outbox_channel)
-	#	)
-	#)
-	#task3 = asyncio.create_task(
-	#	send_startup_message_outbox(
-	#		outbox_channel,
-	#		channels.clickable_channel_ref(inbox_channel)
-	#	)
-	#)
-
 	# This is a test:
-	# Hopefully new players get their cmd_line and finance marked as unread, but not chat_hub
-	# since the latter had its message sent before the player had access
-	task5 = asyncio.create_task(
-		send_startup_message_chat_hub(
-			chat_hub_channel
-		)
-	)
-	await asyncio.gather(task5)
+	# Hopefully new players won't get notifications from chat_hub welcome message,
+	# since it was sent before they got the role that allows them access
+	await send_startup_message_chat_hub(chat_hub_channel)
 
 	# Edit user (change nick and add role):
 	base_nick = 'u' + new_player_id
@@ -144,9 +128,9 @@ async def create_player(member):
 	except discord.Forbidden:
 		print(f'Probably tried to edit server owner, which doesn\'t work. Please add role {new_player_id} to user {member.name}.')
 
-	task1 = asyncio.create_task(send_startup_message_cmd_line(member, new_player_id, cmd_line_channel))
-	task4 = asyncio.create_task(send_startup_message_finance(finances_channel))
-	await asyncio.gather(task1, task4)
+	cmd_line_welcome = asyncio.create_task(send_startup_message_cmd_line(member, new_player_id, cmd_line_channel))
+	finance_welcome = asyncio.create_task(send_startup_message_finance(finances_channel))
+	await asyncio.gather(cmd_line_welcome, finance_welcome)
 
 	handles.init_handles_for_player(new_player_id, base_nick)
 

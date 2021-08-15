@@ -16,10 +16,14 @@ off_category_name = 'offline'
 public_category_name = 'public_network'
 shadowlands_category_name = 'shadowlands'
 
+public_anon_channel_name = 'anon'
+
 channel_id_index = '___channel_id'
 last_poster_index = '___last_poster'
 last_full_post_index = '___last_full_post_time'
 post_counter_index = '___post_counter'
+
+slowmode_delay : int = 2
 
 # Channel state: this is the state of the channel, independent of the handles used in it.
 
@@ -62,7 +66,7 @@ def is_pseudonymous_channel(discord_channel):
         return discord_channel.category.name == public_category_name or discord_channel.category.name == shadowlands_category_name
 
 def is_anonymous_channel(discord_channel):
-    return discord_channel.name == 'anon'
+    return discord_channel.name == public_anon_channel_name
 
 def set_channel_id(channel_name : str, ident : ChannelIdentifier):
     channel_states[channel_name][channel_id_index] = ident.to_string()
@@ -91,40 +95,51 @@ async def delete_discord_channel(channel_id : str):
 
 ### Common init functions:
 
-def init_discord_channel(discord_channel):
+async def init_discord_channel(discord_channel):
     if discord_channel.type in [discord.ChannelType.category, discord.ChannelType.voice]:
         # No need to do anything for the categories themselves or the voice channels
         return
 
     if discord_channel.category != None:
         if discord_channel.category.name == personal_category_name:
-            init_personal_channel(discord_channel)
+            await init_personal_channel(discord_channel)
         elif discord_channel.category.name == public_category_name:
-            init_common_channel(discord_channel)
+            await init_common_channel(discord_channel)
     else:
         print(f'Will not create channel state for channel {discord_channel.name} which has no category')
 
 
-def init_channels(bot):
+async def init_channels(bot):
     for elem in channel_states:
         del channel_states[elem]
     channel_states.write()
     for discord_channel in bot.get_all_channels():
-        init_discord_channel(discord_channel)
+        await init_discord_channel(discord_channel)
 
-def init_channel_state(discord_channel):
+async def init_channel_state(discord_channel):
+    await discord_channel.edit(slowmode_delay=slowmode_delay)
+    add_roles_tasks = (
+        [asyncio.create_task(discord_channel.set_permissions(role, overwrite=overwrites))
+        for (role, overwrites)
+        in server.generate_base_overwrites_new_channel().items()])
+    await asyncio.gather(*add_roles_tasks)
     channel_name = discord_channel.name
     channel_states[channel_name] = {}
     channel_states.write()
     ident = ChannelIdentifier(discord_channel_id=discord_channel.id)
     set_channel_id(discord_channel.name, ident)    
 
-def init_common_channel(discord_channel):
-    init_channel_state(discord_channel)
+async def init_common_channel(discord_channel):
+    await init_channel_state(discord_channel)
     init_pseudonymous_channel(discord_channel.name)
 
-def init_personal_channel(discord_channel):
-    init_channel_state(discord_channel)
+async def init_personal_channel(discord_channel):
+    await init_channel_state(discord_channel)
+
+### Anonymous channels:
+
+def get_public_anon_channel(guild):
+    return get_discord_channel_from_name(guild, public_anon_channel_name)
 
 
 ### Utilities related to pseudonymous channels, i.e. ones where all messages are reposted using handle
@@ -196,7 +211,12 @@ def record_new_post(channel_name : str, poster_id : str, timestamp):
 
 async def create_private_channel(guild, overwrites, channel_name : str, category_name : str):
     category = discord.utils.find(lambda cat: cat.name == category_name, guild.channels)
-    channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
+    channel = await guild.create_text_channel(
+        channel_name,
+        overwrites=overwrites,
+        category=category,
+        slowmode_delay=slowmode_delay
+    )
     init_channel_state(channel)
     return channel
 

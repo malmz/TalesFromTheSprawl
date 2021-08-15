@@ -48,7 +48,7 @@ async def on_ready():
     guild = discord.utils.find(lambda g: g.name == guild_name, bot.guilds)
     server.init(bot, guild)
     await players.init(bot, guild, clear_all=False)
-    channels.init_channels(bot)
+    await channels.init_channels(bot)
     #handles.init() #TODO: ensure that every user has a handle?
     finances.init_finances()
     await chats.init(bot, clear_all=False)
