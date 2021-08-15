@@ -8,7 +8,6 @@ from configobj import ConfigObj
 
 from discord.ext import commands
 from dotenv import load_dotenv
-from collections import namedtuple
 
 # Custom imports
 import handles
@@ -20,6 +19,7 @@ import finances
 import custom_types
 import chats
 import server
+import stores
 
 
 load_dotenv()
@@ -339,7 +339,7 @@ async def close_chat_other_command(ctx, my_handle : str, other_handle : str):
         await swallow(ctx.message);
         return
     report = await chats.close_2party_chat_session(my_handle, other_handle)
-    if report != None:
+    if report is not None:
         await ctx.send(report)
 
 @bot.command(name='clear_all_chats', help='Admin-only: delete all chats and chat channels for all users.')
@@ -349,9 +349,18 @@ async def clear_all_chats_command(ctx):
     await ctx.send('Done.')
 
 
-#@bot.command(name='read_chat', help='Admin-only function to test chats')
-#@commands.has_role('gm')
-#async def read_chat_command(ctx):
-#    await chats.read_chat()
+### Stores:
+
+@bot.command(name='create_store', help='Admin-only: create a new store, run by a certain player.')
+@commands.has_role('gm')
+async def create_store_command(ctx, store_name : str=None, player_id : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = await stores.create_store(guild, store_name, player_id)
+    if report is not None:
+        await ctx.send(report)
+
+
 
 bot.run(TOKEN)
