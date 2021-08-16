@@ -9,6 +9,18 @@ all_players_role = None
 gm_role = None
 guild = None
 
+# TODO: restrict reactions to only the channels where they actually do anything.
+# This is a third category I think:
+# private with emoji: yes, chats
+# private without emoji: yes cmd_line
+# private read-only with emoji: yes, order flow (although they might not be "private", more like "groups")
+# private read-only without emoji: yes, finance
+# public with emoji: yes, all
+# public read-only with emoji: yes, shops
+# public without emoji: perhaps none?
+#
+# Easiest would be to just pass in a separate parameter
+
 no_access = discord.PermissionOverwrite(read_messages=False, send_messages=False)
 normal_access = discord.PermissionOverwrite(read_messages=True) # Will get send access depending on all_players_role settings for this channel
 super_access = discord.PermissionOverwrite(read_messages=True, send_messages=True)

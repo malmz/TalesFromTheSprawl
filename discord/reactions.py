@@ -89,7 +89,8 @@ async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
 		or channels.is_finance(channel.name)
 		):
 		# Reactions in cmd_line and finance channels will be silently swallowed
-		await remove_reaction(search_result.message, emoji, user_id)
+		message = await channel.fetch_message(message_id)
+		await remove_reaction(message, emoji, user_id)
 		return
 
 	if channels.is_chat_hub(channel.name):

@@ -358,6 +358,17 @@ async def create_shop_command(ctx, shop_name : str=None, player_id : str=None):
     if report is not None:
         await ctx.send(report)
 
+@bot.command(name='add_product', help='Admin-only: add a new product to a shop.')
+@commands.has_role('gm') # TODO: allow shop owner / employee to do this live?
+async def add_product_command(ctx, shop_name : str=None, product_name : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = await shops.add_product(shop_name, product_name)
+    if report is not None:
+        await ctx.send(report)
+
+
 
 @bot.command(name='clear_all_shops', help='Admin-only: delete all shops.')
 @commands.has_role('gm')
