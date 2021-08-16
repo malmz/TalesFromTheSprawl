@@ -3,6 +3,7 @@ player_ids_index = '___player_ids'
 system_role_name = 'system'
 admin_role_name = 'admin'
 all_players_role_name = '251'
+gm_role_name = 'gm'
 
 forbidden_content = '**'
 forbidden_content_print = '\*\*'

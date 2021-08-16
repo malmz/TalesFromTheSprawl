@@ -56,6 +56,9 @@ def get_all_players():
 		if not player in [highest_ever_index, player_ids_index]:
 			yield player
 
+def player_exists(player_id : str):
+	return player_id in get_all_players()
+
 def get_player_id(user_id : str):
 	if not user_id in players[player_ids_index]:
 		raise RuntimeError(f'User {user_id} has not been initialized as a player. Fix that first.')
@@ -109,10 +112,11 @@ async def create_player(member):
 		await asyncio.gather(cmd_line_creation, chat_hub_creation, finances_creation)
 	)
 
-	# This is a test:
-	# Hopefully new players won't get notifications from chat_hub welcome message,
-	# since it was sent before they got the role that allows them access
-	await send_startup_message_chat_hub(chat_hub_channel)
+	# Send all welcome messages before adding the role -> avoid spamming notifications
+	chat_hub_welcome = asyncio.create_task(send_startup_message_chat_hub(chat_hub_channel))
+	finance_welcome = asyncio.create_task(send_startup_message_finance(finances_channel))
+	cmd_line_welcome = asyncio.create_task(send_startup_message_cmd_line(member, new_player_id, cmd_line_channel))
+	await asyncio.gather(chat_hub_welcome, finance_welcome, cmd_line_welcome)
 
 	# Edit user (change nick and add role):
 	base_nick = 'u' + new_player_id
@@ -126,10 +130,6 @@ async def create_player(member):
 		await member.edit(nick = base_nick, roles=new_roles)
 	except discord.Forbidden:
 		print(f'Probably tried to edit server owner, which doesn\'t work. Please add role {new_player_id} to user {member.name}.')
-
-	cmd_line_welcome = asyncio.create_task(send_startup_message_cmd_line(member, new_player_id, cmd_line_channel))
-	finance_welcome = asyncio.create_task(send_startup_message_finance(finances_channel))
-	await asyncio.gather(cmd_line_welcome, finance_welcome)
 
 	handles.init_handles_for_player(new_player_id, base_nick)
 

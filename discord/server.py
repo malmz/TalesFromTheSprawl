@@ -1,11 +1,12 @@
 import discord
 import asyncio
 
-from constants import system_role_name, admin_role_name, all_players_role_name
+from constants import system_role_name, admin_role_name, all_players_role_name, gm_role_name
 
 system_role = None
 admin_role = None
 all_players_role = None
+gm_role = None
 guild = None
 
 no_access = discord.PermissionOverwrite(read_messages=False, send_messages=False)
@@ -24,9 +25,11 @@ async def init(bot, current_guild):
 	global admin_role
 	global guild
 	global all_players_role
+	global gm_role
 	guild = current_guild
 	system_role = discord.utils.find(lambda role: role.name == system_role_name, guild.roles)
 	admin_role = discord.utils.find(lambda role: role.name == admin_role_name, guild.roles)
+	gm_role = discord.utils.find(lambda role: role.name == gm_role_name, guild.roles)
 	all_players_role = discord.utils.find(lambda role: role.name == all_players_role_name, guild.roles)
 	if all_players_role is None:
 		print(f'Creating role with name {all_players_role_name}')
@@ -53,7 +56,8 @@ def generate_base_overwrites(private : bool, read_only : bool):
 		{guild.default_role: no_access,
 		all_players_role: access_level,
 		system_role: super_access,
-		admin_role: super_access
+		admin_role: super_access,
+		gm_role : normal_access if not private else no_access
 		})
 
 def get_guild():

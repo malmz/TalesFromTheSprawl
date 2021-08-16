@@ -40,11 +40,13 @@ bot = commands.Bot(
 )
 
 guild = None
+ready = False
 
 @bot.event
 async def on_ready():
     global guild
     global guild_name
+    global ready
     guild = discord.utils.find(lambda g: g.name == guild_name, bot.guilds)
     await server.init(bot, guild)
     await players.init(bot, guild, clear_all=False)
@@ -52,8 +54,9 @@ async def on_ready():
     #handles.init() #TODO: ensure that every user has a handle?
     finances.init_finances()
     await chats.init(bot, clear_all=False)
-    shops.init()
+    await shops.init(bot, clear_all=False)
     print('Initialization complete.')
+    ready = True
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -65,17 +68,21 @@ async def on_command_error(ctx, error):
         await ctx.send("Error: unknown system error. Contact administrator.")
         raise(error)
 
-async def swallow(message):
+async def swallow(message, alert=True):
     await message.delete()
-    alert = await message.channel.send('You cannot do that here. Try it your #cmd_line instead.')
-    await asyncio.sleep(5)
-    await alert.delete()
+    if alert:
+        await message.channel.send(
+            'You cannot do that here. Try it your #cmd_line instead.',
+            delete_after=5)
 
 
 # General message processing (reposting for anonymity/pseudonymity)
 
 @bot.event
 async def on_message(message):
+    if not ready:
+        await swallow(message, alert=False)
+        return
     if message.author == bot.user:
         # Never react to bot's own message to avoid loops
         return
@@ -347,9 +354,19 @@ async def create_shop_command(ctx, shop_name : str=None, player_id : str=None):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = await shops.create_shop(guild, shop_name, player_id)
+    report = await shops.create_shop(ctx.guild, shop_name, player_id)
     if report is not None:
         await ctx.send(report)
+
+
+@bot.command(name='clear_all_shops', help='Admin-only: delete all shops.')
+@commands.has_role('gm')
+async def clear_shops_command(ctx):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    await shops.init(bot, clear_all=True)
+    await ctx.send('Done.')
 
 
 

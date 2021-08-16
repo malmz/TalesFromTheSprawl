@@ -11,6 +11,7 @@ import asyncio
 # This module tracks and handles state related to channels
 
 personal_category_name = 'personal_account'
+shops_category_name = 'public_business'
 chats_category_name = 'chats'
 off_category_name = 'offline'
 public_open_category_name = 'public_network'
@@ -59,6 +60,12 @@ def is_personal_channel(discord_channel):
     else:
         return discord_channel.category.name == personal_category_name
 
+def is_shop_channel(discord_channel):
+    if discord_channel.category == None:
+        return False
+    else:
+        return discord_channel.category.name == shops_category_name
+
 def is_pseudonymous_channel(discord_channel):
     if discord_channel.category == None:
         return False
@@ -93,6 +100,10 @@ async def delete_discord_channel(channel_id : str):
     if channel is not None:
         await channel.delete()
 
+
+# TODO: idea: a "do actions muted" function, that would remove all non-system permissions, do action (callable?) and then re-add them
+# To avoid notifications
+
 ### Common init functions:
 
 async def init_discord_channel(discord_channel):
@@ -105,6 +116,9 @@ async def init_discord_channel(discord_channel):
             await init_personal_channel(discord_channel)
         elif discord_channel.category.name == public_open_category_name:
             await init_public_open_channel(discord_channel)
+        elif discord_channel.category.name == shops_category_name:
+            await init_public_read_only_channel(discord_channel)
+
     else:
         print(f'Will not create channel state for channel {discord_channel.name} which has no category')
 
@@ -130,6 +144,12 @@ async def set_base_permissions(discord_channel, private : bool, read_only : bool
         for (role, overwrites)
         in server.generate_base_overwrites(private, read_only).items()])
     await asyncio.gather(*add_roles_tasks)
+
+
+async def init_public_read_only_channel(discord_channel):
+    await set_base_permissions(discord_channel, private=False, read_only=True)
+    await init_channel_state(discord_channel)
+    init_pseudonymous_channel(discord_channel.name)
 
 async def init_public_open_channel(discord_channel):
     await set_base_permissions(discord_channel, private=False, read_only=False)
@@ -232,6 +252,7 @@ cmd_line_base = 'cmd_line_'
 finance_base = 'finance_'
 daemon_base = 'daemon_'
 chat_hub_base = 'chat_hub_'
+order_flow_base = 'orders_'
 # TODO: some sort of dictionary for these, with an enum type
 
 async def delete_all_personal_channels(bot):
@@ -243,14 +264,21 @@ def get_all_personal_channels(bot):
         if is_personal_channel(channel):
             yield channel
 
+# TODO: let players.py call a function that passes in the role, but lets channels.py compute the overwrites itself
 async def create_personal_channel(guild, overwrites, channel_name : str):
     return await create_discord_channel(guild, overwrites, channel_name, personal_category_name)
+
+async def create_order_flow_channel(guild, player_id : str, shop_name : str):
+    role = players.get_player_role(guild, player_id)
+    overwrites = server.generate_overwrites_own_new_private_channel(role, read_only=True)
+    discord_channel_name = get_order_flow_name(shop_name)
+    return await create_discord_channel(guild, overwrites, discord_channel_name, personal_category_name)
 
 def get_cmd_line_name(player_id : str):
     return cmd_line_base + player_id
 
 def is_cmd_line(channel_name : str):
-    return cmd_line_base in channel_name
+    return channel_name.startswith(cmd_line_base)
 
 def get_cmd_line_channel(guild, player_id : str):
     channel_name = get_cmd_line_name(player_id)
@@ -261,7 +289,7 @@ def get_finance_name(player_id : str):
     return finance_base + player_id
 
 def is_finance(channel_name : str):
-    return finance_base in channel_name
+    return channel_name.startswith(finance_base)
 
 def get_finance_channel(guild, player_id : str):
     channel_name = get_finance_name(player_id)
@@ -273,16 +301,22 @@ def get_chat_hub_name(player_id : str):
     return chat_hub_base + player_id
 
 def is_chat_hub(channel_name : str):
-    return chat_hub_base in channel_name
+    return channel_name.startswith(chat_hub_base)
 
 def get_chat_hub_channel(guild, player_id : str):
     channel_name = get_chat_hub_name(player_id)
     return get_discord_channel_from_name(guild, channel_name)
 
 
+def get_order_flow_name(shop_name : str):
+    return order_flow_base + shop_name
+
+def is_order_flow(channel_name : str):
+    return channel_name.startswith(order_flow_base)
+
 # Currently, the only read-only private channels are the finance channels
 def is_read_only_private_channel(channel_name : str):
-    return is_finance(channel_name)
+    return is_finance(channel_name) or is_order_flow(channel_name)
 
 
 
@@ -316,4 +350,19 @@ def get_all_chat_channels(bot):
             yield channel
 
 
+### Shop channels:
+# These are public (open to all players) but read-only
+# The idea is that the channel holds the menu items as messages, and players can react to place their orders
 
+async def create_shop_channel(guild, channel_name : str):
+    overwrites = server.generate_base_overwrites(private = False, read_only = True)
+    return await create_discord_channel(guild, overwrites, channel_name, shops_category_name)
+
+async def delete_all_shops(bot):
+    task_list = (asyncio.create_task(c.delete()) for c in get_all_shop_related_channels(bot))
+    await asyncio.gather(*task_list)
+
+def get_all_shop_related_channels(bot):
+    for channel in bot.get_all_channels():
+        if is_shop_channel(channel) or is_order_flow(channel.name):
+            yield channel
