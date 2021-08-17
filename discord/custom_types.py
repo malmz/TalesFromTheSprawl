@@ -64,18 +64,21 @@ class ChannelIdentifier(object):
 class Actor(object):
 	def __init__(
 		self,
+		actor_index : str,
 		actor_id : str,
 		finance_channel_id : int,
 		finance_stmt_msg_id : int,
 		chat_channel_id : int):
+		self.actor_index = actor_index
 		self.actor_id = actor_id
 		self.finance_channel_id = finance_channel_id
 		self.finance_stmt_msg_id = finance_stmt_msg_id
 		self.chat_channel_id = chat_channel_id
 
+
 	@staticmethod
 	def from_string(string : str):
-		obj = Actor(None, 0, 0, 0)
+		obj = Actor(None, None, 0, 0, 0)
 		obj.__dict__ = simplejson.loads(string)
 		return obj
 

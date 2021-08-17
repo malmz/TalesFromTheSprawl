@@ -21,8 +21,6 @@ actors = ConfigObj('actors.conf')
 actors_input = ConfigObj('actors_input.conf')
 
 
-finance_statement_index = '___finance_statement_msg_id'
-
 # TODO: loop through all users, find their actor_ids and re-map personal channels if not available
 async def init(bot, guild, clear_all=False):
 	if clear_all:
@@ -31,8 +29,19 @@ async def init(bot, guild, clear_all=False):
 		await channels.delete_all_personal_channels(bot)
 		await handles.clear_all_handles()
 	await delete_all_actor_roles(guild, spare_used=(not clear_all))
-
 	actors.write()
+
+async def clear_actor(bot, guild, actor_id : str):
+	if actor_exists(actor_id):
+		actor = read_actor(actor_id)
+		del actors[actor_id]
+		actors.write()
+		await channels.delete_all_personal_channels(bot, actor.actor_id)
+		await handles.clear_all_handles_for_actor(actor_id)
+		await delete_all_actor_roles(guild, spare_used=True)
+		return 'Done'
+	else:
+		return f'Could not find actor {actor_id}'
 
 
 async def delete_all_actor_roles(guild, spare_used : bool):
@@ -40,13 +49,18 @@ async def delete_all_actor_roles(guild, spare_used : bool):
 	await asyncio.gather(*task_list)
 
 async def delete_if_actor_role(role, spare_used : bool):
-	if common.is_personal_role(role.name):
+	if await is_actor_role(role.name):
 		if not spare_used or len(role.members) == 0:
 			print(f'Deleting unused role with name {role.name}')
 			await role.delete()
 
+async def is_actor_role(name :str):
+	return common.is_player_role(name) or common.is_shop_role(name)
+
 def get_actor_role(guild, actor_id : str):
-	return discord.utils.find(lambda role: role.name == actor_id, guild.roles)
+	actor = read_actor(actor_id)
+	if actor is not None:
+		return discord.utils.find(lambda role: role.name == actor.actor_index, guild.roles)
 
 
 def get_all_actors():
@@ -54,7 +68,7 @@ def get_all_actors():
 		yield read_actor(actor_id)
 
 def actor_exists(actor_id : str):
-	return actor_id in get_all_actors()
+	return actor_id in actors
 
 def store_actor(actor : Actor):
 	actors[actor.actor_id] = actor.to_string()
@@ -69,24 +83,22 @@ async def give_actor_access(guild, channel, actor_id : str):
 	role = get_actor_role(guild, actor_id)
 	await server.give_role_access(channel, role)
 
-async def create_new_actor(guild, actor_id : str, internal_name : str=None):
+async def create_new_actor(guild, actor_index : str, actor_id : str):
 	# Create role for this actor:
-	role = await guild.create_role(name=actor_id)
+	role = await guild.create_role(name=actor_index)
 
 	# Create personal channels for user:
-	chat_overwrites = server.generate_overwrites_own_new_private_channel(role)
-	overwrites_finance = server.generate_overwrites_own_new_private_channel(role, read_only=True)
-
 	chat_hub_creation = asyncio.create_task(channels.create_personal_channel(
 		guild,
-		chat_overwrites,
+		role,
 		channels.get_chat_hub_name(actor_id)
 	))
 
 	finances_creation = asyncio.create_task(channels.create_personal_channel(
 		guild,
-		overwrites_finance,
-		channels.get_finance_name(actor_id)
+		role,
+		channels.get_finance_name(actor_id),
+		read_only=True
 	))
 
 	[chat_hub_channel, finances_channel] = (
@@ -94,31 +106,29 @@ async def create_new_actor(guild, actor_id : str, internal_name : str=None):
 	)
 
 	# Send welcome messages to the channels (no-one has the role to see it yet)
-	chat_hub_welcome = asyncio.create_task(send_startup_message_chat_hub(chat_hub_channel, internal_name))
-	finance_welcome = asyncio.create_task(send_startup_message_finance(finances_channel, internal_name))
+	chat_hub_welcome = asyncio.create_task(send_startup_message_chat_hub(chat_hub_channel, actor_id))
+	finance_welcome = asyncio.create_task(send_startup_message_finance(finances_channel, actor_id))
 	await asyncio.gather(chat_hub_welcome, finance_welcome)
 
 	actor = Actor(
+		actor_index=actor_index,
 		actor_id=actor_id,
 		finance_channel_id=finances_channel.id,
 		finance_stmt_msg_id=0,
 		chat_channel_id=chat_hub_channel.id)
 	store_actor(actor)
+
+	handles.init_handles_for_actor(actor_id)
+
 	return actor
 
-async def send_startup_message_finance(channel, name : str=None):
-	if name is None:
-		content = 'This is your financial record.\n'
-	else:
-		content = f'This is the financial record for {name}.\n'
-	content = content + 'A record of every transaction will appear here. You cannot send anything in this channel.'
+async def send_startup_message_finance(channel, actor_id : str):
+	content = f'This is the financial record for {actor_id}.\n'
+	content = content + 'A record of every transaction—involving any handle you control—will appear here. You cannot send anything in this channel.'
 	await channel.send(content)
 
-async def send_startup_message_chat_hub(channel, name : str=None):
-	if name is None:
-		content = 'This is your chat hub.'
-	else:
-		content = f'This is the chat hub for {name}.'
+async def send_startup_message_chat_hub(channel, actor_id : str):
+	content = f'This is the chat hub for {actor_id}.'
 	content += ' All your chat connections will be visible here. If you close a chat, you can find it here to re-open it.\n '
 	content += 'You can start new chats by typing \".chat <handle>\" or [NOT IMPLEMENTED YET] \".room <room_name>\".'
 	await channel.send(content)

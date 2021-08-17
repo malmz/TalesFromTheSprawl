@@ -79,4 +79,9 @@ def generate_base_overwrites(private : bool, read_only : bool):
 		gm_role : normal_access if not private else no_access
 		})
 
+async def get_member_from_nick(nick : str):
+	if nick is not None:
+		members = await guild.fetch_members(limit=100).flatten()
+		return discord.utils.find(lambda m: m.nick == nick, members)
+
 

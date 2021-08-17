@@ -7,6 +7,7 @@ import simplejson
 from configobj import ConfigObj
 
 # Custom imports
+import common
 import handles
 import channels
 import players
@@ -14,7 +15,7 @@ import actors
 import finances
 import server
 
-from common import coin, emoji_unavail
+from common import coin, emoji_unavail, shop_role_start, highest_ever_index
 from custom_types import Transaction
 
 
@@ -64,11 +65,13 @@ class Shop(object):
 	def __init__(
 		self,
 		name : str,
-		actor_id : str,
+		shop_actor_index : str,
+		owner_id : str,
 		storefront_channel_id : str,
 		order_flow_channel_id : str):
 		self.name = name
-		self.actor_id = actor_id
+		self.shop_actor_index = shop_actor_index
+		self.owner_id = owner_id
 		self.shop_id = name.lower() if name is not None else None
 		self.storefront_channel_id = storefront_channel_id
 		self.order_flow_channel_id = order_flow_channel_id
@@ -76,7 +79,7 @@ class Shop(object):
 
 	@staticmethod
 	def from_string(string : str):
-		obj = Shop(None, None, None, None)
+		obj = Shop(None, None, None, None, None)
 		obj.__dict__ = simplejson.loads(string)
 		return obj
 
@@ -166,16 +169,10 @@ class Order(object):
 
 
 
-async def init(bot, clear_all=False):
-	if shop_data_index not in shops:
-		shops[shop_data_index] = {}
-	if channel_mapping_index not in shops:
-		shops[channel_mapping_index] = {}
-	if catalogue_mapping_index not in shops:
-		shops[catalogue_mapping_index] = {}
-	shops.write()
+async def init(bot, guild, clear_all=False):
 	if clear_all:
-		for shop_name in shops[shop_data_index]:
+		for shop_name in get_all_shop_ids():
+			await actors.clear_actor(bot, guild, shop_name)
 			clear_catalogue(shop_name)
 			del shops[shop_data_index][shop_name]
 		for channel in shops[channel_mapping_index]:
@@ -184,13 +181,47 @@ async def init(bot, clear_all=False):
 			del shops[catalogue_mapping_index][cat_item]
 		shops.write()
 		await channels.delete_all_shops(bot)
-		# TODO: clear order flow channels
+
+	if shop_data_index not in shops:
+		shops[shop_data_index] = {}
+	if highest_ever_index not in shops[shop_data_index] or clear_all:
+		shops[shop_data_index][highest_ever_index] = str(shop_role_start)
+	if channel_mapping_index not in shops:
+		shops[channel_mapping_index] = {}
+	if catalogue_mapping_index not in shops:
+		shops[catalogue_mapping_index] = {}
+	shops.write()
+
+	await delete_all_shop_roles(guild, spare_used=not clear_all)
+
+async def delete_all_shop_roles(guild, spare_used : bool):
+	task_list = (asyncio.create_task(delete_if_shop_role(r, spare_used)) for r in guild.roles)
+	await asyncio.gather(*task_list)
+
+async def delete_if_shop_role(role, spare_used : bool):
+	if common.is_shop_role(role.name):
+		if not spare_used or len(role.members) == 0:
+			print(f'Deleting unused role with name {role.name}')
+			await role.delete()
+
+
+def get_next_shop_actor_index():
+	prev_highest = int(shops[shop_data_index][highest_ever_index])
+	shop_actor_id = str(prev_highest + 1)
+	shops[shop_data_index][highest_ever_index] = shop_actor_id
+	shops.write()
+	return shop_actor_id
 
 def shop_exists(shop_name : str):
 	if shop_name is None:
 		return False
 	else:
-		return shop_name.lower() in shops[shop_data_index]
+		return shop_name.lower() in get_all_shop_ids()
+
+def get_all_shop_ids():
+	for shop_id in shops[shop_data_index]:
+		if shop_id != highest_ever_index:
+			yield shop_id
 
 def store_shop(shop : Shop):
 	shops[shop_data_index][shop.shop_id] = shop.to_string()
@@ -225,7 +256,9 @@ def read_catalogue_item_mapping(msg_id : str):
 	if msg_id in shops[catalogue_mapping_index]:
 		return CatalogueItemMapping.from_string(shops[catalogue_mapping_index][msg_id])
 
-
+def delete_catalogue_item_mapping(msg_id : str):
+	if msg_id in shops[catalogue_mapping_index]:
+		del shops[catalogue_mapping_index][msg_id]
 
 
 def get_catalogue(shop_name : str):
@@ -269,8 +302,9 @@ async def create_shop(guild, shop_name : str, owner_player_id : str):
 		return 'Error: must give a shop name'
 	if owner_player_id is None:
 		return f'Error: must give a player id; use \".create_shop {shop_name} <player_id>\"'
-	if not players.player_exists(owner_player_id):
-		return f'Error: player {owner_player_id} does not exist.'
+	member = await server.get_member_from_nick(owner_player_id)
+	if not players.player_exists(owner_player_id) or member is None:
+		return f'Error: player {owner_player_id} does not exist, or does not conform to the server nick scheme.'
 	if shop_exists(shop_name):
 		existing_shop = read_shop(shop_name)
 		if existing_shop.name == shop_name:
@@ -279,21 +313,45 @@ async def create_shop(guild, shop_name : str, owner_player_id : str):
 			return (f'Error: cannot create {shop_name} because its internal ID '
 				+ f'({shop_name.lower()}) clashes with {existing_shop.name}.)')
 
+	shop_actor_index = get_next_shop_actor_index()
+	actor : actors.Actor = await actors.create_new_actor(guild, actor_index=shop_actor_index, actor_id=shop_name.lower())
 
 	storefront_channel = await channels.create_shop_channel(guild, shop_name)
-	storefront_channel_id = str(storefront_channel.shop_id)
+	storefront_channel_id = str(storefront_channel.id)
 	store_storefront_channel_mapping(storefront_channel_id, shop_name)
 
-	order_flow_channel = await channels.create_order_flow_channel(guild, owner_player_id, shop_name)
-	order_flow_channel_id = str(order_flow_channel.shop_id)
+	role = actors.get_actor_role(guild, actor.actor_id)
+	order_flow_channel = await channels.create_order_flow_channel(guild, role, shop_name)
+	order_flow_channel_id = str(order_flow_channel.id)
 
-	# TODO: send welcome message
-
-	shop = Shop(shop_name, owner_player_id, storefront_channel_id, order_flow_channel_id)
+	# TODO: send welcome message in order_flow_channel
+	shop = Shop(shop_name, shop_actor_index, owner_player_id, storefront_channel_id, order_flow_channel_id)
 	store_shop(shop)
 	clear_catalogue(shop.shop_id)
-	report = f'Created store {shop.name}, run by {owner_player_id}'
+
+	try:
+		new_roles = member.roles
+		new_roles.append(role)
+		await member.edit(roles=new_roles)
+		report = f'Created shop {shop.name}, run by {owner_player_id}'
+	except discord.Forbidden:
+		report = f'Created shop {shop.name}, but could not add the new role to {owner_player_id}. Please add role {role.name} to user {member.name} manually.'
+
 	return report
+
+
+
+
+
+
+
+
+
+#####
+
+
+#####
+
 
 
 def get_emoji_for_new_product(symbol : str):
@@ -339,9 +397,11 @@ async def post_catalogue(shop_name : str):
 
 	for product in get_all_products(shop.shop_id):
 		if product.available:
-			msg_id = await post_catalogue_item_message(channel, product)
+			msg_id = await update_catalogue_item_message(channel, product)
 			mapping = CatalogueItemMapping(shop.shop_id, product.name)
 			store_catalogue_item_mapping(msg_id, mapping)
+			product.storefront_msg_id = msg_id
+			store_product(shop_name, product)
 
 async def post_catalogue_item(shop_name, product_name):
 	if shop_name is None:
@@ -361,14 +421,30 @@ async def post_catalogue_item(shop_name, product_name):
 	store_catalogue_item_mapping(msg_id, mapping)
 
 
-async def post_catalogue_item_message(channel, product):
+async def update_catalogue_item_message(channel, product):
+	print(f'{product.to_string()}')
+	content = generate_catalogue_item_message(product)
+	if product.storefront_msg_id is None:
+		message = await channel.send(content)
+	else:
+		delete_catalogue_item_mapping(product.storefront_msg_id)
+		message = await channel.fetch_message(product.storefront_msg_id)
+		await asyncio.gather(
+			*[asyncio.create_task(c)
+			for c
+			in [message.clear_reactions(), message.edit(content=content)]]
+		)
+	if product.in_stock:
+		await message.add_reaction(product.emoji)
+	return str(message.id)
+
+async def edit_catalogue_item_message(channel, product):
 	print(f'{product.to_string()}')
 	content = generate_catalogue_item_message(product)
 	message = await channel.send(content)
 	if product.in_stock:
 		await message.add_reaction(product.emoji)
-	return str(message.shop_id)
-
+	return str(message.id)
 
 def generate_catalogue_item_message(product):
 	if product.in_stock:

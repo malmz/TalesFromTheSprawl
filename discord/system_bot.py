@@ -58,7 +58,7 @@ async def on_ready():
     #handles.init() #TODO: ensure that every user has a handle?
     finances.init_finances()
     await chats.init(bot, clear_all=clear_all)
-    await shops.init(bot, clear_all=clear_all)
+    await shops.init(bot, guild, clear_all=clear_all)
     print('Initialization complete.')
     ready = True
 
@@ -66,6 +66,8 @@ async def on_ready():
 async def on_command_error(ctx, error):
     if isinstance(error, commands.errors.BadArgument) and 'Converting to "int" failed for parameter "amount"' in str(error):
         await ctx.send("Error: amount must be an integer greater than 0.")
+    elif isinstance(error, commands.errors.BadArgument) and 'Converting to "int" failed for parameter "price"' in str(error):
+        await ctx.send("Error: price must be an integer greater than 0.")
     elif isinstance(error, commands.errors.CommandNotFound):
         await ctx.send("Error: that is not a known command.")
     else:
@@ -76,7 +78,7 @@ async def swallow(message, alert=True):
     await message.delete()
     if alert:
         await message.channel.send(
-            'You cannot do that here. Try it your #cmd_line instead.',
+            'You cannot do that here. Try it in your #cmd_line instead.',
             delete_after=5)
 
 
@@ -248,7 +250,7 @@ async def collect_command(ctx):
 @commands.has_role('gm')
 async def fake_join_command(ctx, user_id):
     member_to_fake_join = await ctx.guild.fetch_member(user_id)
-    if member_to_fake_join == None:
+    if member_to_fake_join is None:
         await ctx.send(f'Failed: member with user_id {user_id} not found.')
     else:
         report = await on_member_join(member_to_fake_join)
@@ -261,7 +263,7 @@ async def fake_join_command(ctx, user_id):
 async def fake_join_command(ctx, name : str):
     members = await ctx.guild.fetch_members(limit=100).flatten()
     member_to_fake_join = discord.utils.find(lambda m: m.name == name, members)
-    if member_to_fake_join == None:
+    if member_to_fake_join is None:
         await ctx.send(f'Failed: member with name {name} not found.')
     else:
         report = await on_member_join(member_to_fake_join)
@@ -272,9 +274,8 @@ async def fake_join_command(ctx, name : str):
 @bot.command(name='fake_join_nick', help='Admin-only function to test run the new member mechanics')
 @commands.has_role('gm')
 async def fake_join_command(ctx, nick : str):
-    members = await ctx.guild.fetch_members(limit=100).flatten()
-    member_to_fake_join = discord.utils.find(lambda m: m.nick == nick, members)
-    if member_to_fake_join == None:
+    member_to_fake_join = await server.get_member_from_nick(nick)
+    if member_to_fake_join is None:
         await ctx.send(f'Failed: member with nick {nick} not found.')
     else:
         report = await on_member_join(member_to_fake_join)
@@ -291,6 +292,30 @@ async def clear_all_players_command(ctx):
     except discord.errors.NotFound:
         print('Cleared all players. Could not send report because channel is missing – '
             +'the command was probably given in a player-only command line that was deleted.')
+
+@bot.command(name='clear_all_actors', help='Admin-only: de-initialise all actors (players and shops).')
+@commands.has_role('gm')
+async def clear_all_actors_command(ctx):
+    await actors.init(bot, guild, clear_all=True)
+    try:
+        await ctx.send('Done.')
+    except discord.errors.NotFound:
+        print('Cleared all actors. Could not send report because channel is missing – '
+            +'the command was probably given in a player-only command line that was deleted.')
+
+@bot.command(name='clear_actor', help='Admin-only: de-initialise an actor (player or shop).')
+@commands.has_role('gm')
+async def clear_actor_command(ctx, actor_id : str):
+    report = await actors.clear_actor(bot, guild, actor_id)
+    try:
+        await ctx.send(report)
+    except discord.errors.NotFound:
+        print(f'Cleared actor {actor_id}. Could not send report because channel is missing – '
+            +'the command was probably given in a player-only command line that was deleted.')
+
+
+
+
 
     
 
@@ -418,7 +443,7 @@ async def clear_shops_command(ctx):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    await shops.init(bot, clear_all=True)
+    await shops.init(bot, guild, clear_all=True)
     await ctx.send('Done.')
 
 

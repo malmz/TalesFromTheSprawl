@@ -28,13 +28,18 @@ class HandleStatus:
     handle_type : str = ''
 
 async def clear_all_handles():
-	for actor_id in handles:
-		for handle in get_handles_for_actor(actor_id):
-			await finances.deinit_finances_for_handle(handle, actor_id, record=False)
-		del handles[actor_id]
-	handles.write()
+    for actor_id in handles:
+        await clear_all_handles_for_actor(actor_id)
 
-def init_handles_for_actor(actor_id : str, first_handle : str):
+async def clear_all_handles_for_actor(actor_id : str):
+    for handle in get_handles_for_actor(actor_id):
+        await finances.deinit_finances_for_handle(handle, actor_id, record=False)
+    del handles[actor_id]
+    handles.write()
+
+def init_handles_for_actor(actor_id : str, first_handle : str=None):
+    if first_handle is None:
+        first_handle = actor_id
     handles[actor_id] = {}
     create_regular_handle(actor_id, first_handle)
     switch_to_handle(actor_id, first_handle)

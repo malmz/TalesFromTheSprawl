@@ -42,7 +42,7 @@ player_personal_role_start = 2700
 #personal_role_regex = re.compile(f'^27[0-9][0-9]$')
 #shop_role_regex = re.compile(f'^23[0-9][0-9]$')
 
-def is_personal_role(name : str):
+def is_player_role(name : str):
 	try:
 		number = int(name)
 		return number >= player_personal_role_start

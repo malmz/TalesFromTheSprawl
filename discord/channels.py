@@ -7,7 +7,7 @@ import actors
 import server
 import asyncio
 
-### Module common_channels.py
+### Module channels.py
 # This module tracks and handles state related to channels
 
 personal_category_name = 'personal_account'
@@ -54,11 +54,15 @@ def is_chat_channel(discord_channel):
     else:
         return discord_channel.category.name == chats_category_name
 
-def is_personal_channel(discord_channel):
+def is_personal_channel(discord_channel, channel_suffix : str=None):
     if discord_channel.category == None:
         return False
     else:
-        return discord_channel.category.name == personal_category_name
+        if discord_channel.category.name == personal_category_name:
+            if channel_suffix is None:
+                return True
+            else:
+                return discord_channel.name.endswith(channel_suffix)
 
 def is_shop_channel(discord_channel):
     if discord_channel.category == None:
@@ -255,24 +259,24 @@ chat_hub_base = 'chat_hub_'
 order_flow_base = 'orders_'
 # TODO: some sort of dictionary for these, with an enum type
 
-async def delete_all_personal_channels(bot):
-    task_list = (asyncio.create_task(c.delete()) for c in get_all_personal_channels(bot))
+async def delete_all_personal_channels(bot, channel_suffix : str=None):
+    task_list = (asyncio.create_task(c.delete()) for c in get_all_personal_channels(bot, channel_suffix))
     await asyncio.gather(*task_list)
 
-def get_all_personal_channels(bot):
+def get_all_personal_channels(bot, channel_suffix : str=None):
     for channel in bot.get_all_channels():
-        if is_personal_channel(channel):
+        if is_personal_channel(channel, channel_suffix):
             yield channel
 
-# TODO: let actors.py/players.py call a function that passes in the role, but lets channels.py compute the overwrites itself
-async def create_personal_channel(guild, overwrites, channel_name : str):
+async def create_personal_channel(guild, role, channel_name : str, read_only : bool=False):
+    overwrites = server.generate_overwrites_own_new_private_channel(role, read_only)
     return await create_discord_channel(guild, overwrites, channel_name, personal_category_name)
 
-async def create_order_flow_channel(guild, actor_id : str, shop_name : str):
-    role = actors.get_actor_role(guild, actor_id)
-    overwrites = server.generate_overwrites_own_new_private_channel(role, read_only=True)
+
+async def create_order_flow_channel(guild, role, shop_name : str):
     discord_channel_name = get_order_flow_name(shop_name)
-    return await create_discord_channel(guild, overwrites, discord_channel_name, personal_category_name)
+    return await create_personal_channel(guild, role, discord_channel_name)
+
 
 def get_cmd_line_name(player_id : str):
     return cmd_line_base + player_id
