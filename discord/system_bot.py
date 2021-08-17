@@ -151,7 +151,7 @@ async def create_burner_command(ctx, new_id : str=None):
 
 @bot.command(name='burn', help='Destroy a burner account forever.')
 async def burn_command(ctx, burner_id : str=None):
-    response = await process_burn_command(ctx, burner_id)
+    response = await handles.process_burn_command(ctx, burner_id)
     await ctx.send(response)
 
 

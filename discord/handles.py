@@ -28,10 +28,10 @@ class HandleStatus:
     player_id : str = ''
     handle_type : str = ''
 
-def clear_all_handles():
+async def clear_all_handles():
 	for player_id in handles:
 		for handle in get_handles_for_player(player_id):
-			finances.deinit_finances_for_handle(handle)
+			await finances.deinit_finances_for_handle(guild, handle, player_id, record=False)
 		del handles[player_id]
 	handles.write()
 
@@ -82,7 +82,7 @@ async def destroy_burner(guild, player_id : str, burner : str):
 
 		# Delete the burner
 		del handles[player_id][burner]
-		finances.deinit_finances_for_handle(burner)
+		await finances.deinit_finances_for_handle(guild, burner, player_id, record=True)
 	handles.write()
 	return balance
 
@@ -113,7 +113,6 @@ def handle_exists(handle : str):
             return True
     return False
 
-# Sanitize input -- special return on reserved values will protect many commands, including creating
 def get_handle_status(handle : str):
     if handle.lower() != handle:
         raise RuntimeError(f'Unsanitized handle {handle} passed to get_handle_status.')
@@ -193,7 +192,7 @@ async def process_burn_command(ctx, burner_id : str=None):
     else:
         burner_id = burner_id.lower()
         player_id = players.get_player_id(str(ctx.message.author.id))
-        handle_status : handles.HandleStatus = handles.get_handle_status(burner_id)
+        handle_status : HandleStatus = get_handle_status(burner_id)
         if (not handle_status.exists):
             response = 'Error: the handle ' + burner_id + ' does not exist'
         elif (handle_status.player_id != player_id):
@@ -201,8 +200,8 @@ async def process_burn_command(ctx, burner_id : str=None):
         elif (handle_status.handle_type == 'regular'):
             response = 'Error: **' + burner_id + '** is not a burner handle, cannot be destroyed. To stop using it, simply switch to another handle.'
         elif (handle_status.handle_type == 'burner'):
-            amount = await handles.destroy_burner(ctx.guild, player_id, burner_id)
-            current_handle = handles.get_handle(player_id)
+            amount = await destroy_burner(ctx.guild, player_id, burner_id)
+            current_handle = get_handle(player_id)
             response = 'Destroyed burner handle **' + burner_id + '**.\n'
             response = response + 'If you or someone else uses that name, it may be confusing but cannot be traced to the previous use.\n'
             if amount > 0:

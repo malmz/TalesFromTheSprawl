@@ -31,7 +31,7 @@ async def init(bot, guild, clear_all=False):
 		for player_id in get_all_players():
 			del players[player_id]
 		await channels.delete_all_personal_channels(bot)
-		handles.clear_all_handles()
+		await handles.clear_all_handles()
 	await delete_all_player_roles(guild, spare_used=(not clear_all))
 
 	players.write()
@@ -270,11 +270,19 @@ async def record_transaction(guild, transaction : Transaction):
 			await write_financial_record(guild, recip_status.player_id, finances.generate_record_recip(transaction), transaction.last_in_sequence)
 
 
-async def write_financial_record(guild, player_id : str, content : str, last_in_sequence : bool):
+async def write_financial_record(guild, player_id : str, content : str, last_in_sequence : bool, handle : str = None):
+	if player_id is None:
+		if handle is not None:
+			player_status : handles.HandleStatus = handles.get_handle_status(handle)
+			if player_status.exists:
+				player_id = player_status.player_id
+	if player_id is None:
+		raise RuntimeError(f'Writing financial record but could not find which player it belongs to.')
 	channel = channels.get_finance_channel(guild, player_id)
-	await asyncio.create_task(channel.send(content))
+	if content is not None:
+		await channel.send(content)
 	if last_in_sequence:
-		await asyncio.create_task(update_financial_statement(channel, player_id))
+		await update_financial_statement(channel, player_id)
 
 
 def get_cmd_line_channel_for_handle(guild, handle : str):

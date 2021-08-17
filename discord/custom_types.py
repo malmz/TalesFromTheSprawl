@@ -7,15 +7,24 @@ class ReactionPaymentResult:
     success = False
     report = None
 
-class Transaction:
-    success = False
-    report : str = None
-    timestamp = None # TODO
-    amount : int = 0
-    payer : str = None
-    recip : str = None
-    last_in_sequence : bool = True
-    # cause?
+class Transaction(object):
+	def __init__(
+		self,
+		payer : str,
+		recip : str,
+		amount : int,
+		report : str=None,
+		timestamp=None, # TODO
+		success : bool=False,
+		last_in_sequence : bool=True
+		):
+		self.payer = payer
+		self.recip = recip
+		self.amount = amount
+		self.report = report
+		self.timestamp = timestamp
+		self.success = success
+		self.last_in_sequence = last_in_sequence
 
 class PostTimestamp(object):
 	def __init__(self, hour : int, minute : int):

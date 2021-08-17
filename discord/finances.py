@@ -16,6 +16,8 @@ import asyncio
 # TODO: BITCOIN BITCOIN BITCOIN!!!
 
 balance_index = '___balance'
+system_fake_handle = '___system'
+
 
 # 'finances' holds the money associated with each 
 finances = ConfigObj('finances.conf')
@@ -30,9 +32,11 @@ def init_finances_for_handle(handle : str):
     finances[handle][balance_index] = '0'
     finances.write()
 
-def deinit_finances_for_handle(handle : str):
+async def deinit_finances_for_handle(guild, handle : str, player_id : str, record : bool):
     del finances[handle]
     finances.write()
+    if record:
+        await players.write_financial_record(guild, content=None, player_id=player_id, last_in_sequence=True)
 
 def get_current_balance(handle : str):
     return int(finances[handle][balance_index])
@@ -44,19 +48,10 @@ def set_current_balance(handle : str, balance : int):
 async def overwrite_balance(guild, handle : str, balance : int):
     old_balance = finances[handle][balance_index]
     set_current_balance(handle, balance)
-    transaction = Transaction()
-    transaction.recip = '___system'
-    transaction.amount = old_balance
-    transaction.payer = handle
-    transaction.success = True
-    transaction.last_in_sequence = False
+    transaction = Transaction(handle, system_fake_handle, old_balance, success=True)
     await players.record_transaction(guild, transaction)
 
-    transaction.recip = handle
-    transaction.amount = balance
-    transaction.payer = '___system'
-    transaction.success = True
-    transaction.last_in_sequence = True
+    transaction = Transaction(system_fake_handle, handle, balance, success=True)
     await players.record_transaction(guild, transaction)
 
 def get_all_handles_balance_report(player_id : str):
@@ -86,7 +81,7 @@ def transfer_funds(transaction : Transaction):
     return transaction
 
 async def transfer_from_burner(guild, burner : str, new_active : str, amount : int):
-    transaction = Transaction()
+    transaction = Transaction(burner, new_active, amount)
     transaction.payer = burner
     transaction.recip = new_active
     transaction.amount = amount
@@ -98,19 +93,13 @@ async def add_funds(guild, handle : str, amount : int):
     new_balance = previous_balance + amount
     finances[handle][balance_index] = str(new_balance)
     finances.write()
-    transaction = Transaction()
-    transaction.recip = handle
-    transaction.amount = amount
-    transaction.payer = '___system'
-    transaction.success = True
+    transaction = Transaction(system_fake_handle, handle, amount, success=True)
     await players.record_transaction(guild, transaction)
 
 async def collect_all_funds(guild, player_id : str):
     current_handle = handles.get_handle(player_id)
     total = 0
-    transaction = Transaction()
-    transaction.recip = constants.transaction_collector
-    transaction.success = True
+    transaction = Transaction(None, constants.transaction_collector, 0, success=True)
     balance_on_current = 0
     for handle in handles.get_handles_for_player(player_id):
         collected = get_current_balance(handle)
@@ -152,10 +141,7 @@ def generate_record_collector(transaction : Transaction):
 
 async def try_to_pay(guild, player_id : str, handle_recip : str, amount : int, from_reaction=False):
     handle_payer = handles.get_handle(player_id)
-    transaction = Transaction()
-    transaction.payer = handle_payer
-    transaction.recip = handle_recip
-    transaction.amount = amount
+    transaction = Transaction(handle_payer, handle_recip, amount)
     if handle_payer == handle_recip or handle_recip == None:
         # Cannot transfer to yourself, and cannot transfer to unknown messages
         # On reactions, feedback in cmd_line would just be distracting
