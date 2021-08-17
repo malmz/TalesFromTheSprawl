@@ -5,7 +5,7 @@ import finances
 import constants
 import server
 
-from constants import highest_ever_index, player_ids_index
+from constants import highest_ever_index, player_ids_index, coin
 from custom_types import Transaction
 
 import discord
@@ -181,7 +181,7 @@ async def send_startup_message_cmd_line(member, player_id : str, channel):
 	content = '  You can also send money by reacting to messages. '
 	content = content + 'Adding the following reactions to a message will transfer the corresponding amount of money:\n'
 	for emoji, amount in reactions.reactions_worth_money.items():
-		content = content + '  ' + emoji + ' = ¥' + str(amount) + '\n'
+		content = f'{content}  {emoji} = {coin}{amount}\n'
 
 	await channel.send(content)
 

@@ -11,6 +11,8 @@ forbidden_content_print = '\*\*'
 transaction_collector = '___collector'
 transaction_collected = '___collected'
 
+coin = '¥'
+
 # good-to-have emojis:
 # ✅
 # ❇️
@@ -20,3 +22,7 @@ transaction_collected = '___collected'
 emoji_cancel = '❌'
 emoji_open = '❇️'
 emoji_accept = '✅'
+emoji_green = '🟢'
+emoji_red = '🔴'
+emoji_alert = '❗'
+emoji_unavail = '🚫'

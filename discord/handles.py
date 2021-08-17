@@ -1,6 +1,6 @@
 import finances
 import players
-from constants import forbidden_content, forbidden_content_print
+from constants import forbidden_content, forbidden_content_print, coin
 
 from configobj import ConfigObj
 import re
@@ -206,7 +206,7 @@ async def process_burn_command(ctx, burner_id : str=None):
             response = 'Destroyed burner handle **' + burner_id + '**.\n'
             response = response + 'If you or someone else uses that name, it may be confusing but cannot be traced to the previous use.\n'
             if amount > 0:
-                response = response + f'Your current handle is **{current_handle}**; the remaining ¥ {amount} from {burner_id} was transferred there.'
+                response = response + f'Your current handle is **{current_handle}**; the remaining {coin} {amount} from {burner_id} was transferred there.'
             else:
                 response = response + 'Your current handle is **' + current_handle + '**.'
     return response

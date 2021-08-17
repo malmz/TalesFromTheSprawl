@@ -20,6 +20,7 @@ import custom_types
 import chats
 import server
 import shops
+from constants import coin
 
 
 load_dotenv()
@@ -169,7 +170,7 @@ async def create_money_command(ctx, handle : str=None, amount : int=0):
     else:
         handle = handle.lower()
         if amount <= 0:
-            response = 'Error: cannot create less than ¥ 1.'
+            response = f'Error: cannot create less than {coin} 1.'
         elif handles.handle_exists(handle):
             await finances.add_funds(ctx.guild, handle, amount)
             response = 'Added ' + str(amount) + ' to the balance of ' + handle
@@ -197,7 +198,7 @@ async def set_money_command(ctx, handle : str=None, amount : int=-1):
             response = 'Error: handle \"' + handle + '\" does not exist.'
     await ctx.send(response)
 
-@bot.command(name='pay', help='Pay money (¥) to the owner of another handle')
+@bot.command(name='pay', help=f'Pay money ({coin}) to the owner of another handle')
 async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
@@ -208,7 +209,7 @@ async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
     else:
         handle_recip = handle_recip.lower()
         if amount <= 0:
-            response = 'Error: cannot transfer less than ¥ 1. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
+            response = f'Error: cannot transfer less than {coin} 1. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
         else:
             player_id = players.get_player_id(str(ctx.message.author.id))
             transaction : custom_types.Transaction = await finances.try_to_pay(ctx.guild, player_id, handle_recip, amount)
@@ -360,11 +361,40 @@ async def create_shop_command(ctx, shop_name : str=None, player_id : str=None):
 
 @bot.command(name='add_product', help='Admin-only: add a new product to a shop.')
 @commands.has_role('gm') # TODO: allow shop owner / employee to do this live?
-async def add_product_command(ctx, shop_name : str=None, product_name : str=None):
+async def add_product_command(ctx,
+    shop_name : str=None,
+    product_name : str=None,
+    description : str=None,
+    price : int=0,
+    symbol : str=None):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = await shops.add_product(shop_name, product_name)
+    # TODO: update with all the params!
+    report = await shops.add_product(shop_name, product_name, description, price, symbol)
+    if report is not None:
+        await ctx.send(report)
+
+@bot.command(name='publish_menu', help='Admin-only: post a shop\'s catalogue/menu.')
+@commands.has_role('gm') # TODO: allow shop owner / employee to do this live?
+async def publish_menu_command(ctx, shop_name : str=None, product_name : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    if product_name is not None:
+        report = await shops.post_catalogue_item(shop_name, product_name)
+    else:
+        report = await shops.post_catalogue(shop_name)
+    if report is not None:
+        await ctx.send(report)
+
+@bot.command(name='order', help='Admin-only: order a product from a shop.')
+@commands.has_role('gm')
+async def order_command(ctx, product_name : str=None, shop_name : str=None, buyer : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = await shops.order_product(shop_name, product_name, buyer)
     if report is not None:
         await ctx.send(report)
 

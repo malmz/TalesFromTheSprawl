@@ -8,7 +8,7 @@ import handles
 import channels
 import server
 import posting
-from constants import emoji_cancel, emoji_open
+from constants import emoji_cancel, emoji_open, emoji_green, emoji_red
 
 chats_dir = 'chats'
 chats = ConfigObj(f'chats.conf')
@@ -499,7 +499,7 @@ def generate_hub_msg_active_session(discord_channel, handle : str):
 	clickable_ref = channels.clickable_channel_ref(discord_channel)
 	content = (f'> Chat name: {clickable_ref}\n'
 		+ f'> Your identity: **{handle}**\n'
-		+ '> Status: **connected**\n'
+		+ f'> Status: {emoji_green} **connected**\n'
 		+ f'> To close connection, click on the {emoji_cancel} below.'
 	)
 	return content
@@ -507,7 +507,7 @@ def generate_hub_msg_active_session(discord_channel, handle : str):
 def generate_hub_msg_inactive_session(chat_title : str, handle : str):
 	content = (f'> Chat name: **{chat_title}**\n'
 		+ f'> Your identity: **{handle}**\n'
-		+ '> Status: **not connected** (no unread messages)\n' # TODO
+		+ f'> Status: {emoji_red}**not connected** (no unread messages)\n' # TODO
 		+ f'> To open connection, click on the {emoji_open} below.'
 	)
 	return content

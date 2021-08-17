@@ -3,6 +3,7 @@ import handles
 import players
 from custom_types import Transaction, ReactionPaymentResult
 import constants
+from constants import coin
 
 from configobj import ConfigObj
 import asyncio
@@ -67,10 +68,10 @@ def get_all_handles_balance_report(player_id : str):
         total += balance
         balance_str = str(balance)
         if handle == current_handle:
-            report = report + '> **' + handle + '**: ¥ **' + balance_str + '**\n'
+            report = report + f'> **{handle}**: {coin} **{balance_str}**\n'
         else:
-            report = report + '> ' + handle + ': ¥ **' + balance_str + '**\n'
-    report = report + 'Total: ¥ **' + str(total) + '**'
+            report = report + f'> {handle}: {coin} **{balance_str}**\n'
+    report = report + f'Total: {coin} **{total}**'
     return report
 
 def transfer_funds(transaction : Transaction):
@@ -135,19 +136,19 @@ async def collect_all_funds(guild, player_id : str):
 
 # TODO: timestamp for transactions
 def generate_record_self_transfer(transaction : Transaction):
-    return f'🔁 **{transaction.payer}** --> **{transaction.recip}**: ¥ {transaction.amount}'
+    return f'🔁 **{transaction.payer}** --> **{transaction.recip}**: {coin} {transaction.amount}'
 
 def generate_record_payer(transaction : Transaction):
-    return f'🟥 **{transaction.payer}** --> {transaction.recip}: ¥ {transaction.amount}'
+    return f'🟥 **{transaction.payer}** --> {transaction.recip}: {coin} {transaction.amount}'
 
 def generate_record_recip(transaction : Transaction):
-    return f'🟩 {transaction.payer} --> **{transaction.recip}**: ¥ {transaction.amount}'
+    return f'🟩 {transaction.payer} --> **{transaction.recip}**: {coin} {transaction.amount}'
 
 def generate_record_collected(transaction : Transaction):
-    return f'⏬ Collected ¥ {transaction.amount} from **{transaction.payer}**'
+    return f'⏬ Collected {coin} {transaction.amount} from **{transaction.payer}**'
 
 def generate_record_collector(transaction : Transaction):
-    return f'▶️ --> **{transaction.recip}**: total ¥ {transaction.amount} collected from your other handles.'
+    return f'▶️ --> **{transaction.recip}**: total {coin} {transaction.amount} collected from your other handles.'
 
 async def try_to_pay(guild, player_id : str, handle_recip : str, amount : int, from_reaction=False):
     handle_payer = handles.get_handle(player_id)
@@ -165,24 +166,24 @@ async def try_to_pay(guild, player_id : str, handle_recip : str, amount : int, f
     recip_status : HandleStatus = handles.get_handle_status(handle_recip)
     if not recip_status.exists:
         if from_reaction:
-            transaction.report = f'Tried to transfer ¥ **{amount}** based on your reaction (emoji), but recipient {handle_recip} does not exist.'
+            transaction.report = f'Tried to transfer {coin} **{amount}** based on your reaction (emoji), but recipient {handle_recip} does not exist.'
         else:
-            transaction.report = f'Failed to transfer ¥ **{amount}** from {handle_payer} to {handle_recip}; recipient does not exist. Check the spelling.'
+            transaction.report = f'Failed to transfer {coin} **{amount}** from {handle_payer} to {handle_recip}; recipient does not exist. Check the spelling.'
     else:
         transaction = transfer_funds(transaction)
         if not transaction.success:
             avail = get_current_balance(handle_payer)
             if from_reaction:
-                transaction.report = f'Tried to transfer ¥ **{amount}** from {handle_payer} to {handle_recip} based on your reaction (emoji), but your balance is {avail}.'
+                transaction.report = f'Tried to transfer {coin} **{amount}** from {handle_payer} to {handle_recip} based on your reaction (emoji), but your balance is {avail}.'
             else:
-                transaction.report = f'Failed to transfer ¥ **{amount}** from {handle_payer} to {handle_recip}; current balance is ¥ **{avail}**.'
+                transaction.report = f'Failed to transfer {coin} **{amount}** from {handle_payer} to {handle_recip}; current balance is {coin} **{avail}**.'
         elif from_reaction:
             # Success; no need for report to cmd_line
             await players.record_transaction(guild, transaction)
         else:
             if recip_status.player_id == player_id:
-                transaction.report = 'Successfully transferred ¥ **' + str(amount) + '** from ' + handle_payer + ' to **' + handle_recip + '**. (Note: you control both accounts.)'
+                transaction.report = f'Successfully transferred {coin} **{amount}** from {handle_payer} to **{handle_recip}**. (Note: you control both accounts.)'
             else:
-                transaction.report = 'Successfully transferred ¥ **' + str(amount) + '** from ' + handle_payer + ' to **' + handle_recip + '**.'
+                transaction.report = f'Successfully transferred {coin} **{amount}** from {handle_payer} to **{handle_recip}**.'
             await players.record_transaction(guild, transaction)
     return transaction
