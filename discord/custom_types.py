@@ -59,3 +59,45 @@ class ChannelIdentifier(object):
 
 	def to_string(self):
 		return simplejson.dumps(self.__dict__)
+
+
+class Actor(object):
+	def __init__(
+		self,
+		actor_id : str,
+		finance_channel_id : int,
+		finance_stmt_msg_id : int,
+		chat_channel_id : int):
+		self.actor_id = actor_id
+		self.finance_channel_id = finance_channel_id
+		self.finance_stmt_msg_id = finance_stmt_msg_id
+		self.chat_channel_id = chat_channel_id
+
+	@staticmethod
+	def from_string(string : str):
+		obj = Actor(None, 0, 0, 0)
+		obj.__dict__ = simplejson.loads(string)
+		return obj
+
+	def to_string(self):
+		return simplejson.dumps(self.__dict__)
+
+
+class PlayerData(object):
+	def __init__(
+		self,
+		player_id : str,
+		cmd_line_channel_id : int):
+		self.player_id = player_id
+		self.cmd_line_channel_id = cmd_line_channel_id
+
+	@staticmethod
+	def from_string(string : str):
+		obj = PlayerData(None, 0)
+		obj.__dict__ = simplejson.loads(string)
+		return obj
+
+	def to_string(self):
+		return simplejson.dumps(self.__dict__)
+
+

@@ -3,7 +3,7 @@ import datetime
 import discord
 
 from custom_types import PostTimestamp, ChannelIdentifier
-import players
+import actors
 import server
 import asyncio
 
@@ -264,12 +264,12 @@ def get_all_personal_channels(bot):
         if is_personal_channel(channel):
             yield channel
 
-# TODO: let players.py call a function that passes in the role, but lets channels.py compute the overwrites itself
+# TODO: let actors.py/players.py call a function that passes in the role, but lets channels.py compute the overwrites itself
 async def create_personal_channel(guild, overwrites, channel_name : str):
     return await create_discord_channel(guild, overwrites, channel_name, personal_category_name)
 
-async def create_order_flow_channel(guild, player_id : str, shop_name : str):
-    role = players.get_player_role(guild, player_id)
+async def create_order_flow_channel(guild, actor_id : str, shop_name : str):
+    role = actors.get_actor_role(guild, actor_id)
     overwrites = server.generate_overwrites_own_new_private_channel(role, read_only=True)
     discord_channel_name = get_order_flow_name(shop_name)
     return await create_discord_channel(guild, overwrites, discord_channel_name, personal_category_name)
@@ -280,32 +280,19 @@ def get_cmd_line_name(player_id : str):
 def is_cmd_line(channel_name : str):
     return channel_name.startswith(cmd_line_base)
 
-def get_cmd_line_channel(guild, player_id : str):
-    channel_name = get_cmd_line_name(player_id)
-    return get_discord_channel_from_name(guild, channel_name)
 
-
-def get_finance_name(player_id : str):
-    return finance_base + player_id
+def get_finance_name(actor_id : str):
+    return finance_base + actor_id
 
 def is_finance(channel_name : str):
     return channel_name.startswith(finance_base)
 
-def get_finance_channel(guild, player_id : str):
-    channel_name = get_finance_name(player_id)
-    return get_discord_channel_from_name(guild, channel_name)
 
-
-
-def get_chat_hub_name(player_id : str):
-    return chat_hub_base + player_id
+def get_chat_hub_name(actor_id : str):
+    return chat_hub_base + actor_id
 
 def is_chat_hub(channel_name : str):
     return channel_name.startswith(chat_hub_base)
-
-def get_chat_hub_channel(guild, player_id : str):
-    channel_name = get_chat_hub_name(player_id)
-    return get_discord_channel_from_name(guild, channel_name)
 
 
 def get_order_flow_name(shop_name : str):
@@ -313,6 +300,7 @@ def get_order_flow_name(shop_name : str):
 
 def is_order_flow(channel_name : str):
     return channel_name.startswith(order_flow_base)
+
 
 # Currently, the only read-only private channels are the finance channels
 def is_read_only_private_channel(channel_name : str):
@@ -331,8 +319,8 @@ def init_chat_channel(channel_name : str):
     ident = ChannelIdentifier(chat_channel_name=channel_name)
     set_channel_id(channel_name, ident)
 
-async def create_chat_session_channel(guild, player_id : str, discord_channel_name : str):
-    role = players.get_player_role(guild, player_id)
+async def create_chat_session_channel(guild, actor_id : str, discord_channel_name : str):
+    role = actors.get_actor_role(guild, actor_id)
     overwrites = server.generate_overwrites_own_new_private_channel(role)
     return await create_discord_channel(guild, overwrites, discord_channel_name, chats_category_name)
 

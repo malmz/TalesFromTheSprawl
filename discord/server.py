@@ -1,7 +1,7 @@
 import discord
 import asyncio
 
-from constants import system_role_name, admin_role_name, all_players_role_name, gm_role_name
+from common import system_role_name, admin_role_name, all_players_role_name, gm_role_name
 
 system_role = None
 admin_role = None
@@ -47,6 +47,13 @@ async def init(bot, current_guild):
 		print(f'Creating role with name {all_players_role_name}')
 		all_players_role = await guild.create_role(name=all_players_role_name)
 
+def get_guild():
+	return guild
+
+# TODO: this could perhaps be refactored to use the overwrite generation functions
+async def give_role_access(channel, role):
+	await channel.set_permissions(role, read_messages=True)
+
 def get_all_players_role():
 	return all_players_role
 
@@ -72,5 +79,4 @@ def generate_base_overwrites(private : bool, read_only : bool):
 		gm_role : normal_access if not private else no_access
 		})
 
-def get_guild():
-	return guild
+

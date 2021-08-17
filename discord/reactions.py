@@ -62,7 +62,6 @@ async def process_reaction_for_payment(message_id : int, user_id : int, channel,
 		search_result : ReactionRecipientSearchResult = await find_reaction_recipient_and_message(message_id, channel)
 
 		transaction : custom_types.Transaction = await finances.try_to_pay(
-			channel.guild,
 			player_id,
 			search_result.recipient,
 			payment_amount,
@@ -72,7 +71,7 @@ async def process_reaction_for_payment(message_id : int, user_id : int, channel,
 			await remove_reaction(search_result.message, emoji, user_id)
 		if transaction.report != None:
 			handle = handles.get_handle(player_id)
-			cmd_line_channel = players.get_cmd_line_channel_for_handle(channel.guild, handle)
+			cmd_line_channel = players.get_cmd_line_channel_for_handle(handle)
 			await cmd_line_channel.send(transaction.report)
 
 async def process_reaction_in_chat_hub(message_id : int, user_id : int, channel, emoji):

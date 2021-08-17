@@ -3,12 +3,14 @@ import asyncio
 from configobj import ConfigObj
 import simplejson
 
+import actors
 import players
 import handles
 import channels
 import server
 import posting
-from constants import emoji_cancel, emoji_open, emoji_green, emoji_red
+import actors
+from common import emoji_cancel, emoji_open, emoji_green, emoji_red
 
 chats_dir = 'chats'
 chats = ConfigObj(f'chats.conf')
@@ -31,13 +33,13 @@ session_status_inactive = '___inactive'
 
 # This is stored indexed by handle, and points out the various connections that handle has to the chat
 class ChatParticipant(object):
-	def __init__(self, chat_name : str, session_status : str, channel_name : str, player_id : str, handle : str, chat_hub_msg_id : str, channel_id : str=None):
+	def __init__(self, chat_name : str, session_status : str, channel_name : str, actor_id : str, handle : str, chat_hub_msg_id : str, channel_id : str=None):
 		self.chat_name = chat_name
 		self.session_status = session_status
 		# Regardless of whether the channel currently exists or not
 		# it shall have the same name every time it's re-created
 		self.channel_name = channel_name
-		self.player_id = player_id
+		self.actor_id = actor_id
 		self.handle = handle
 		self.chat_hub_msg_id = chat_hub_msg_id
 		# Set to None when the channel is temporarily closed
@@ -55,9 +57,9 @@ class ChatParticipant(object):
 
 # This is stored per channel/msg ID, and maps back to the chat
 class ChatConnectionMapping(object):
-	def __init__(self, chat_name : str, player_id : str, handle : str):
+	def __init__(self, chat_name : str, actor_id : str, handle : str):
 		self.chat_name = chat_name
-		self.player_id = player_id
+		self.actor_id = actor_id
 		self.handle = handle
 
 	@staticmethod
@@ -89,13 +91,13 @@ class ChatLogEntry(object):
 # - The chat hub message with open/close commands
 # This is not meant to be stored in any configobj
 class ChatUI(object):
-	def __init__(self, chat_name : str, channel, chat_hub_message, session_status : str, handle : str, player_id : str):
+	def __init__(self, chat_name : str, channel, chat_hub_message, session_status : str, handle : str, actor_id : str):
 		self.chat_name = chat_name
 		self.channel = channel # Can be None, if the channel is closed (session_status_inactive)
 		self.chat_hub_message = chat_hub_message
 		self.session_status = session_status
 		self.handle = handle
-		self.player_id = player_id
+		self.actor_id = actor_id
 
 
 def init_chats_confobj():
@@ -288,7 +290,7 @@ async def create_2party_chat(my_handle : str, partner_handle : str):
 
 	# data common to both participants:
 	chat_name = create_2party_chat_name(my_handle, partner_handle)
-	# Chat-specific config: will hold all history, but also players' active handles and channels
+	# Chat-specific config: will hold all history, but also actors' active handles and channels
 	newly_created_chat = init_chat_log(chat_name)
 	if newly_created_chat:
 		channels.init_chat_channel(chat_name)
@@ -305,7 +307,7 @@ async def create_2party_chat(my_handle : str, partner_handle : str):
 			guild,
 			chat_state,
 			chat_name,
-			my_status.player_id,
+			my_status.actor_id,
 			my_handle,
 			port_name = partner_handle,
 			activate = True
@@ -320,7 +322,7 @@ async def create_2party_chat(my_handle : str, partner_handle : str):
 			guild,
 			chat_state,
 			chat_name,
-			partner_status.player_id,
+			partner_status.actor_id,
 			partner_handle,
 			port_name = my_handle
 		)
@@ -338,7 +340,7 @@ async def create_2party_chat(my_handle : str, partner_handle : str):
 			# TODO: this is only here during testing
 			# non-admins should not see their partner's channel even if it does exist.
 			report += f'(Other channel is avaialable at {partner_clickable_ref})'
-	elif my_status.player_id == partner_status.player_id:
+	elif my_status.actor_id == partner_status.actor_id:
 		report = (f'Opened chat between {my_handle} and {partner_handle}. '
 			+ 'Note that both handles are controlled by you, so you will be chatting with yourself. '
 			)
@@ -352,8 +354,8 @@ async def create_2party_chat(my_handle : str, partner_handle : str):
 
 async def create_chat_from_command(ctx, partner_handle):
 	creator_user_id = str(ctx.message.author.id)
-	creator_player_id = players.get_player_id(creator_user_id)
-	creator_handle = handles.get_handle(creator_player_id)
+	creator_actor_id = players.get_player_id(creator_user_id)
+	creator_handle = handles.get_handle(creator_actor_id)
 	report = await create_2party_chat(creator_handle, partner_handle)
 	if report != None:
 		await ctx.send(report)
@@ -374,7 +376,7 @@ async def add_participant_to_chat(
 	guild,
 	chat_state,
 	chat_name : str,
-	player_id : str,
+	actor_id : str,
 	handle : str,
 	port_name : str,
 	activate : bool=False
@@ -384,16 +386,16 @@ async def add_participant_to_chat(
 	participant : ChatParticipant = read_participant(chat_state, handle)
 	if participant == None:
 		# This is a newly added participant
-		participant = create_new_participant(chat_name, channel_name, session_status_inactive, player_id, handle)
+		participant = create_new_participant(chat_name, channel_name, session_status_inactive, actor_id, handle)
 	# TODO: customise further: add option to UPDATE a chat session (i.e. update the hub msg) without actually creating a channel
 	return await get_chat_ui(guild, chat_state, participant, activate)
 
-def create_new_participant(chat_name : str, channel_name : str, session_status : str, player_id : str, handle : str):
+def create_new_participant(chat_name : str, channel_name : str, session_status : str, actor_id : str, handle : str):
 	return ChatParticipant(
 		chat_name,
 		session_status,
 		channel_name,
-		player_id,
+		actor_id,
 		handle,
 		chat_hub_msg_id=None,
 		channel_id=None)
@@ -420,7 +422,7 @@ async def get_chat_ui_for_active_session(guild, participant):
 		)
 	chat_channel = channels.get_discord_channel(participant.channel_id)
 
-	chat_hub_channel = channels.get_chat_hub_channel(guild, participant.player_id)
+	chat_hub_channel = actors.get_chat_hub_channel(participant.actor_id)
 	chat_hub_message = await chat_hub_channel.fetch_message(participant.chat_hub_msg_id)
 
 	return ChatUI(
@@ -429,7 +431,7 @@ async def get_chat_ui_for_active_session(guild, participant):
 		chat_hub_message,
 		participant.session_status,
 		participant.handle,
-		participant.player_id)
+		participant.actor_id)
 
 
 # TODO: implement limit on open chat sessions!
@@ -439,7 +441,7 @@ async def get_chat_ui_for_inactive_session(guild, chat_state, participant : Chat
 		raise RuntimeError(f'Instructed to open session but it appears to be active. Dump: {participant.to_string()}')
 
 	channel = None
-	chat_connection = ChatConnectionMapping(participant.chat_name, participant.player_id, participant.handle)
+	chat_connection = ChatConnectionMapping(participant.chat_name, participant.actor_id, participant.handle)
 
 	# TODO: we also need to check if there is room to create another channel
 	# If there is not, we should fail activation, and adapt the hub msg accordingly
@@ -459,7 +461,7 @@ async def get_chat_ui_for_inactive_session(guild, chat_state, participant : Chat
 	# We have posted a new chat hub message, so must add its mapping
 	store_chat_connection_for_hub_msg(participant.chat_hub_msg_id, chat_connection)	# chat name -> full chat log file name mapping
 
-	# chat -> player, channel ID, msg ID mapping
+	# chat -> actor, channel ID, msg ID mapping
 	# 'participant' may have been updated: 
 	store_participant(participant.chat_name, participant)
 
@@ -469,7 +471,7 @@ async def get_chat_ui_for_inactive_session(guild, chat_state, participant : Chat
 		chat_hub_message,
 		participant.session_status,
 		participant.handle,
-		participant.player_id
+		participant.actor_id
 	)
 
 async def create_channel_for_chat_session(guild, chat_state, participant : ChatParticipant):
@@ -484,7 +486,7 @@ async def create_channel_for_chat_session(guild, chat_state, participant : ChatP
 	await repost_message_history(channel, chat_state, participant)
 
 	# At this point we want to give permissions (prevent unread from before)
-	await players.give_player_access(guild, channel, participant.player_id)
+	await actors.give_actor_access(guild, channel, participant.actor_id)
 	return channel
 
 async def open_chat_from_reaction(chat_state, participant : ChatParticipant):
@@ -499,7 +501,7 @@ def generate_hub_msg_active_session(discord_channel, handle : str):
 	clickable_ref = channels.clickable_channel_ref(discord_channel)
 	content = (f'> Chat name: {clickable_ref}\n'
 		+ f'> Your identity: **{handle}**\n'
-		+ f'> Status: {emoji_green} **connected**\n'
+		+ f'> Status: {emoji_green}  **connected**\n'
 		+ f'> To close connection, click on the {emoji_cancel} below.'
 	)
 	return content
@@ -507,7 +509,7 @@ def generate_hub_msg_active_session(discord_channel, handle : str):
 def generate_hub_msg_inactive_session(chat_title : str, handle : str):
 	content = (f'> Chat name: **{chat_title}**\n'
 		+ f'> Your identity: **{handle}**\n'
-		+ f'> Status: {emoji_red}**not connected** (no unread messages)\n' # TODO
+		+ f'> Status: {emoji_red}  **not connected** (no unread messages)\n' # TODO
 		+ f'> To open connection, click on the {emoji_open} below.'
 	)
 	return content
@@ -525,7 +527,7 @@ async def update_chat_hub_message(guild, chat_channel, participant):
 	# but for 2party ones it should be the channel name
 	new_content = generate_hub_msg(participant.handle, participant.session_status, participant.channel_name, chat_channel)
 
-	chat_hub_channel = channels.get_chat_hub_channel(guild, participant.player_id)
+	chat_hub_channel = actors.get_chat_hub_channel(participant.actor_id)
 
 	if participant.chat_hub_msg_id is None:
 		message = await chat_hub_channel.send(new_content)
@@ -619,7 +621,7 @@ async def close_chat_session(chat_state, participant : ChatParticipant):
 	participant.channel_id = None
 	participant.session_status = session_status_inactive
 
-	# Close the session, i.e. delete the player's discord channel
+	# Close the session, i.e. delete the actor's discord channel
 	await channels.delete_discord_channel(channel_id_to_close)
 
 	chat_hub_message = await update_chat_hub_message(guild, None, participant)
@@ -627,10 +629,10 @@ async def close_chat_session(chat_state, participant : ChatParticipant):
 
 	# Update message ID -> chat mapping
 	# We have updated the hub message, so must update its mapping
-	chat_connection = ChatConnectionMapping(participant.chat_name, participant.player_id, participant.handle)
+	chat_connection = ChatConnectionMapping(participant.chat_name, participant.actor_id, participant.handle)
 	store_chat_connection_for_hub_msg(participant.chat_hub_msg_id, chat_connection)
 
-	# 'participant' is the chat -> player, channel ID, msg ID mapping
+	# 'participant' is the chat -> actor, channel ID, msg ID mapping
 	store_participant(participant.chat_name, participant)
 
 	# Add chat log entry for this event
@@ -639,8 +641,8 @@ async def close_chat_session(chat_state, participant : ChatParticipant):
 
 async def close_chat_session_from_command(ctx, partner_handle : str):
 	my_user_id = str(ctx.message.author.id)
-	my_player_id = players.get_player_id(my_user_id)
-	my_handle = handles.get_handle(my_player_id)
+	my_actor_id = actors.get_actor_id(my_user_id)
+	my_handle = handles.get_handle(my_actor_id)
 	report = await close_2party_chat_session(my_handle, partner_handle)
 	if report != None:
 		await ctx.send(report)

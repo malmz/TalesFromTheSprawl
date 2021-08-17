@@ -14,13 +14,14 @@ import handles
 import channels
 import posting
 import reactions
+import actors
 import players
 import finances
 import custom_types
 import chats
 import server
 import shops
-from constants import coin
+from common import coin
 
 
 load_dotenv()
@@ -48,14 +49,16 @@ async def on_ready():
     global guild
     global guild_name
     global ready
+    clear_all = False
     guild = discord.utils.find(lambda g: g.name == guild_name, bot.guilds)
     await server.init(bot, guild)
-    await players.init(bot, guild, clear_all=False)
+    await actors.init(bot, guild, clear_all=clear_all)
+    await players.init(bot, guild, clear_all=clear_all)
     await channels.init_channels(bot)
     #handles.init() #TODO: ensure that every user has a handle?
     finances.init_finances()
-    await chats.init(bot, clear_all=False)
-    await shops.init(bot, clear_all=False)
+    await chats.init(bot, clear_all=clear_all)
+    await shops.init(bot, clear_all=clear_all)
     print('Initialization complete.')
     ready = True
 
@@ -129,7 +132,7 @@ async def on_raw_reaction_add(payload):
 
 @bot.event
 async def on_member_join(member):
-    await players.create_player(member)
+    return await players.create_player(member)
 
 
 # Commands related to handles
@@ -172,7 +175,7 @@ async def create_money_command(ctx, handle : str=None, amount : int=0):
         if amount <= 0:
             response = f'Error: cannot create less than {coin} 1.'
         elif handles.handle_exists(handle):
-            await finances.add_funds(ctx.guild, handle, amount)
+            await finances.add_funds(handle, amount)
             response = 'Added ' + str(amount) + ' to the balance of ' + handle
         else:
             response = 'Error: handle \"' + handle + '\" does not exist.'
@@ -192,7 +195,7 @@ async def set_money_command(ctx, handle : str=None, amount : int=-1):
         if amount < 0:
             response = 'Error: you must set a new balance.'
         elif handles.handle_exists(handle):
-            await finances.overwrite_balance(ctx.guild, handle, amount)
+            await finances.overwrite_balance(handle, amount)
             response = 'Set the balance of ' + handle + ' to ' + str(amount)
         else:
             response = 'Error: handle \"' + handle + '\" does not exist.'
@@ -212,7 +215,7 @@ async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
             response = f'Error: cannot transfer less than {coin} 1. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
         else:
             player_id = players.get_player_id(str(ctx.message.author.id))
-            transaction : custom_types.Transaction = await finances.try_to_pay(ctx.guild, player_id, handle_recip, amount)
+            transaction : custom_types.Transaction = await finances.try_to_pay(player_id, handle_recip, amount)
             response = transaction.report
     await ctx.send(response)
 
@@ -235,7 +238,7 @@ async def collect_command(ctx):
     player_id = players.get_player_id(str(ctx.message.author.id))
     response = 'Collecting all funds to the account of the current handle...'
     await asyncio.create_task(ctx.send(response))
-    await asyncio.create_task(finances.collect_all_funds(ctx.guild, player_id))
+    await asyncio.create_task(finances.collect_all_funds(player_id))
     #await show_balance_command(ctx)
 
 
@@ -248,7 +251,10 @@ async def fake_join_command(ctx, user_id):
     if member_to_fake_join == None:
         await ctx.send(f'Failed: member with user_id {user_id} not found.')
     else:
-        await on_member_join(member_to_fake_join)
+        report = await on_member_join(member_to_fake_join)
+        if report is None:
+            report = "Done."
+        await ctx.send(report)
 
 @bot.command(name='fake_join_name', help='Admin-only function to test run the new member mechanics')
 @commands.has_role('gm')
@@ -258,7 +264,10 @@ async def fake_join_command(ctx, name : str):
     if member_to_fake_join == None:
         await ctx.send(f'Failed: member with name {name} not found.')
     else:
-        await on_member_join(member_to_fake_join)
+        report = await on_member_join(member_to_fake_join)
+        if report is None:
+            report = "Done."
+        await ctx.send(report)
 
 @bot.command(name='fake_join_nick', help='Admin-only function to test run the new member mechanics')
 @commands.has_role('gm')
@@ -268,7 +277,10 @@ async def fake_join_command(ctx, nick : str):
     if member_to_fake_join == None:
         await ctx.send(f'Failed: member with nick {nick} not found.')
     else:
-        await on_member_join(member_to_fake_join)
+        report = await on_member_join(member_to_fake_join)
+        if report is None:
+            report = "Done."
+        await ctx.send(report)
 
 @bot.command(name='clear_all_players', help='Admin-only: de-initialise all players.')
 @commands.has_role('gm')
@@ -291,11 +303,11 @@ async def init_all_players_command(ctx):
 @bot.command(name='ping', help='Admin-only function to test user-player-channel mappings')
 @commands.has_role('gm')
 async def ping_command(ctx, handle : str):
-    channel = players.get_cmd_line_channel_for_handle(ctx.guild, handle)
+    channel = players.get_cmd_line_channel_for_handle(handle)
     if channel != None:
         await channel.send(f'Testing ping for {handle}')
     else:
-        ctx.send(f'Error: could not find the command line channel for {handle}')
+        await ctx.send(f'Error: could not find the command line channel for {handle}')
 
 # Chats
 

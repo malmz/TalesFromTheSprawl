@@ -10,10 +10,11 @@ from configobj import ConfigObj
 import handles
 import channels
 import players
+import actors
 import finances
 import server
 
-from constants import coin, emoji_unavail
+from common import coin, emoji_unavail
 from custom_types import Transaction
 
 
@@ -48,12 +49,14 @@ shop_data_index = '__shop_data'
 channel_mapping_index = '__channel_mapping'
 catalogue_mapping_index = '__catalogue_mapping'
 
-### Module to set certain player to have a shop.
+### Module to allow one or more players to run a shop together.
 # Having a shop grants:
 # - A public storefront, where the menu/catalogue is presented as messages you can react to
 # - An "orders" channel, showing what people have ordered recently
 # - A "delivery ID" (e.g. table number) for each customer,
 #   so that orders can be collected and delivered together
+# - An "actor", with the functionality that comes with it (handles, financial reports, chats)
+#   albeit restricted to a single handle
 
 ### Classes, init and utilities:
 
@@ -61,12 +64,12 @@ class Shop(object):
 	def __init__(
 		self,
 		name : str,
-		player_id : str,
+		actor_id : str,
 		storefront_channel_id : str,
 		order_flow_channel_id : str):
 		self.name = name
-		self.player_id = player_id
-		self.id = name.lower() if name is not None else None
+		self.actor_id = actor_id
+		self.shop_id = name.lower() if name is not None else None
 		self.storefront_channel_id = storefront_channel_id
 		self.order_flow_channel_id = order_flow_channel_id
 		self.highest_order = 0
@@ -190,7 +193,7 @@ def shop_exists(shop_name : str):
 		return shop_name.lower() in shops[shop_data_index]
 
 def store_shop(shop : Shop):
-	shops[shop_data_index][shop.id] = shop.to_string()
+	shops[shop_data_index][shop.shop_id] = shop.to_string()
 	shops.write()
 
 def read_shop(shop_name : str):
@@ -261,13 +264,13 @@ def clear_catalogue(shop_name : str):
 
 ### Creating a new shop:
 
-async def create_shop(guild, shop_name : str, player_id : str):
+async def create_shop(guild, shop_name : str, owner_player_id : str):
 	if shop_name is None:
 		return 'Error: must give a shop name'
-	if player_id is None:
+	if owner_player_id is None:
 		return f'Error: must give a player id; use \".create_shop {shop_name} <player_id>\"'
-	if not players.player_exists(player_id):
-		return f'Error: player {player_id} does not exist.'
+	if not players.player_exists(owner_player_id):
+		return f'Error: player {owner_player_id} does not exist.'
 	if shop_exists(shop_name):
 		existing_shop = read_shop(shop_name)
 		if existing_shop.name == shop_name:
@@ -278,18 +281,18 @@ async def create_shop(guild, shop_name : str, player_id : str):
 
 
 	storefront_channel = await channels.create_shop_channel(guild, shop_name)
-	storefront_channel_id = str(storefront_channel.id)
+	storefront_channel_id = str(storefront_channel.shop_id)
 	store_storefront_channel_mapping(storefront_channel_id, shop_name)
 
-	order_flow_channel = await channels.create_order_flow_channel(guild, player_id, shop_name)
-	order_flow_channel_id = str(order_flow_channel.id)
+	order_flow_channel = await channels.create_order_flow_channel(guild, owner_player_id, shop_name)
+	order_flow_channel_id = str(order_flow_channel.shop_id)
 
 	# TODO: send welcome message
 
-	shop = Shop(shop_name, player_id, storefront_channel_id, order_flow_channel_id)
+	shop = Shop(shop_name, owner_player_id, storefront_channel_id, order_flow_channel_id)
 	store_shop(shop)
-	clear_catalogue(shop.id)
-	report = f'Created store {shop.name}, run by {player_id}'
+	clear_catalogue(shop.shop_id)
+	report = f'Created store {shop.name}, run by {owner_player_id}'
 	return report
 
 
@@ -334,10 +337,10 @@ async def post_catalogue(shop_name : str):
 	shop : Shop = read_shop(shop_name)
 	channel = channels.get_discord_channel(shop.storefront_channel_id)
 
-	for product in get_all_products(shop.id):
+	for product in get_all_products(shop.shop_id):
 		if product.available:
 			msg_id = await post_catalogue_item_message(channel, product)
-			mapping = CatalogueItemMapping(shop.id, product.name)
+			mapping = CatalogueItemMapping(shop.shop_id, product.name)
 			store_catalogue_item_mapping(msg_id, mapping)
 
 async def post_catalogue_item(shop_name, product_name):
@@ -354,7 +357,7 @@ async def post_catalogue_item(shop_name, product_name):
 	channel = channels.get_discord_channel(shop.storefront_channel_id)
 
 	msg_id = await post_catalogue_item_message(channel, product)
-	mapping = CatalogueItemMapping(shop.id, product.name)
+	mapping = CatalogueItemMapping(shop.shop_id, product.name)
 	store_catalogue_item_mapping(msg_id, mapping)
 
 
@@ -364,7 +367,7 @@ async def post_catalogue_item_message(channel, product):
 	message = await channel.send(content)
 	if product.in_stock:
 		await message.add_reaction(product.emoji)
-	return str(message.id)
+	return str(message.shop_id)
 
 
 def generate_catalogue_item_message(product):
@@ -389,7 +392,7 @@ async def order_product(shop_name : str, product_name : str, payer_handle : str,
 			shop_name = ''
 		return f'Error: cannot find product {product_name} at shop {shop_name}'
 	shop : Shop = read_shop(shop_name)
-	shop_id = shop.id
+	shop_id = shop.shop_id
 
 
 	if payer_handle is None:

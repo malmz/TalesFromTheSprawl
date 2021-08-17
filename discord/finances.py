@@ -1,9 +1,9 @@
 import channels
 import handles
-import players
+import actors
 from custom_types import Transaction, ReactionPaymentResult
-import constants
-from constants import coin
+import common
+from common import coin
 
 from configobj import ConfigObj
 import asyncio
@@ -32,11 +32,11 @@ def init_finances_for_handle(handle : str):
     finances[handle][balance_index] = '0'
     finances.write()
 
-async def deinit_finances_for_handle(guild, handle : str, player_id : str, record : bool):
+async def deinit_finances_for_handle(handle : str, actor_id : str, record : bool):
     del finances[handle]
     finances.write()
     if record:
-        await players.write_financial_record(guild, content=None, player_id=player_id, last_in_sequence=True)
+        await actors.write_financial_record(content=None, actor_id=actor_id, last_in_sequence=True)
 
 def get_current_balance(handle : str):
     return int(finances[handle][balance_index])
@@ -45,20 +45,20 @@ def set_current_balance(handle : str, balance : int):
     finances[handle][balance_index] = str(balance)
     finances.write()
 
-async def overwrite_balance(guild, handle : str, balance : int):
+async def overwrite_balance(handle : str, balance : int):
     old_balance = finances[handle][balance_index]
     set_current_balance(handle, balance)
     transaction = Transaction(handle, system_fake_handle, old_balance, success=True)
-    await players.record_transaction(guild, transaction)
+    await actors.record_transaction(transaction)
 
     transaction = Transaction(system_fake_handle, handle, balance, success=True)
-    await players.record_transaction(guild, transaction)
+    await actors.record_transaction(transaction)
 
-def get_all_handles_balance_report(player_id : str):
-    current_handle = handles.get_handle(player_id)
+def get_all_handles_balance_report(actor_id : str):
+    current_handle = handles.get_handle(actor_id)
     report = 'Current balance for all your accounts:\n'
     total = 0
-    for handle in handles.get_handles_for_player(player_id):
+    for handle in handles.get_handles_for_actor(actor_id):
         balance = get_current_balance(handle)
         total += balance
         balance_str = str(balance)
@@ -80,28 +80,28 @@ def transfer_funds(transaction : Transaction):
         transaction.success = False
     return transaction
 
-async def transfer_from_burner(guild, burner : str, new_active : str, amount : int):
+async def transfer_from_burner(burner : str, new_active : str, amount : int):
     transaction = Transaction(burner, new_active, amount)
     transaction.payer = burner
     transaction.recip = new_active
     transaction.amount = amount
     transfer_funds(transaction)
-    await players.record_transaction(guild, transaction)
+    await actors.record_transaction(transaction)
 
-async def add_funds(guild, handle : str, amount : int):
+async def add_funds(handle : str, amount : int):
     previous_balance = int(finances[handle][balance_index])
     new_balance = previous_balance + amount
     finances[handle][balance_index] = str(new_balance)
     finances.write()
     transaction = Transaction(system_fake_handle, handle, amount, success=True)
-    await players.record_transaction(guild, transaction)
+    await actors.record_transaction(transaction)
 
-async def collect_all_funds(guild, player_id : str):
-    current_handle = handles.get_handle(player_id)
+async def collect_all_funds(actor_id : str):
+    current_handle = handles.get_handle(actor_id)
     total = 0
-    transaction = Transaction(None, constants.transaction_collector, 0, success=True)
+    transaction = Transaction(None, common.transaction_collector, 0, success=True)
     balance_on_current = 0
-    for handle in handles.get_handles_for_player(player_id):
+    for handle in handles.get_handles_for_actor(actor_id):
         collected = get_current_balance(handle)
         if collected > 0:
             total += collected
@@ -112,13 +112,13 @@ async def collect_all_funds(guild, player_id : str):
                 transaction.amount = collected
                 transaction.payer = handle
                 transaction.last_in_sequence = False
-                await players.record_transaction(guild, transaction)
+                await actors.record_transaction(transaction)
     set_current_balance(current_handle, total)
     transaction.amount = total - balance_on_current
-    transaction.payer = constants.transaction_collected
+    transaction.payer = common.transaction_collected
     transaction.recip = current_handle
     transaction.last_in_sequence = True
-    await players.record_transaction(guild, transaction)
+    await actors.record_transaction(transaction)
 
 
 # Related to transactions
@@ -139,8 +139,8 @@ def generate_record_collected(transaction : Transaction):
 def generate_record_collector(transaction : Transaction):
     return f'▶️ --> **{transaction.recip}**: total {coin} {transaction.amount} collected from your other handles.'
 
-async def try_to_pay(guild, player_id : str, handle_recip : str, amount : int, from_reaction=False):
-    handle_payer = handles.get_handle(player_id)
+async def try_to_pay(actor_id : str, handle_recip : str, amount : int, from_reaction=False):
+    handle_payer = handles.get_handle(actor_id)
     transaction = Transaction(handle_payer, handle_recip, amount)
     if handle_payer == handle_recip or handle_recip == None:
         # Cannot transfer to yourself, and cannot transfer to unknown messages
@@ -165,11 +165,11 @@ async def try_to_pay(guild, player_id : str, handle_recip : str, amount : int, f
                 transaction.report = f'Failed to transfer {coin} **{amount}** from {handle_payer} to {handle_recip}; current balance is {coin} **{avail}**.'
         elif from_reaction:
             # Success; no need for report to cmd_line
-            await players.record_transaction(guild, transaction)
+            await actors.record_transaction(transaction)
         else:
-            if recip_status.player_id == player_id:
+            if recip_status.actor_id == actor_id:
                 transaction.report = f'Successfully transferred {coin} **{amount}** from {handle_payer} to **{handle_recip}**. (Note: you control both accounts.)'
             else:
                 transaction.report = f'Successfully transferred {coin} **{amount}** from {handle_payer} to **{handle_recip}**.'
-            await players.record_transaction(guild, transaction)
+            await actors.record_transaction(transaction)
     return transaction
