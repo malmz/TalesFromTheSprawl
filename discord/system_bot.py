@@ -217,7 +217,7 @@ async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
             response = f'Error: cannot transfer less than {coin} 1. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
         else:
             player_id = players.get_player_id(str(ctx.message.author.id))
-            transaction : custom_types.Transaction = await finances.try_to_pay(player_id, handle_recip, amount)
+            transaction : custom_types.Transaction = await finances.try_to_pay_from_actor(player_id, handle_recip, amount)
             response = transaction.report
     await ctx.send(response)
 

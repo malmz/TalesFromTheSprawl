@@ -12,19 +12,25 @@ class Transaction(object):
 		self,
 		payer : str,
 		recip : str,
+		payer_actor : str,
+		recip_actor : str,
 		amount : int,
 		report : str=None,
 		timestamp=None, # TODO
 		success : bool=False,
-		last_in_sequence : bool=True
+		last_in_sequence : bool=True,
+		emoji : str=None
 		):
 		self.payer = payer
 		self.recip = recip
+		self.payer_actor = payer_actor
+		self.recip_actor = recip_actor
 		self.amount = amount
 		self.report = report
 		self.timestamp = timestamp
 		self.success = success
 		self.last_in_sequence = last_in_sequence
+		self.emoji = emoji
 
 class PostTimestamp(object):
 	def __init__(self, hour : int, minute : int):

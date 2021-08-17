@@ -15,7 +15,7 @@ import chats
 # 🟥
 # 🔥
 
-reactions_worth_money = {'💴' : 1, '💸' : 1, '💰' : 1, '🍺' : 1, '💯' : 100}
+reactions_worth_money = {'💴' : 1, '💸' : 1, '💰' : 1, '🍺' : 1, '💯' : 100, '🪙' : 1}
 
 async def remove_reaction(message, emoji, user_id : int):
 	member = await message.channel.guild.fetch_member(user_id)
@@ -48,7 +48,7 @@ async def find_reaction_recipient_and_message(message_id : int, channel):
 			break
 	return result
 
-async def process_reaction_for_payment(message_id : int, user_id : int, channel, emoji):
+async def process_reaction_for_tipping(message_id : int, user_id : int, channel, emoji):
 	player_id = players.get_player_id(str(user_id))
 
 	# Currently only one use case for reading reactions, and that is for paying money
@@ -61,7 +61,7 @@ async def process_reaction_for_payment(message_id : int, user_id : int, channel,
 		# If other reactions are implemented, perhaps this search will be relevant for all of them
 		search_result : ReactionRecipientSearchResult = await find_reaction_recipient_and_message(message_id, channel)
 
-		transaction : custom_types.Transaction = await finances.try_to_pay(
+		transaction : custom_types.Transaction = await finances.try_to_pay_from_actor(
 			player_id,
 			search_result.recipient,
 			payment_amount,
@@ -95,6 +95,6 @@ async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
 	if channels.is_chat_hub(channel.name):
 		await process_reaction_in_chat_hub(message_id, user_id, channel, emoji)
 	else:
-		await process_reaction_for_payment(message_id, user_id, channel, emoji)
+		await process_reaction_for_tipping(message_id, user_id, channel, emoji)
 
 

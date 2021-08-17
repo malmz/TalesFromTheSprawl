@@ -135,7 +135,10 @@ async def send_startup_message_chat_hub(channel, actor_id : str):
 
 async def get_financial_statement(channel, actor : Actor):
 	if actor.finance_stmt_msg_id > 0:
-		return await channel.fetch_message(actor.finance_stmt_msg_id)
+		try:
+			return await channel.fetch_message(actor.finance_stmt_msg_id)
+		except discord.errors.NotFound:
+			pass
 
 async def update_financial_statement(channel, actor : Actor):
 	message = await get_financial_statement(channel, actor)

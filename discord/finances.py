@@ -48,10 +48,10 @@ def set_current_balance(handle : str, balance : int):
 async def overwrite_balance(handle : str, balance : int):
     old_balance = finances[handle][balance_index]
     set_current_balance(handle, balance)
-    transaction = Transaction(handle, system_fake_handle, old_balance, success=True)
+    transaction = Transaction(payer=handle, payer_actor=None, recip=system_fake_handle, recip_actor=None, amount=old_balance, success=True)
     await actors.record_transaction(transaction)
 
-    transaction = Transaction(system_fake_handle, handle, balance, success=True)
+    transaction = Transaction(payer=system_fake_handle, payer_actor=None, recip=handle, recip_actor=None, amount=balance, success=True)
     await actors.record_transaction(transaction)
 
 def get_all_handles_balance_report(actor_id : str):
@@ -69,7 +69,7 @@ def get_all_handles_balance_report(actor_id : str):
     report = report + f'Total: {coin} **{total}**'
     return report
 
-def transfer_funds(transaction : Transaction):
+def transfer_funds_if_available(transaction : Transaction):
     avail_at_payer = int(finances[transaction.payer][balance_index])
     if avail_at_payer >= transaction.amount:
         amount_at_recip = get_current_balance(transaction.recip)
@@ -81,11 +81,11 @@ def transfer_funds(transaction : Transaction):
     return transaction
 
 async def transfer_from_burner(burner : str, new_active : str, amount : int):
-    transaction = Transaction(burner, new_active, amount)
+    transaction = Transaction(payer=burner, payer_actor=None, recip=new_active, recip_actor=None, amount=amount)
     transaction.payer = burner
     transaction.recip = new_active
     transaction.amount = amount
-    transfer_funds(transaction)
+    transfer_funds_if_available(transaction)
     await actors.record_transaction(transaction)
 
 async def add_funds(handle : str, amount : int):
@@ -93,13 +93,13 @@ async def add_funds(handle : str, amount : int):
     new_balance = previous_balance + amount
     finances[handle][balance_index] = str(new_balance)
     finances.write()
-    transaction = Transaction(system_fake_handle, handle, amount, success=True)
+    transaction = Transaction(payer=system_fake_handle, payer_actor=None, recip=handle, recip_actor=None, amount=amount)
     await actors.record_transaction(transaction)
 
 async def collect_all_funds(actor_id : str):
     current_handle = handles.get_handle(actor_id)
     total = 0
-    transaction = Transaction(None, common.transaction_collector, 0, success=True)
+    transaction = Transaction(payer=None, payer_actor=None, recip=common.transaction_collector, recip_actor=None, amount=0, success=True)
     balance_on_current = 0
     for handle in handles.get_handles_for_actor(actor_id):
         collected = get_current_balance(handle)
@@ -139,37 +139,71 @@ def generate_record_collected(transaction : Transaction):
 def generate_record_collector(transaction : Transaction):
     return f'▶️ --> **{transaction.recip}**: total {coin} {transaction.amount} collected from your other handles.'
 
-async def try_to_pay(actor_id : str, handle_recip : str, amount : int, from_reaction=False):
+async def try_to_pay_from_actor(actor_id : str, handle_recip : str, amount : int, from_reaction=False):
     handle_payer = handles.get_handle(actor_id)
-    transaction = Transaction(handle_payer, handle_recip, amount)
-    if handle_payer == handle_recip or handle_recip == None:
+    transaction = Transaction(payer=handle_payer, payer_actor=None, recip=handle_recip, recip_actor=None, amount=amount)
+    transaction = find_transaction_parties(transaction)
+    if transaction.report is not None:
+        return transaction
+    else:
+        return await try_to_pay(transaction, from_reaction)
+
+
+def find_transaction_parties(transaction : Transaction):
+    if transaction.payer is None:
+        if transaction.payer_actor is None:
+            transaction.report = f'Error: attempted transaction without knowing either the handle or the user ID of the payer.'
+        else:
+            transaction.payer = handles.get_handle(transaction.payer_actor)
+            if transaction.payer is None:
+                transaction.report = f'Error: attempted transaction for {transaction.payer_actor} but could not find current handle.'
+    else:
+        if transaction.payer_actor is None:
+            payer_status : HandleStatus = handles.get_handle_status(transaction.payer)
+            if not payer_status.exists:
+                transaction.report = f'Error: attempted transaction from handle {transaction.payer} which does not exist.'
+            else:
+                transaction.payer_actor = payer_status.actor_id
+
+    if transaction.recip is None:
+        if transaction.recip_actor is None:
+            transaction.report = f'Error: attempted transaction without knowing either the handle or the user ID of the recipient.'
+        else:
+            transaction.recip = handles.get_handle(transaction.recip_actor)
+            if transaction.recip is None:
+                transaction.report = f'Error: attempted transaction to {transaction.recip_actor} but could not find current handle.'
+    else:
+        if transaction.recip_actor is None:
+            recip_status : HandleStatus = handles.get_handle_status(transaction.recip)
+            if not recip_status.exists:
+                transaction.report = f'Error: attempted transaction to handle {transaction.recip} which does not exist.'
+            else:
+                transaction.recip_actor = recip_status.actor_id
+    return transaction
+
+async def try_to_pay(transaction : Transaction, from_reaction : bool=False):
+    if transaction.payer == transaction.recip:
         # Cannot transfer to yourself, and cannot transfer to unknown messages
         # On reactions, feedback in cmd_line would just be distracting
         # On a command, we want to give feedback anyway so we might as well say what happened
         if not from_reaction:
-            transaction.report = f'Error: cannot transfer funds from account {handle_recip} to itself.'
+            transaction.report = f'Error: cannot transfer funds from account {transaction.recip} to itself.'
         return transaction
-    recip_status : HandleStatus = handles.get_handle_status(handle_recip)
-    if not recip_status.exists:
+
+    transaction = transfer_funds_if_available(transaction)
+    if not transaction.success:
+        avail = get_current_balance(transaction.payer)
         if from_reaction:
-            transaction.report = f'Tried to transfer {coin} **{amount}** based on your reaction (emoji), but recipient {handle_recip} does not exist.'
+            transaction.report = f'Tried to transfer {coin} **{transaction.amount}** from {transaction.payer} to {transaction.recip} based on your reaction (emoji), but your balance is {avail}.'
         else:
-            transaction.report = f'Failed to transfer {coin} **{amount}** from {handle_payer} to {handle_recip}; recipient does not exist. Check the spelling.'
+            transaction.report = f'Failed to transfer {coin} **{transaction.amount}** from {transaction.payer} to {transaction.recip}; current balance is {coin} **{avail}**.'
+    elif from_reaction:
+        # Success; no need for report to cmd_line
+        await actors.record_transaction(transaction)
     else:
-        transaction = transfer_funds(transaction)
-        if not transaction.success:
-            avail = get_current_balance(handle_payer)
-            if from_reaction:
-                transaction.report = f'Tried to transfer {coin} **{amount}** from {handle_payer} to {handle_recip} based on your reaction (emoji), but your balance is {avail}.'
-            else:
-                transaction.report = f'Failed to transfer {coin} **{amount}** from {handle_payer} to {handle_recip}; current balance is {coin} **{avail}**.'
-        elif from_reaction:
-            # Success; no need for report to cmd_line
-            await actors.record_transaction(transaction)
+        if transaction.payer_actor is not None and transaction.payer_actor == transaction.recip_actor:
+            transaction.report = f'Successfully transferred {coin} **{transaction.amount}** from {transaction.payer} to **{transaction.recip}**. (Note: you control both accounts.)'
         else:
-            if recip_status.actor_id == actor_id:
-                transaction.report = f'Successfully transferred {coin} **{amount}** from {handle_payer} to **{handle_recip}**. (Note: you control both accounts.)'
-            else:
-                transaction.report = f'Successfully transferred {coin} **{amount}** from {handle_payer} to **{handle_recip}**.'
-            await actors.record_transaction(transaction)
+            transaction.report = f'Successfully transferred {coin} **{transaction.amount}** from {transaction.payer} to **{transaction.recip}**.'
+        await actors.record_transaction(transaction)
     return transaction

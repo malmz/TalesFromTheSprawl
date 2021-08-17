@@ -34,6 +34,9 @@ product_emojis = {
 	'food' : '🍽️'
 }
 
+# Order unchecked: 🟦
+# Order checked: ☑️
+
 #User reacted with 🛒
 #User reacted with 🍿
 #User reacted with 🍺
@@ -467,6 +470,8 @@ async def order_product(shop_name : str, product_name : str, payer_handle : str,
 		if shop_name is None:
 			shop_name = ''
 		return f'Error: cannot find product {product_name} at shop {shop_name}'
+	if not product.in_stock:
+		return f'Sorry - {shop_name} is all out of {product_name}!'
 	shop : Shop = read_shop(shop_name)
 	shop_id = shop.shop_id
 
@@ -476,7 +481,13 @@ async def order_product(shop_name : str, product_name : str, payer_handle : str,
 	if delivery_id is None:
 		delivery_id = payer_handle
 
-	# TODO: transaction -- but first, fix transaction to be a real class
+	transaction = Transaction(payer=payer_handle, payer_actor=None, recip=shop_id, recip_actor=None, amount=product.price)
+	transaction.emoji = product.emoji
+	transaction = await finances.try_to_pay(transaction)
+	if not transaction.success:
+		return transaction.report
+	# Otherwise, we move on to create the order
+
 
 	order_id = str(record_new_order(shop_id))
 	order = Order(order_id, delivery_id, product.price, items_ordered={product.name: 1})
