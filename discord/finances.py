@@ -1,7 +1,7 @@
 import channels
 import handles
 import actors
-from custom_types import Transaction, TransTypes, ReactionPaymentResult
+from custom_types import Transaction, TransTypes
 import common
 from common import coin
 

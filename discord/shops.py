@@ -16,7 +16,7 @@ import finances
 import server
 
 from common import coin, emoji_unavail, shop_role_start, highest_ever_index
-from custom_types import Transaction, TransTypes
+from custom_types import Transaction, TransTypes, ActionResult
 
 
 emoji_shopping = '🛒'
@@ -101,6 +101,7 @@ class Product(object):
 		available : bool=True,
 		emoji : str = emoji_shopping):
 		self.name = name
+		self.product_id = name.lower() if name is not None else None
 		self.description = description
 		self.price = price
 		self.file_name = file_name
@@ -125,9 +126,9 @@ class CatalogueItemMapping(object):
 	def __init__(
 		self,
 		shop_id : str,
-		product_name : str):
+		product_id : str):
 		self.shop_id = shop_id
-		self.product_name = product_name
+		self.product_id = product_id
 
 	@staticmethod
 	def from_string(string : str):
@@ -223,8 +224,9 @@ async def reinitialize(shop_name : str):
 		in [order_flow_channel.purge(), storefront_channel.purge()]]
 		)
 	delete_catalogue_item_mappings_for_shop(shop.shop_id)
-	shop.highest_order = '1'
+	shop.highest_order = 1
 	store_shop(shop)
+	return 'Done.'
 
 
 def get_next_shop_actor_index():
@@ -256,10 +258,10 @@ def read_shop(shop_name : str):
 
 def record_new_order(shop_name : str):
 	shop : Shop = read_shop(shop_name)
-	new_order_id = shop.highest_order
+	new_order_id = int(shop.highest_order)
 	shop.highest_order = new_order_id + 1
 	store_shop(shop)
-	return new_order_id
+	return str(new_order_id)
 
 def store_storefront_channel_mapping(channel_id : str, shop_name : str):
 	shop_id = shop_name.lower()
@@ -298,14 +300,17 @@ def get_catalogue(shop_name : str):
 
 def get_all_products(shop_name : str):
 	catalogue = get_catalogue(shop_name)
-	for product_name in catalogue:
-		yield read_product_from_cat(catalogue, product_name)
+	for product_id in catalogue:
+		yield read_product_from_cat(catalogue, product_id)
+
+def product_exists(shop_name : str, product_name : str):
+	return read_product(shop_name, product_name) is not None
 
 
 def store_product(shop_name : str, product : Product):
 	if shop_exists(shop_name):
 		catalogue = get_catalogue(shop_name)
-		catalogue[product.name] = product.to_string()
+		catalogue[product.product_id] = product.to_string()
 		catalogue.write()
 
 def read_product(shop_name : str, product_name : str):
@@ -314,14 +319,15 @@ def read_product(shop_name : str, product_name : str):
 		return read_product_from_cat(catalogue, product_name)
 
 def read_product_from_cat(catalogue, product_name : str):
-	if product_name in catalogue:
-		return Product.from_string(catalogue[product_name])
+	product_id = product_name.lower()
+	if product_id in catalogue:
+		return Product.from_string(catalogue[product_id])
 
 def clear_catalogue(shop_name : str):
 	if shop_exists(shop_name):
 		catalogue = get_catalogue(shop_name)
-		for product in catalogue:
-			del catalogue[product]
+		for product_id in catalogue:
+			del catalogue[product_id]
 		catalogue.write()
 
 
@@ -392,7 +398,13 @@ def add_product(shop_name : str, product_name : str, description : str, price : 
 		return f'Error: must give a product name; use \".add_product {shop_name} <product_name>. (Optional: add description, price, and type/symbol)\"'
 	if not shop_exists(shop_name):
 		return f'Error: shop {shop_name} does not exist'
-
+	if product_exists(shop_name, product_name):
+		existing_product = read_product(shop_name, product_name)
+		if existing_product.name == product_name:
+			return f'Error: the shop {shop_name} already has a product called {product_name}.'
+		else:
+			return (f'Error: cannot create {product_name} at {shop_name} because its internal ID '
+				+ f'({product_name.lower()}) clashes with {existing_product.name}.)')
 	emoji = get_emoji_for_new_product(symbol)
 
 	product = Product(
@@ -471,10 +483,11 @@ async def post_catalogue(shop_name : str):
 				# Listing has been removed for non-available item, no issue here
 				pass
 		else:
-			mapping = CatalogueItemMapping(shop.shop_id, product.name)
+			mapping = CatalogueItemMapping(shop.shop_id, product.product_id)
 			store_catalogue_item_mapping(msg_id, mapping)
 		product.storefront_msg_id = msg_id
 		store_product(shop_name, product)
+	return 'Done.'
 
 async def post_catalogue_item(shop_name, product_name):
 	if shop_name is None:
@@ -490,7 +503,7 @@ async def post_catalogue_item(shop_name, product_name):
 	channel = channels.get_discord_channel(shop.storefront_channel_id)
 
 	msg_id = await update_catalogue_item_message(channel, product)
-	mapping = CatalogueItemMapping(shop.shop_id, product.name)
+	mapping = CatalogueItemMapping(shop.shop_id, product.product_id)
 	store_catalogue_item_mapping(msg_id, mapping)
 
 
@@ -548,41 +561,50 @@ def generate_catalogue_item_message(product):
 
 ### Making an order:
 
-async def order_product(shop_name : str, product_name : str, payer_handle : str, delivery_id : str=None):
+async def order_product_from_command(shop_name : str, product_name : str, payer_handle : str, delivery_id : str=None):
 	product = read_product(shop_name, product_name)
 	if product is None:
 		if product_name is None:
 			product_name = ''
 		if shop_name is None:
 			shop_name = ''
-		return f'Error: cannot find product {product_name} at shop {shop_name}'
-	if not product.in_stock:
-		return f'Sorry - {shop_name} is all out of {product_name}!'
-	shop : Shop = read_shop(shop_name)
-	shop_id = shop.shop_id
-
+		return f'Error: cannot find product {product_name} at shop {shop_name}.'
 
 	if payer_handle is None:
 		return (f'Error: no payer ID supplied.')
 	if delivery_id is None:
 		delivery_id = payer_handle
 
+	shop : Shop = read_shop(shop_name)
+	shop_id = shop.shop_id
+
+	result : ActionResult = await order_product(shop, product, payer_handle, delivery_id)
+	return result.report
+
+
+async def order_product(shop : Shop, product : Product, payer_handle : str, delivery_id : str):
+	result = ActionResult()
+	if not product.in_stock:
+		return f'Sorry - {shop_name} is all out of {product_name}!'
+
+	# TODO: use "from_reaction" somehow to ensure not all transaction failures end up in cmd line?
 	transaction = Transaction(
 		payer=payer_handle,
 		payer_actor=None,
-		recip=shop_id,
+		recip=shop.shop_id,
 		recip_actor=None,
 		amount=product.price,
-		cause = TransTypes.ShopOrder)
+		cause=TransTypes.ShopOrder)
 	transaction.emoji = product.emoji
 	transaction = finances.find_transaction_parties(transaction)
 	transaction = await finances.try_to_pay(transaction)
 	if not transaction.success:
-		return transaction.report
+		result.report = transaction.report
+		return result
 	# Otherwise, we move on to create the order
 
 
-	order_id = str(record_new_order(shop_id))
+	order_id = str(record_new_order(shop.shop_id))
 	order = Order(order_id, delivery_id, product.price, items_ordered={product.name: 1})
 		#msg_id : str,
 		#time_created,
@@ -590,6 +612,10 @@ async def order_product(shop_name : str, product_name : str, payer_handle : str,
 	order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
 	post = generate_order_message(order)
 	await order_flow_channel.send(post)
+	result.report = f'Successfully ordered {product.name} from {shop.name}'
+	result.success = True
+	return result
+
 
 def generate_order_message(order : Order):
 	content = f'**#{order.order_id}** for **{order.delivery_id}**\n'
@@ -597,3 +623,36 @@ def generate_order_message(order : Order):
 		content += f'{amount} {item}\n'
 	content += f'Total: {coin} {order.price_total} (paid)'
 	return content
+
+async def process_reaction_in_catalogue(message, user_id : str, emoji : str):
+	result = ActionResult()
+	shop_id = read_storefront_channel_mapping(str(message.channel.id))
+	if shop_id is None:
+		result.report = f'Error: tried to order {emoji} from shop but could not map channel {message.channel.id} to any shop.'
+		return result		
+	shop : Shop = read_shop(shop_id)
+	if shop is None:
+		result.report = f'Error: tried to order {emoji} from shop but could not find shop.'
+		return result
+	cat_mapping : CatalogueItemMapping = read_catalogue_item_mapping(str(message.id))
+	if cat_mapping is None:
+		result.report = f'Error: tried to order {emoji} from {shop.name} but could not map the message to a product.'
+		return result
+	if cat_mapping.shop_id != shop_id:
+		result.report = f'Error: corrupt database, shop ID mismatch {cat_mapping.shop_id}/{shop_id}.'
+		return result
+	product : Product = read_product(shop_id, cat_mapping.product_id)
+	if product is None:
+		result.report = f'Error: cannot find product {cat_mapping.product_id} at shop {shop.name}.'
+		return result
+	if product.emoji != emoji:
+		# Wrong reaction -- silently ignore it.
+		return result
+
+	player_id = players.get_player_id(user_id, expect_to_find=True)
+	payer_handle = handles.get_handle(player_id)
+
+	# TODO: find delivery ID for this player
+
+	result = await order_product(shop, product, payer_handle, delivery_id=payer_handle)
+	return result

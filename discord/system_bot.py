@@ -448,9 +448,7 @@ async def clear_orders_command(ctx, shop_name : str=None):
         await swallow(ctx.message);
         return
     await shops.reinitialize(shop_name)
-    report = await publish_menu_command(ctx, shop_name)
-    if report is not None:
-        await ctx.send(report)
+    await publish_menu_command(ctx, shop_name)
 
 
 @bot.command(name='publish_menu', help='Admin-only: post a shop\'s catalogue/menu.')
@@ -472,7 +470,7 @@ async def order_command(ctx, product_name : str=None, shop_name : str=None, buye
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = await shops.order_product(shop_name, product_name, buyer)
+    report = await shops.order_product_from_command(shop_name, product_name, buyer)
     if report is not None:
         await ctx.send(report)
 

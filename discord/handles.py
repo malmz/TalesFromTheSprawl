@@ -97,7 +97,8 @@ def switch_to_handle(actor_id : str, handle : str):
     handles.write()
 
 def get_handle(actor_id : str):
-    return handles[actor_id][active_index]
+    if actor_id in handles:
+        return handles[actor_id][active_index]
 
 def get_handles_for_actor(actor_id : str):
     for handle in handles[actor_id]:

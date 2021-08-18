@@ -3,9 +3,10 @@ from enum import Enum
 
 # TODO: do these correctly!
 # Should use instance fields instead of class fields.
-class ReactionPaymentResult:
-    success = False
-    report = None
+class ActionResult(object):
+	def __init__(self, success : bool=False, report : str = None):
+		self.success = success
+		self.report = report
 
 class TransTypes(Enum):
 	Transfer = 1
