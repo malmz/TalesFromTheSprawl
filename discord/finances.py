@@ -1,9 +1,8 @@
 import channels
 import handles
 import actors
-from custom_types import Transaction, TransTypes
-import common
-from common import coin
+from custom_types import Transaction, TransTypes, Handle, HandleTypes
+from common import coin, transaction_collector, transaction_collected
 
 from configobj import ConfigObj
 import asyncio
@@ -24,32 +23,39 @@ finances = ConfigObj('finances.conf')
 
 def init_finances():
     for handle in handles.get_all_handles():
-        if not handle in finances:
+        if not handle.handle_id in finances and can_have_finances(handle.handle_type):
             init_finances_for_handle(handle)
 
-def init_finances_for_handle(handle : str):
-    finances[handle] = {}
-    finances[handle][balance_index] = '0'
+def init_finances_for_handle(handle : Handle):
+    finances[handle.handle_id] = {}
+    finances[handle.handle_id][balance_index] = '0'
     finances.write()
 
-async def deinit_finances_for_handle(handle : str, actor_id : str, record : bool):
-    del finances[handle]
-    finances.write()
+async def deinit_finances_for_handle(handle : Handle, actor_id : str, record : bool):
+    if handle.handle_id in finances:
+        del finances[handle.handle_id]
+        finances.write()
     if record:
         await actors.write_financial_record(content=None, actor_id=actor_id, last_in_sequence=True)
 
-def get_current_balance(handle : str):
-    return int(finances[handle][balance_index])
+def get_current_balance(handle : Handle):
+    return get_current_balance_handle_id(handle.handle_id)
 
-def set_current_balance(handle : str, balance : int):
-    finances[handle][balance_index] = str(balance)
+def get_current_balance_handle_id(handle_id : str):
+    return int(finances[handle_id][balance_index])
+
+def set_current_balance(handle : Handle, balance : int):
+    set_current_balance_handle_id(handle.handle_id, balance)
+
+def set_current_balance_handle_id(handle_id : str, balance : int):
+    finances[handle_id][balance_index] = str(balance)
     finances.write()
 
-async def overwrite_balance(handle : str, balance : int):
-    old_balance = finances[handle][balance_index]
+async def overwrite_balance(handle : Handle, balance : int):
+    old_balance = get_current_balance(handle)
     set_current_balance(handle, balance)
     transaction = Transaction(
-        payer=handle,
+        payer=handle.handle_id,
         payer_actor=None,
         recip=system_fake_handle,
         recip_actor=None,
@@ -62,7 +68,7 @@ async def overwrite_balance(handle : str, balance : int):
     transaction = Transaction(
         payer=system_fake_handle,
         payer_actor=None,
-        recip=handle,
+        recip=handle.handle_id,
         recip_actor=None,
         amount=balance,
         cause = TransTypes.Transfer,
@@ -70,37 +76,43 @@ async def overwrite_balance(handle : str, balance : int):
     transaction = find_transaction_parties(transaction)
     await record_transaction(transaction)
 
+def can_have_finances(handle_type : HandleTypes):
+    return handles.is_active_handle_type(handle_type)
+
 def get_all_handles_balance_report(actor_id : str):
-    current_handle = handles.get_handle(actor_id)
+    current_handle : Handle = handles.get_active_handle(actor_id)
     report = 'Current balance for all your accounts:\n'
     total = 0
     for handle in handles.get_handles_for_actor(actor_id):
         balance = get_current_balance(handle)
         total += balance
         balance_str = str(balance)
-        if handle == current_handle:
-            report = report + f'> **{handle}**: {coin} **{balance_str}**\n'
+        if handle.handle_id == current_handle.handle_id:
+            report = report + f'> **{handle.handle_id}**: {coin} **{balance_str}**'
         else:
-            report = report + f'> {handle}: {coin} **{balance_str}**\n'
+            report = report + f'> {handle.handle_id}: {coin} **{balance_str}**'
+        if handle.handle_type == HandleTypes.Burner:
+            report += '  🔥'
+        report += '\n'
     report = report + f'Total: {coin} **{total}**'
     return report
 
 def transfer_funds_if_available(transaction : Transaction):
     avail_at_payer = int(finances[transaction.payer][balance_index])
     if avail_at_payer >= transaction.amount:
-        amount_at_recip = get_current_balance(transaction.recip)
-        set_current_balance(transaction.recip, amount_at_recip + transaction.amount)
-        set_current_balance(transaction.payer, avail_at_payer - transaction.amount)
+        amount_at_recip = get_current_balance_handle_id(transaction.recip)
+        set_current_balance_handle_id(transaction.recip, amount_at_recip + transaction.amount)
+        set_current_balance_handle_id(transaction.payer, avail_at_payer - transaction.amount)
         transaction.success = True
     else:
         transaction.success = False
     return transaction
 
-async def transfer_from_burner(burner : str, new_active : str, amount : int):
+async def transfer_from_burner(burner : Handle, new_active : Handle, amount : int):
     transaction = Transaction(
-        payer=burner,
+        payer=burner.handle_id,
         payer_actor=None,
-        recip=new_active,
+        recip=new_active.handle_id,
         recip_actor=None,
         cause = TransTypes.Burn,
         amount=amount)
@@ -108,35 +120,35 @@ async def transfer_from_burner(burner : str, new_active : str, amount : int):
     transfer_funds_if_available(transaction)
     await record_transaction(transaction)
 
-async def add_funds(handle : str, amount : int):
-    previous_balance = int(finances[handle][balance_index])
+async def add_funds(handle : Handle, amount : int):
+    previous_balance = int(finances[handle.handle_id][balance_index])
     new_balance = previous_balance + amount
-    finances[handle][balance_index] = str(new_balance)
+    finances[handle.handle_id][balance_index] = str(new_balance)
     finances.write()
-    transaction = Transaction(payer=system_fake_handle, payer_actor=None, recip=handle, recip_actor=None, amount=amount)
+    transaction = Transaction(payer=system_fake_handle, payer_actor=None, recip=handle.handle_id, recip_actor=None, amount=amount)
     transaction = find_transaction_parties(transaction)
     await record_transaction(transaction)
 
 async def collect_all_funds(actor_id : str):
-    current_handle = handles.get_handle(actor_id)
+    current_handle : Handle = handles.get_active_handle(actor_id)
     total = 0
-    transaction = Transaction(payer=None, payer_actor=None, recip=common.transaction_collector, recip_actor=None, amount=0, success=True)
+    transaction = Transaction(payer=None, payer_actor=None, recip=transaction_collector, recip_actor=None, amount=0, success=True)
     balance_on_current = 0
     for handle in handles.get_handles_for_actor(actor_id):
-        collected = get_current_balance(handle)
+        collected = get_current_balance_handle_id(handle)
         if collected > 0:
             total += collected
             set_current_balance(handle, 0)
-            if handle == current_handle:
+            if handle.handle_id == current_handle.handle_id:
                 balance_on_current = collected
             else:
                 transaction.amount = collected
-                transaction.payer = handle
+                transaction.payer = handle.handle_id
                 transaction.last_in_sequence = False
                 record_transaction(transaction)
     set_current_balance(current_handle, total)
     transaction.amount = total - balance_on_current
-    transaction.payer = common.transaction_collected
+    transaction.payer = transaction_collected
     transaction.recip = current_handle
     transaction.last_in_sequence = True
     await record_transaction(transaction)
@@ -144,15 +156,18 @@ async def collect_all_funds(actor_id : str):
 
 # Related to transactions
 
-async def try_to_pay_from_actor(actor_id : str, handle_recip : str, amount : int, from_reaction=False):
-    handle_payer = handles.get_handle(actor_id)
+async def try_to_pay_from_actor(actor_id : str, recip_handle_id : str, amount : int, from_reaction=False):
+    # Some input checking has been done here, but we should move it from system_bot.py into here
+    handle_payer : Handle = handles.get_active_handle(actor_id)
     transaction = Transaction(
-        payer=handle_payer,
-        payer_actor=None,
-        recip=handle_recip,
+        payer=handle_payer.handle_id,
+        payer_actor=handle_payer.actor_id,
+        recip=recip_handle_id,
         recip_actor=None,
         cause = TransTypes.Transfer,
         amount=amount)
+    # TODO: right now a reaction on e.g. a burnt burner WILL cause error printout every time;
+    # "from_reaction" only protects against printout on self-reacts
     transaction = find_transaction_parties(transaction)
     if transaction.report is not None:
         return transaction
@@ -166,31 +181,31 @@ def find_transaction_parties(transaction : Transaction):
         if transaction.payer_actor is None:
             transaction.report = f'Error: attempted transaction without knowing either the handle or the user ID of the payer.'
         else:
-            transaction.payer = handles.get_handle(transaction.payer_actor)
+            transaction.payer = handles.get_active_handle(transaction.payer_actor).handle_id
             if transaction.payer is None:
                 transaction.report = f'Error: attempted transaction for {transaction.payer_actor} but could not find current handle.'
     else:
         if transaction.payer_actor is None and transaction.payer_actor != system_fake_handle:
-            payer_status : HandleStatus = handles.get_handle_status(transaction.payer)
-            if not payer_status.exists:
+            payer_handle : Handle = handles.get_handle(transaction.payer)
+            if not can_have_finances(payer_handle.handle_type):
                 transaction.report = f'Error: attempted transaction from handle {transaction.payer} which does not exist.'
             else:
-                transaction.payer_actor = payer_status.actor_id
+                transaction.payer_actor = payer_handle.actor_id
 
     if transaction.recip is None:
         if transaction.recip_actor is None:
             transaction.report = f'Error: attempted transaction without knowing either the handle or the user ID of the recipient.'
         else:
-            transaction.recip = handles.get_handle(transaction.recip_actor)
+            transaction.recip = handles.get_active_handle(transaction.recip_actor).handle_id
             if transaction.recip is None:
                 transaction.report = f'Error: attempted transaction to {transaction.recip_actor} but could not find current handle.'
     else:
         if transaction.recip_actor is None and transaction.recip_actor != system_fake_handle:
-            recip_status : HandleStatus = handles.get_handle_status(transaction.recip)
-            if not recip_status.exists:
+            recip_handle : Handle = handles.get_handle(transaction.recip)
+            if not can_have_finances(recip_handle.handle_type):
                 transaction.report = f'Error: attempted transaction to handle {transaction.recip} which does not exist.'
             else:
-                transaction.recip_actor = recip_status.actor_id
+                transaction.recip_actor = recip_handle.actor_id
     return transaction
 
 async def try_to_pay(transaction : Transaction, from_reaction : bool=False):
@@ -204,7 +219,7 @@ async def try_to_pay(transaction : Transaction, from_reaction : bool=False):
 
     transaction = transfer_funds_if_available(transaction)
     if not transaction.success:
-        avail = get_current_balance(transaction.payer)
+        avail = get_current_balance_handle_id(transaction.payer)
         if from_reaction:
             transaction.report = f'Tried to transfer {coin} **{transaction.amount}** from {transaction.payer} to {transaction.recip} based on your reaction (emoji), but your balance is {avail}.'
         else:

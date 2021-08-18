@@ -64,6 +64,7 @@ def create_post(message, sender : str, recip : str=None):
         header = create_header(message.created_at, sender, recip)
         return header + post
 
+# TODO: pass in "full_post : bool" instead of checking sender == None
 async def repost_message_to_channel(channel, message, sender : str, recip : str=None):
     post = create_post(message, sender, recip)
     files = [await a.to_file() for a in message.attachments]

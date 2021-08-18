@@ -16,7 +16,7 @@ import finances
 import server
 
 from common import coin, emoji_unavail, shop_role_start, highest_ever_index
-from custom_types import Transaction, TransTypes, ActionResult
+from custom_types import Transaction, TransTypes, ActionResult, Handle
 
 
 emoji_shopping = '🛒'
@@ -571,9 +571,10 @@ async def order_product_from_command(shop_name : str, product_name : str, payer_
 		return f'Error: cannot find product {product_name} at shop {shop_name}.'
 
 	if payer_handle is None:
-		return (f'Error: no payer ID supplied.')
+		return 'Error: no payer ID supplied.'
+	payer_handle : Handle = handles.get_handle(payer_handle)
 	if delivery_id is None:
-		delivery_id = payer_handle
+		delivery_id = payer_handle.handle_id
 
 	shop : Shop = read_shop(shop_name)
 	shop_id = shop.shop_id
@@ -582,21 +583,21 @@ async def order_product_from_command(shop_name : str, product_name : str, payer_
 	return result.report
 
 
-async def order_product(shop : Shop, product : Product, payer_handle : str, delivery_id : str):
+async def order_product(shop : Shop, product : Product, payer_handle : Handle, delivery_id : str):
 	result = ActionResult()
 	if not product.in_stock:
 		return f'Sorry - {shop_name} is all out of {product_name}!'
 
 	# TODO: use "from_reaction" somehow to ensure not all transaction failures end up in cmd line?
 	transaction = Transaction(
-		payer=payer_handle,
-		payer_actor=None,
+		payer=payer_handle.handle_id,
+		payer_actor=payer_handle.actor_id,
 		recip=shop.shop_id,
-		recip_actor=None,
+		recip_actor=shop.actor_id,
 		amount=product.price,
 		cause=TransTypes.ShopOrder)
 	transaction.emoji = product.emoji
-	transaction = finances.find_transaction_parties(transaction)
+	#transaction = finances.find_transaction_parties(transaction)
 	transaction = await finances.try_to_pay(transaction)
 	if not transaction.success:
 		result.report = transaction.report
@@ -650,9 +651,9 @@ async def process_reaction_in_catalogue(message, user_id : str, emoji : str):
 		return result
 
 	player_id = players.get_player_id(user_id, expect_to_find=True)
-	payer_handle = handles.get_handle(player_id)
+	payer_handle : Handle = handles.get_active_handle(player_id)
 
 	# TODO: find delivery ID for this player
 
-	result = await order_product(shop, product, payer_handle, delivery_id=payer_handle)
+	result = await order_product(shop, product, payer_handle, delivery_id=payer_handle.handle_id)
 	return result

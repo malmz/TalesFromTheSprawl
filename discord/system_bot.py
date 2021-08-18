@@ -141,8 +141,8 @@ async def on_member_join(member):
 # These work in both cmd_line and chat_hub channels
 
 @bot.command(name='handle', help='Show current handle, or switch to another handle. To switch, new handle must be free (then it will be created) or controlled by you. Your handle is shown to other users in most other channels.')
-async def switch_handle_command(ctx, new_handle : str=None, burner=False):
-    response = await handles.process_handle_command(ctx, new_handle, burner)
+async def switch_handle_command(ctx, new_handle : str=None, burner : bool=False):
+    response = await handles.process_handle_command(ctx, new_handle, burner=burner)
     if channels.is_cmd_line(ctx.channel.name):
         await ctx.send(response)
     elif channels.is_chat_hub(ctx.channel.name):
@@ -165,44 +165,45 @@ async def burn_command(ctx, burner_id : str=None):
 
 @bot.command(name='create_money', help='Use \".create_money <handle> <amount>\" to create new money (will be admin-only during the game)')
 @commands.has_role('gm')
-async def create_money_command(ctx, handle : str=None, amount : int=0):
+async def create_money_command(ctx, handle_id : str=None, amount : int=0):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
 
-    if handle == None:
+    if handle_id == None:
         response = 'Error: no handle specified.'
+    elif amount <= 0:
+        response = f'Error: cannot create less than {coin} 1.'
     else:
-        handle = handle.lower()
-        if amount <= 0:
-            response = f'Error: cannot create less than {coin} 1.'
-        elif handles.handle_exists(handle):
+        handle = handles.get_handle(handle_id)
+        if finances.can_have_finances(handle.handle_type):
             await finances.add_funds(handle, amount)
-            response = 'Added ' + str(amount) + ' to the balance of ' + handle
+            response = f'Added {amount} to the balance of {handle.handle_id}'
         else:
-            response = 'Error: handle \"' + handle + '\" does not exist.'
+            response = f'Error: handle \"{handle_id}\" does not exist, or is not capable of having money.'
     await ctx.send(response)
 
 @bot.command(name='set_money', help='Use \".set_money <handle> <amount>\" to set the balance of an account (will be admin-only during the game)')
 @commands.has_role('gm')
-async def set_money_command(ctx, handle : str=None, amount : int=-1):
+async def set_money_command(ctx, handle_id : str=None, amount : int=-1):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
 
-    if handle == None:
+    if handle_id == None:
         response = 'Error: no handle specified.'
+    elif amount < 0:
+        response = 'Error: you must set a new balance.'
     else:
-        handle = handle.lower()
-        if amount < 0:
-            response = 'Error: you must set a new balance.'
-        elif handles.handle_exists(handle):
+        handle = handles.get_handle(handle_id)
+        if finances.can_have_finances(handle.handle_type):
             await finances.overwrite_balance(handle, amount)
-            response = 'Set the balance of ' + handle + ' to ' + str(amount)
+            response = f'Set the balance of {handle.handle_id} to {amount}'
         else:
-            response = 'Error: handle \"' + handle + '\" does not exist.'
+            response = f'Error: handle \"{handle_id}\" does not exist, or is not capable of having money'
     await ctx.send(response)
 
+#TODO: move some of this error handling into try_to_pay_from_command
 @bot.command(name='pay', help=f'Pay money ({coin}) to the owner of another handle')
 async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
     if not channels.is_cmd_line(ctx.channel.name):
@@ -211,14 +212,12 @@ async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
 
     if handle_recip == None:
         response = 'Error: no recipient specified. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
+    elif amount <= 0:
+        response = f'Error: cannot transfer less than {coin} 1. Use \".pay <recipient> <amount>\", e.g. \".pay {handle_recip} 500\".'
     else:
-        handle_recip = handle_recip.lower()
-        if amount <= 0:
-            response = f'Error: cannot transfer less than {coin} 1. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
-        else:
-            player_id = players.get_player_id(str(ctx.message.author.id))
-            transaction : custom_types.Transaction = await finances.try_to_pay_from_actor(player_id, handle_recip, amount)
-            response = transaction.report
+        player_id = players.get_player_id(str(ctx.message.author.id))
+        transaction : custom_types.Transaction = await finances.try_to_pay_from_actor(player_id, handle_recip, amount)
+        response = transaction.report
     await ctx.send(response)
 
 @bot.command(name='balance', help='Show current balance (amount of money available) on all available handles.')
@@ -315,8 +314,6 @@ async def clear_actor_command(ctx, actor_id : str):
 
 
 
-
-
     
 
 @bot.command(name='init_all_players', help='Admin-only: initialise all current members of the server as players.')
@@ -327,12 +324,12 @@ async def init_all_players_command(ctx):
 
 @bot.command(name='ping', help='Admin-only function to test user-player-channel mappings')
 @commands.has_role('gm')
-async def ping_command(ctx, handle : str):
+async def ping_command(ctx, handle_id : str):
     channel = players.get_cmd_line_channel_for_handle(handle)
     if channel != None:
-        await channel.send(f'Testing ping for {handle}')
+        await channel.send(f'Testing ping for {handle_id}')
     else:
-        await ctx.send(f'Error: could not find the command line channel for {handle}')
+        await ctx.send(f'Error: could not find the command line channel for {handle_id}')
 
 # Chats
 
@@ -352,7 +349,7 @@ async def chat_other_command(ctx,  my_handle : str, other_handle : str):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = await chats.create_2party_chat(my_handle, other_handle)
+    report = await chats.create_2party_chat_from_handle_id(my_handle, other_handle)
     if report != None:
         await ctx.send(report)
 
@@ -373,7 +370,7 @@ async def close_chat_other_command(ctx, my_handle : str, other_handle : str):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = await chats.close_2party_chat_session(my_handle, other_handle)
+    report = await chats.close_2party_chat_session_from_handle_id(my_handle, other_handle)
     if report is not None:
         await ctx.send(report)
 

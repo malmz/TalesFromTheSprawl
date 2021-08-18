@@ -1,8 +1,7 @@
 import simplejson
 from enum import Enum
 
-# TODO: do these correctly!
-# Should use instance fields instead of class fields.
+
 class ActionResult(object):
 	def __init__(self, success : bool=False, report : str = None):
 		self.success = success
@@ -119,4 +118,29 @@ class PlayerData(object):
 	def to_string(self):
 		return simplejson.dumps(self.__dict__)
 
+class HandleTypes(str, Enum):
+	Unused = 'unused'
+	Regular = 'regular'
+	Burner = 'burner'
+	Burnt = 'burnt'
+	NPC = 'npc'
 
+
+class Handle(object):
+	def __init__(
+		self,
+		handle_id : str,
+		handle_type : HandleTypes = HandleTypes.Unused,
+		actor_id : str=None):
+		self.handle_id = handle_id.lower() if handle_id is not None else None
+		self.handle_type = handle_type
+		self.actor_id = actor_id
+
+	@staticmethod
+	def from_string(string : str):
+		obj = Handle(None)
+		obj.__dict__ = simplejson.loads(string)
+		return obj
+
+	def to_string(self):
+		return simplejson.dumps(self.__dict__)

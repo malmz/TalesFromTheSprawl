@@ -163,10 +163,10 @@ async def write_financial_record(actor_id : str, content : str, last_in_sequence
 	if last_in_sequence:
 		await update_financial_statement(channel, actor)
 
-def get_actor_for_handle(handle : str):
-	actor_status : handles.HandleStatus = handles.get_handle_status(handle)
-	if actor_status.exists:
-		return read_actor(actor_status.actor_id)
+def get_actor_for_handle(handle_id : str):
+	handle : handles.Handle = handles.get_handle(handle_id)
+	if handle.actor_id is not None:
+		return read_actor(handle.actor_id)
 
 def get_finance_channel_for_handle(handle : str):
 	actor : Actor = get_actor_for_handle(handle)

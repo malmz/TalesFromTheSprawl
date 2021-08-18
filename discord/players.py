@@ -6,7 +6,7 @@ import server
 import actors
 
 from common import coin, highest_ever_index, player_personal_role_start
-from custom_types import PlayerData
+from custom_types import PlayerData, Handle
 
 import discord
 import asyncio
@@ -183,7 +183,7 @@ async def send_startup_message_cmd_line(player_id : str, channel):
 	await channel.send(content)
 
 
-def get_cmd_line_channel_for_handle(handle : str):
+def get_cmd_line_channel_for_handle(handle : Handle):
 	actor : Actor = actors.get_actor_for_handle(handle)
 	if actor is not None:
 		return get_cmd_line_channel(actor.actor_id)
