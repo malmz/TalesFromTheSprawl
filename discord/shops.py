@@ -16,7 +16,7 @@ import finances
 import server
 
 from common import coin, emoji_unavail, shop_role_start, highest_ever_index
-from custom_types import Transaction
+from custom_types import Transaction, TransTypes
 
 
 emoji_shopping = '🛒'
@@ -347,17 +347,6 @@ async def create_shop(guild, shop_name : str, owner_player_id : str):
 
 
 
-
-
-
-
-#####
-
-
-#####
-
-
-
 def get_emoji_for_new_product(symbol : str):
 	if symbol is None:
 		return emoji_shopping
@@ -541,8 +530,15 @@ async def order_product(shop_name : str, product_name : str, payer_handle : str,
 	if delivery_id is None:
 		delivery_id = payer_handle
 
-	transaction = Transaction(payer=payer_handle, payer_actor=None, recip=shop_id, recip_actor=None, amount=product.price)
+	transaction = Transaction(
+		payer=payer_handle,
+		payer_actor=None,
+		recip=shop_id,
+		recip_actor=None,
+		amount=product.price,
+		cause = TransTypes.ShopOrder)
 	transaction.emoji = product.emoji
+	transaction = finances.find_transaction_parties(transaction)
 	transaction = await finances.try_to_pay(transaction)
 	if not transaction.success:
 		return transaction.report

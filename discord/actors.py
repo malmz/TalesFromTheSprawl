@@ -152,67 +152,8 @@ async def update_financial_statement(channel, actor : Actor):
 	actor.finance_stmt_msg_id = new_message.id
 	store_actor(actor)
 
-async def record_transaction(transaction : Transaction):
-	payer_status : handles.HandleStatus = handles.get_handle_status(transaction.payer)
-	recip_status : handles.HandleStatus = handles.get_handle_status(transaction.recip)
-	if payer_status.exists:
-		# Special case: recip is a collector account
-		if transaction.recip == common.transaction_collector:
-			await write_financial_record(
-				payer_status.actor_id,
-				finances.generate_record_collected(transaction),
-				transaction.last_in_sequence
-			)
-		elif recip_status.exists:
-			# Both payer and recip are normal handles
-			if payer_status.actor_id == recip_status.actor_id:
-				# Special case: payer and recip are the same
-				await write_financial_record(
-					payer_status.actor_id,
-					finances.generate_record_self_transfer(transaction),
-					transaction.last_in_sequence
-				)
-			else:
-				await asyncio.create_task(
-					write_financial_record(
-						payer_status.actor_id,
-						finances.generate_record_payer(transaction),
-						transaction.last_in_sequence
-					)
-				)
-				await asyncio.create_task(
-					write_financial_record(
-						recip_status.actor_id,
-						finances.generate_record_recip(transaction),
-						transaction.last_in_sequence
-					)
-				)
-		else:
-			# Only payer exists, not recip:
-			await write_financial_record(
-				payer_status.actor_id,
-				finances.generate_record_payer(transaction),
-				transaction.last_in_sequence
-			)
-	elif recip_status.exists:
-		# Only recip exists, not payer
-		# Special case: payer is the collection from other accounts
-		if transaction.payer == common.transaction_collected:
-			await write_financial_record(
-				recip_status.actor_id,
-				finances.generate_record_collector(transaction),
-				transaction.last_in_sequence
-			)
-		else:
-			await write_financial_record(recip_status.actor_id, finances.generate_record_recip(transaction), transaction.last_in_sequence)
 
-
-async def write_financial_record(actor_id : str, content : str, last_in_sequence : bool, handle : str = None):
-	if actor_id is None:
-		if handle is not None:
-			actor_status : handles.HandleStatus = handles.get_handle_status(handle)
-			if actor_status.exists:
-				actor_id = actor_status.actor_id
+async def write_financial_record(actor_id : str, content : str, last_in_sequence : bool):
 	actor = read_actor(actor_id)
 	if actor is None:
 		raise RuntimeError(f'Trying to write financial record but could not find which actor it belongs to.')

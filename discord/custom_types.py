@@ -1,11 +1,18 @@
 import simplejson
-
+from enum import Enum
 
 # TODO: do these correctly!
 # Should use instance fields instead of class fields.
 class ReactionPaymentResult:
     success = False
     report = None
+
+class TransTypes(Enum):
+	Transfer = 1
+	Collect = 2
+	Burn = 3
+	ChatReact = 4
+	ShopOrder = 5
 
 class Transaction(object):
 	def __init__(
@@ -15,6 +22,7 @@ class Transaction(object):
 		payer_actor : str,
 		recip_actor : str,
 		amount : int,
+		cause : TransTypes=TransTypes.Transfer,
 		report : str=None,
 		timestamp=None, # TODO
 		success : bool=False,
@@ -26,6 +34,7 @@ class Transaction(object):
 		self.payer_actor = payer_actor
 		self.recip_actor = recip_actor
 		self.amount = amount
+		self.cause = cause
 		self.report = report
 		self.timestamp = timestamp
 		self.success = success

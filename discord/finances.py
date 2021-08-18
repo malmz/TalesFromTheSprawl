@@ -1,7 +1,7 @@
 import channels
 import handles
 import actors
-from custom_types import Transaction, ReactionPaymentResult
+from custom_types import Transaction, TransTypes, ReactionPaymentResult
 import common
 from common import coin
 
@@ -48,11 +48,27 @@ def set_current_balance(handle : str, balance : int):
 async def overwrite_balance(handle : str, balance : int):
     old_balance = finances[handle][balance_index]
     set_current_balance(handle, balance)
-    transaction = Transaction(payer=handle, payer_actor=None, recip=system_fake_handle, recip_actor=None, amount=old_balance, success=True)
-    await actors.record_transaction(transaction)
+    transaction = Transaction(
+        payer=handle,
+        payer_actor=None,
+        recip=system_fake_handle,
+        recip_actor=None,
+        amount=old_balance,
+        cause = TransTypes.Transfer,
+        success=True)
+    transaction = find_transaction_parties(transaction)
+    await record_transaction(transaction)
 
-    transaction = Transaction(payer=system_fake_handle, payer_actor=None, recip=handle, recip_actor=None, amount=balance, success=True)
-    await actors.record_transaction(transaction)
+    transaction = Transaction(
+        payer=system_fake_handle,
+        payer_actor=None,
+        recip=handle,
+        recip_actor=None,
+        amount=balance,
+        cause = TransTypes.Transfer,
+        success=True)
+    transaction = find_transaction_parties(transaction)
+    await record_transaction(transaction)
 
 def get_all_handles_balance_report(actor_id : str):
     current_handle = handles.get_handle(actor_id)
@@ -81,12 +97,16 @@ def transfer_funds_if_available(transaction : Transaction):
     return transaction
 
 async def transfer_from_burner(burner : str, new_active : str, amount : int):
-    transaction = Transaction(payer=burner, payer_actor=None, recip=new_active, recip_actor=None, amount=amount)
-    transaction.payer = burner
-    transaction.recip = new_active
-    transaction.amount = amount
+    transaction = Transaction(
+        payer=burner,
+        payer_actor=None,
+        recip=new_active,
+        recip_actor=None,
+        cause = TransTypes.Burn,
+        amount=amount)
+    transaction = find_transaction_parties(transaction)
     transfer_funds_if_available(transaction)
-    await actors.record_transaction(transaction)
+    await record_transaction(transaction)
 
 async def add_funds(handle : str, amount : int):
     previous_balance = int(finances[handle][balance_index])
@@ -94,7 +114,8 @@ async def add_funds(handle : str, amount : int):
     finances[handle][balance_index] = str(new_balance)
     finances.write()
     transaction = Transaction(payer=system_fake_handle, payer_actor=None, recip=handle, recip_actor=None, amount=amount)
-    await actors.record_transaction(transaction)
+    transaction = find_transaction_parties(transaction)
+    await record_transaction(transaction)
 
 async def collect_all_funds(actor_id : str):
     current_handle = handles.get_handle(actor_id)
@@ -112,36 +133,26 @@ async def collect_all_funds(actor_id : str):
                 transaction.amount = collected
                 transaction.payer = handle
                 transaction.last_in_sequence = False
-                await actors.record_transaction(transaction)
+                record_transaction(transaction)
     set_current_balance(current_handle, total)
     transaction.amount = total - balance_on_current
     transaction.payer = common.transaction_collected
     transaction.recip = current_handle
     transaction.last_in_sequence = True
-    await actors.record_transaction(transaction)
+    await record_transaction(transaction)
 
 
 # Related to transactions
 
-# TODO: timestamp for transactions
-def generate_record_self_transfer(transaction : Transaction):
-    return f'🔁 **{transaction.payer}** --> **{transaction.recip}**: {coin} {transaction.amount}'
-
-def generate_record_payer(transaction : Transaction):
-    return f'🟥 **{transaction.payer}** --> {transaction.recip}: {coin} {transaction.amount}'
-
-def generate_record_recip(transaction : Transaction):
-    return f'🟩 {transaction.payer} --> **{transaction.recip}**: {coin} {transaction.amount}'
-
-def generate_record_collected(transaction : Transaction):
-    return f'⏬ Collected {coin} {transaction.amount} from **{transaction.payer}**'
-
-def generate_record_collector(transaction : Transaction):
-    return f'▶️ --> **{transaction.recip}**: total {coin} {transaction.amount} collected from your other handles.'
-
 async def try_to_pay_from_actor(actor_id : str, handle_recip : str, amount : int, from_reaction=False):
     handle_payer = handles.get_handle(actor_id)
-    transaction = Transaction(payer=handle_payer, payer_actor=None, recip=handle_recip, recip_actor=None, amount=amount)
+    transaction = Transaction(
+        payer=handle_payer,
+        payer_actor=None,
+        recip=handle_recip,
+        recip_actor=None,
+        cause = TransTypes.Transfer,
+        amount=amount)
     transaction = find_transaction_parties(transaction)
     if transaction.report is not None:
         return transaction
@@ -149,6 +160,7 @@ async def try_to_pay_from_actor(actor_id : str, handle_recip : str, amount : int
         return await try_to_pay(transaction, from_reaction)
 
 
+# TODO: on second thought, move this into try_to_pay again? We always want to abort and return if this does not succeed
 def find_transaction_parties(transaction : Transaction):
     if transaction.payer is None:
         if transaction.payer_actor is None:
@@ -158,7 +170,7 @@ def find_transaction_parties(transaction : Transaction):
             if transaction.payer is None:
                 transaction.report = f'Error: attempted transaction for {transaction.payer_actor} but could not find current handle.'
     else:
-        if transaction.payer_actor is None:
+        if transaction.payer_actor is None and transaction.payer_actor != system_fake_handle:
             payer_status : HandleStatus = handles.get_handle_status(transaction.payer)
             if not payer_status.exists:
                 transaction.report = f'Error: attempted transaction from handle {transaction.payer} which does not exist.'
@@ -173,7 +185,7 @@ def find_transaction_parties(transaction : Transaction):
             if transaction.recip is None:
                 transaction.report = f'Error: attempted transaction to {transaction.recip_actor} but could not find current handle.'
     else:
-        if transaction.recip_actor is None:
+        if transaction.recip_actor is None and transaction.recip_actor != system_fake_handle:
             recip_status : HandleStatus = handles.get_handle_status(transaction.recip)
             if not recip_status.exists:
                 transaction.report = f'Error: attempted transaction to handle {transaction.recip} which does not exist.'
@@ -199,11 +211,100 @@ async def try_to_pay(transaction : Transaction, from_reaction : bool=False):
             transaction.report = f'Failed to transfer {coin} **{transaction.amount}** from {transaction.payer} to {transaction.recip}; current balance is {coin} **{avail}**.'
     elif from_reaction:
         # Success; no need for report to cmd_line
-        await actors.record_transaction(transaction)
+        await record_transaction(transaction)
     else:
         if transaction.payer_actor is not None and transaction.payer_actor == transaction.recip_actor:
             transaction.report = f'Successfully transferred {coin} **{transaction.amount}** from {transaction.payer} to **{transaction.recip}**. (Note: you control both accounts.)'
         else:
             transaction.report = f'Successfully transferred {coin} **{transaction.amount}** from {transaction.payer} to **{transaction.recip}**.'
-        await actors.record_transaction(transaction)
+        await record_transaction(transaction)
     return transaction
+
+# Record for transactions:
+
+async def record_transaction(transaction : Transaction):
+    record_payer = generate_record_for_payer(transaction)
+    if record_payer is not None:
+        await actors.write_financial_record(
+            transaction.payer_actor,
+            record_payer,
+            transaction.last_in_sequence
+        )
+    record_recip = generate_record_for_recip(transaction)
+    if record_recip is not None:
+        record_recip = generate_record_for_recip(transaction)
+        await actors.write_financial_record(
+            transaction.recip_actor,
+            record_recip,
+            transaction.last_in_sequence
+        )
+
+def generate_record_for_payer(transaction : Transaction):
+    if transaction.payer_actor is None:
+        return None
+    if transaction.payer_actor == transaction.recip_actor:
+        if transaction.cause == TransTypes.Burn:
+            # Will be generated for the recipient
+            return None
+        else:
+            return generate_record_self_transfer(transaction)
+    if transaction.cause == TransTypes.Transfer:
+        return generate_record_payer(transaction)
+    if transaction.cause == TransTypes.ChatReact:
+        # TODO
+        return generate_record_payer(transaction)
+    if transaction.cause == TransTypes.Collect:
+        return generate_record_collected(transaction)
+    if transaction.cause == TransTypes.ShopOrder:
+        return generate_record_buyer(transaction)
+
+
+def generate_record_for_recip(transaction : Transaction):
+    if transaction.recip_actor is None:
+        return None
+    if transaction.payer_actor == transaction.recip_actor:
+        if transaction.cause == TransTypes.Burn:
+            return generate_record_burner(transaction)
+        else:
+            # This transaction will be recorded for payer, don't need it twice
+            return None
+    if transaction.cause == TransTypes.Transfer:
+        return generate_record_recip(transaction)
+    if transaction.cause == TransTypes.ChatReact:
+        # TODO
+        return generate_record_recip(transaction)
+    if transaction.cause == TransTypes.Collect:
+        return generate_record_collector(transaction)
+    if transaction.cause == TransTypes.ShopOrder:
+        return generate_record_recip_shop(transaction)
+
+# TODO: timestamp for transactions
+def generate_record_self_transfer(transaction : Transaction):
+    return f'🔁 **{transaction.payer}** --> **{transaction.recip}**: {coin} {transaction.amount}'
+
+def generate_record_payer(transaction : Transaction):
+    return f'🟥 **{transaction.payer}** --> {transaction.recip}: {coin} {transaction.amount}'
+
+def generate_record_buyer(transaction : Transaction):
+    if transaction.emoji is not None:
+        return f'🟥 **{transaction.payer}** --> {transaction.recip}: {coin} {transaction.amount} for {transaction.emoji}'
+    else:
+        return generate_record_payer(transaction)
+
+def generate_record_recip(transaction : Transaction):
+    return f'🟩 {transaction.payer} --> **{transaction.recip}**: {coin} {transaction.amount}'
+
+def generate_record_recip_shop(transaction : Transaction):
+    if transaction.emoji is not None:
+        return f'🟩 {transaction.payer} --> **{transaction.recip}**: {coin} {transaction.amount} for {transaction.emoji}'
+    else:
+        return generate_record_recip(transaction)
+
+def generate_record_burner(transaction : Transaction):
+    return f'🟩 🔥 {transaction.payer} --> **{transaction.recip}**: {coin} {transaction.amount}'
+
+def generate_record_collected(transaction : Transaction):
+    return f'⏬ Collected {coin} {transaction.amount} from **{transaction.payer}**'
+
+def generate_record_collector(transaction : Transaction):
+    return f'▶️ --> **{transaction.recip}**: total {coin} {transaction.amount} collected from your other handles.'
