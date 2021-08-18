@@ -407,10 +407,38 @@ async def add_product_command(ctx,
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    # TODO: update with all the params!
-    report = await shops.add_product(shop_name, product_name, description, price, symbol)
+    report = shops.add_product(shop_name, product_name, description, price, symbol)
     if report is not None:
         await ctx.send(report)
+
+@bot.command(name='edit_product', help='Admin-only: edit a product.')
+@commands.has_role('gm') # TODO: allow shop owner / employee to do this live?
+async def edit_product_command(ctx,
+    shop_name : str=None,
+    product_name : str=None,
+    key : str=None,
+    value : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = shops.edit_product(shop_name, product_name, key, value)
+    if report is not None:
+        await ctx.send(report)
+
+@bot.command(name='in_stock', help='Admin-only: set a product to be in stock/out of stock.')
+@commands.has_role('gm') # TODO: allow shop owner / employee to do this live?
+async def in_stock_command(ctx,
+    shop_name : str=None,
+    product_name : str=None,
+    value : bool=True):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = await shops.edit_product(shop_name, product_name, 'in_stock', str(value))
+    if report is not None:
+        await ctx.send(report)
+
+
 
 @bot.command(name='publish_menu', help='Admin-only: post a shop\'s catalogue/menu.')
 @commands.has_role('gm') # TODO: allow shop owner / employee to do this live?

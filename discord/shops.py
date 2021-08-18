@@ -262,6 +262,7 @@ def read_catalogue_item_mapping(msg_id : str):
 def delete_catalogue_item_mapping(msg_id : str):
 	if msg_id in shops[catalogue_mapping_index]:
 		del shops[catalogue_mapping_index][msg_id]
+		shops.write()
 
 
 def get_catalogue(shop_name : str):
@@ -367,7 +368,7 @@ def get_emoji_for_new_product(symbol : str):
 		return symbol
 
 
-async def add_product(shop_name : str, product_name : str, description : str, price : int, symbol : str):
+def add_product(shop_name : str, product_name : str, description : str, price : int, symbol : str):
 	if shop_name is None:
 		return 'Error: must give a shop name'
 	if product_name is None:
@@ -386,6 +387,52 @@ async def add_product(shop_name : str, product_name : str, description : str, pr
 	return (f'Added product {product_name} to {shop_name}.')
 
 
+def edit_product(shop_name : str, product_name : str, key : str, value : str):
+	if shop_name is None:
+		return 'Error: must give a shop name'
+	if product_name is None:
+		return f'Error: must give a product name; use \".add_product {shop_name} <product_name>. (Optional: add description, price, and type/symbol)\"'
+	if not shop_exists(shop_name):
+		return f'Error: shop {shop_name} does not exist'
+	if key is None:
+		return f'Error: must give the property to edit. usage: \".edit_product {shop_name} {product_name} <property> <value>\"'
+
+	key = key.lower()
+	if key in ['available', 'in_stock'] and value is None:
+		value = 'true'
+	if value is None:
+		return f'Error: must set the new value of property \"{key}\"'
+
+	product = read_product(shop_name, product_name)
+	edited = False
+
+	if key == 'description':
+		product.description = value
+		edited = True
+	elif key in ['available', 'in_stock']:
+		if value in ['true', 't', '1']:
+			new_value = True
+		elif value in ['false', 'f', '0']:
+			new_value = False
+		else:
+			return f'Error: did not understand value \"{value}\" for property \"{key}\"'
+		if key == 'available':
+			product.available = new_value
+		else:
+			product.in_stock = new_value
+		edited = True
+	elif key == 'price':
+		try:
+			new_price = int(value)
+			product.price = new_price
+			edited = True
+		except ValueError:
+			return f'Error: cannot set price to \"{value}\"; must be a number.'
+	if edited:
+		store_product(shop_name, product)
+		return 'Done.'
+
+
 
 ### The menu/catalogue: product information messages where players can order by pressing reactions
 
@@ -399,12 +446,18 @@ async def post_catalogue(shop_name : str):
 	channel = channels.get_discord_channel(shop.storefront_channel_id)
 
 	for product in get_all_products(shop.shop_id):
-		if product.available:
-			msg_id = await update_catalogue_item_message(channel, product)
+		msg_id = await update_catalogue_item_message(channel, product)
+		if msg_id is None:
+			if product.available:
+				raise RuntimeError(f'Error: failed to publish product, dump: {product.to_string()}')
+			else:
+				# Listing has been removed for non-available item, no issue here
+				pass
+		else:
 			mapping = CatalogueItemMapping(shop.shop_id, product.name)
 			store_catalogue_item_mapping(msg_id, mapping)
-			product.storefront_msg_id = msg_id
-			store_product(shop_name, product)
+		product.storefront_msg_id = msg_id
+		store_product(shop_name, product)
 
 async def post_catalogue_item(shop_name, product_name):
 	if shop_name is None:
@@ -419,13 +472,19 @@ async def post_catalogue_item(shop_name, product_name):
 	shop : Shop = read_shop(shop_name)
 	channel = channels.get_discord_channel(shop.storefront_channel_id)
 
-	msg_id = await post_catalogue_item_message(channel, product)
+	msg_id = await update_catalogue_item_message(channel, product)
 	mapping = CatalogueItemMapping(shop.shop_id, product.name)
 	store_catalogue_item_mapping(msg_id, mapping)
 
 
 async def update_catalogue_item_message(channel, product):
 	print(f'{product.to_string()}')
+
+	if not product.available:
+		if product.storefront_msg_id is not None:
+			delete_catalogue_item_mapping(product.storefront_msg_id)
+		return None
+
 	content = generate_catalogue_item_message(product)
 	if product.storefront_msg_id is None:
 		message = await channel.send(content)
@@ -450,6 +509,7 @@ async def edit_catalogue_item_message(channel, product):
 	return str(message.id)
 
 def generate_catalogue_item_message(product):
+	print(f'Generating message for product: {product.to_string()}')
 	if product.in_stock:
 		post = f'{product.emoji}   __**{product.name}**__\n'
 	else:
