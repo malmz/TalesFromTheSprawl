@@ -301,7 +301,7 @@ def generate_record_recip_shop(transaction : Transaction):
         return generate_record_recip(transaction)
 
 def generate_record_burner(transaction : Transaction):
-    return f'🟩 🔥 {transaction.payer} --> **{transaction.recip}**: {coin} {transaction.amount}'
+    return f'🟩 🔥 ~~{transaction.payer}~~ --> **{transaction.recip}**: {coin} {transaction.amount}'
 
 def generate_record_collected(transaction : Transaction):
     return f'⏬ Collected {coin} {transaction.amount} from **{transaction.payer}**'

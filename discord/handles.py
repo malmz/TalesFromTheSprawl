@@ -86,7 +86,7 @@ async def destroy_burner(guild, actor_id : str, burner : str):
 
 		# Delete the burner
 		del handles[actor_id][burner]
-		await finances.deinit_finances_for_handle(guild, burner, actor_id, record=True)
+		await finances.deinit_finances_for_handle(burner, actor_id, record=True)
 	handles.write()
 	return balance
 

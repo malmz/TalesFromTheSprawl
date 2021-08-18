@@ -124,9 +124,9 @@ class Product(object):
 class CatalogueItemMapping(object):
 	def __init__(
 		self,
-		shop_name : str,
+		shop_id : str,
 		product_name : str):
-		self.shop_name = shop_name
+		self.shop_id = shop_id
 		self.product_name = product_name
 
 	@staticmethod
@@ -172,6 +172,9 @@ class Order(object):
 
 
 
+### Init, getters, setters, deleters
+
+
 async def init(bot, guild, clear_all=False):
 	if clear_all:
 		for shop_name in get_all_shop_ids():
@@ -206,6 +209,22 @@ async def delete_if_shop_role(role, spare_used : bool):
 		if not spare_used or len(role.members) == 0:
 			print(f'Deleting unused role with name {role.name}')
 			await role.delete()
+
+
+async def reinitialize(shop_name : str):
+	shop : Shop = read_shop(shop_name)
+	if shop is None:
+		return
+	order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
+	storefront_channel = channels.get_discord_channel(shop.storefront_channel_id)
+	await asyncio.gather(
+		*[asyncio.create_task(c)
+		for c
+		in [order_flow_channel.purge(), storefront_channel.purge()]]
+		)
+	delete_catalogue_item_mappings_for_shop(shop.shop_id)
+	shop.highest_order = '1'
+	store_shop(shop)
 
 
 def get_next_shop_actor_index():
@@ -263,6 +282,13 @@ def delete_catalogue_item_mapping(msg_id : str):
 	if msg_id in shops[catalogue_mapping_index]:
 		del shops[catalogue_mapping_index][msg_id]
 		shops.write()
+
+def delete_catalogue_item_mappings_for_shop(shop_id : str):
+	for msg_id in shops[catalogue_mapping_index]:
+		cat_map = read_catalogue_item_mapping(msg_id)
+		if cat_map.shop_id == shop_id:
+			del shops[catalogue_mapping_index][msg_id]
+	shops.write()
 
 
 def get_catalogue(shop_name : str):
@@ -345,6 +371,8 @@ async def create_shop(guild, shop_name : str, owner_player_id : str):
 
 
 
+
+## Adding and editing products for a shop
 
 
 def get_emoji_for_new_product(symbol : str):
@@ -475,16 +503,25 @@ async def update_catalogue_item_message(channel, product):
 		return None
 
 	content = generate_catalogue_item_message(product)
-	if product.storefront_msg_id is None:
-		message = await channel.send(content)
-	else:
+	previous_msg = product.storefront_msg_id
+	if previous_msg is not None:
+		# Try updating the message instead of sending new one:
 		delete_catalogue_item_mapping(product.storefront_msg_id)
-		message = await channel.fetch_message(product.storefront_msg_id)
-		await asyncio.gather(
-			*[asyncio.create_task(c)
-			for c
-			in [message.clear_reactions(), message.edit(content=content)]]
-		)
+		try:
+			message = await channel.fetch_message(product.storefront_msg_id)
+			await asyncio.gather(
+				*[asyncio.create_task(c)
+				for c
+				in [message.clear_reactions(), message.edit(content=content)]]
+				)
+		except discord.errors.NotFound:
+			# Reference to a message in storefront that is no longer available
+			# Either due to reinitialize(), or due to being removed by an admin
+			previous_msg = None
+	if previous_msg is None:
+		# There is no previous message to update so we must send a new one
+		message = await channel.send(content)
+
 	if product.in_stock:
 		await message.add_reaction(product.emoji)
 	return str(message.id)

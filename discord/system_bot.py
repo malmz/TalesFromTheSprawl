@@ -384,6 +384,9 @@ async def clear_all_chats_command(ctx):
     await ctx.send('Done.')
 
 
+
+
+
 ### shops:
 
 @bot.command(name='create_shop', help='Admin-only: create a new shop, run by a certain player.')
@@ -438,6 +441,16 @@ async def in_stock_command(ctx,
     if report is not None:
         await ctx.send(report)
 
+@bot.command(name='clear_orders', help='Admin-only: clear a shop\'s orders and update its menu.')
+@commands.has_role('gm') # TODO: allow shop owner / employee to do this live?
+async def clear_orders_command(ctx, shop_name : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    await shops.reinitialize(shop_name)
+    report = await publish_menu_command(ctx, shop_name)
+    if report is not None:
+        await ctx.send(report)
 
 
 @bot.command(name='publish_menu', help='Admin-only: post a shop\'s catalogue/menu.')
