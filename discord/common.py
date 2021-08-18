@@ -32,6 +32,7 @@ emoji_green = '🟢'
 emoji_red = '🔴'
 emoji_alert = '❗'
 emoji_unavail = '🚫'
+emoji_unread = '💬'
 
 
 # Roles

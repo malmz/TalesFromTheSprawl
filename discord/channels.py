@@ -131,8 +131,8 @@ async def init_channels(bot):
     for elem in channel_states:
         del channel_states[elem]
     channel_states.write()
-    for discord_channel in bot.get_all_channels():
-        await init_discord_channel(discord_channel)
+    task_list = (asyncio.create_task(init_discord_channel(c)) for c in bot.get_all_channels())
+    await asyncio.gather(*task_list)
 
 async def init_channel_state(discord_channel):
     await discord_channel.edit(slowmode_delay=slowmode_delay)
@@ -267,6 +267,12 @@ def get_all_personal_channels(bot, channel_suffix : str=None):
     for channel in bot.get_all_channels():
         if is_personal_channel(channel, channel_suffix):
             yield channel
+
+def get_all_chat_hub_channels(bot, channel_suffix : str=None):
+    for channel in bot.get_all_channels():
+        if is_chat_hub(channel.name):
+            if channel_suffix is None or channel.name.endswith(channel_suffix):
+                yield channel
 
 async def create_personal_channel(guild, role, channel_name : str, read_only : bool=False):
     overwrites = server.generate_overwrites_own_new_private_channel(role, read_only)

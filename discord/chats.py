@@ -10,10 +10,13 @@ import channels
 import server
 import posting
 import actors
-from common import emoji_cancel, emoji_open, emoji_green, emoji_red
+from common import emoji_cancel, emoji_open, emoji_green, emoji_red, emoji_unread
 
 chats_dir = 'chats'
 chats = ConfigObj(f'chats.conf')
+chat_channel_budget = ConfigObj('channel_budget.conf')
+
+channel_limit_per_actor = 6
 
 channel_id_index = '___channel_id'
 handle_index = '___handle'
@@ -25,7 +28,7 @@ chat_participants_index = '___chat_participants'
 
 session_status_active = '___active'
 session_status_inactive = '___inactive'
-#session_status_muted = '___muted'
+session_status_unread = '___inactive_unread'
 
 # TODO: support for burning a burner that was involved in a chat!
 
@@ -106,7 +109,7 @@ def init_chats_confobj():
 	if not chat_hub_msg_data_index in chats:
 		chats[chat_hub_msg_data_index] = {}
 	if not chats_with_logs_index in chats:
-		chats[chats_with_logs_index] = {}	
+		chats[chats_with_logs_index] = {}
 
 
 async def init(bot, clear_all : bool=False):
@@ -133,10 +136,16 @@ async def init(bot, clear_all : bool=False):
 	if clear_all:
 		chats[chat_hub_msg_data_index] = {}
 		chats[chats_with_logs_index] = {}
-		# TODO: loop through all chat_hub channels and use purge()
+		await asyncio.gather(
+			*[asyncio.create_task(c.purge())
+			for c
+			in channels.get_all_chat_hub_channels(bot)])
 
 	# Any left-over channels after this should be deleted
 	await channels.delete_all_chats(bot)
+	for actor_id in chat_channel_budget:
+		del chat_channel_budget[actor_id]
+		chat_channel_budget.write()
 
 	chats.write()
 
@@ -176,9 +185,10 @@ def store_chat_connection_for_hub_msg(msg_id : str, chat_connection : ChatConnec
 	chats[chat_hub_msg_data_index][msg_id] = chat_connection.to_string()
 	chats.write()
 
-def clear_hub_msg_connection_mappings(msg_id):
-	del chats[chat_hub_msg_data_index][msg_id]
-	chats.write()
+def clear_hub_msg_connection_mapping(msg_id):
+	if msg_id in chats[chat_hub_msg_data_index]:
+		del chats[chat_hub_msg_data_index][msg_id]
+		chats.write()
 
 
 
@@ -273,6 +283,33 @@ def get_chat_log_length(chat_name):
 	return int(chats[chats_with_logs_index][chat_name])
 
 
+### The channel budget
+
+def try_to_add_active_chat(actor_id : str):
+	if actor_id in chat_channel_budget:
+		prev_number = int(chat_channel_budget[actor_id])
+		if prev_number < channel_limit_per_actor:
+			chat_channel_budget[actor_id] = str(prev_number + 1)
+			chat_channel_budget.write()
+			return True
+		else:
+			return False
+	else:
+		chat_channel_budget[actor_id] = 1
+		chat_channel_budget.write()
+		return True
+
+def decrease_num_active_chats(actor_id : str):
+	if actor_id in chat_channel_budget:
+		prev_number = int(chat_channel_budget[actor_id])
+		if prev_number > 0:
+			chat_channel_budget[actor_id] = str(prev_number - 1)
+			chat_channel_budget.write()
+	else:
+		chat_channel_budget[actor_id] = 0
+		chat_channel_budget.write()
+
+
 ### Creating a new chat
 
 # TODO: Split this into create_2party_chat and create_chat, where the latter takes my_handle and [other_handles]
@@ -330,7 +367,10 @@ async def create_2party_chat(my_handle : str, partner_handle : str):
 
 	[my_ui, partner_ui] = await asyncio.gather(task_add_me, task_add_partner)
 	if my_ui.channel is None:
-		raise RuntimeError(f'Tried to open chat {chat_name} but now there is no channel for {my_handle}')
+		clickable_chat_hub = channels.clickable_channel_ref(get_chat_hub_channel(my_status.actor_id))
+		report = (f'Created chat {chat_name}, but it is currently closed since you have too many chat sessions open. '
+			+ f'You can access the chat from {clickable_chat_hub}, if you close another chat first.')
+		return report
 	my_clickable_ref = channels.clickable_channel_ref(my_ui.channel)
 	partner_clickable_ref = channels.clickable_channel_ref(my_ui.channel) if partner_ui.channel is not None else None
 
@@ -339,7 +379,7 @@ async def create_2party_chat(my_handle : str, partner_handle : str):
 		if partner_clickable_ref is not None:
 			# TODO: this is only here during testing
 			# non-admins should not see their partner's channel even if it does exist.
-			report += f'(Other channel is avaialable at {partner_clickable_ref})'
+			report += f'(Other channel is available at {partner_clickable_ref})'
 	elif my_status.actor_id == partner_status.actor_id:
 		report = (f'Opened chat between {my_handle} and {partner_handle}. '
 			+ 'Note that both handles are controlled by you, so you will be chatting with yourself. '
@@ -434,32 +474,28 @@ async def get_chat_ui_for_active_session(guild, participant):
 		participant.actor_id)
 
 
-# TODO: implement limit on open chat sessions!
-
 async def get_chat_ui_for_inactive_session(guild, chat_state, participant : ChatParticipant, activate : bool):
 	if participant.session_status == session_status_active or participant.channel_id is not None:
 		raise RuntimeError(f'Instructed to open session but it appears to be active. Dump: {participant.to_string()}')
 
 	channel = None
-	chat_connection = ChatConnectionMapping(participant.chat_name, participant.actor_id, participant.handle)
 
 	# TODO: we also need to check if there is room to create another channel
 	# If there is not, we should fail activation, and adapt the hub msg accordingly
+	status_change = False
 	if activate:
-		channel = await create_channel_for_chat_session(guild, chat_state, participant)
+		can_be_activated = try_to_add_active_chat(participant.actor_id)
+		if can_be_activated:
+			channel = await create_channel_for_chat_session(guild, chat_state, participant)
+			participant.channel_id = str(channel.id)
+			# channel ID -> chat mapping
+			participant.session_status = session_status_active
+			chat_connection = ChatConnectionMapping(participant.chat_name, participant.actor_id, participant.handle)
+			store_chat_connection_for_channel(participant.channel_id, chat_connection)
+			status_change = True
 
-		participant.channel_id = str(channel.id)
-
-		# channel ID -> chat mapping
-		participant.session_status = session_status_active
-		store_chat_connection_for_channel(participant.channel_id, chat_connection)
-
-	chat_hub_message = await update_chat_hub_message(guild, channel, participant)
+	chat_hub_message = await update_chat_hub_message(guild, channel, participant, has_changed=status_change)
 	participant.chat_hub_msg_id = str(chat_hub_message.id)
-
-	# message ID -> chat mapping
-	# We have posted a new chat hub message, so must add its mapping
-	store_chat_connection_for_hub_msg(participant.chat_hub_msg_id, chat_connection)	# chat name -> full chat log file name mapping
 
 	# chat -> actor, channel ID, msg ID mapping
 	# 'participant' may have been updated: 
@@ -493,6 +529,7 @@ async def open_chat_from_reaction(chat_state, participant : ChatParticipant):
 	guild = server.get_guild()
 	# activate the session:
 	chat_ui = await get_chat_ui(guild, chat_state, participant, activate=True)
+	return chat_ui.session_status == session_status_active
 
 
 ### The messages in the chat_hub channel, which are linked to and from the chat state itself
@@ -514,34 +551,59 @@ def generate_hub_msg_inactive_session(chat_title : str, handle : str):
 	)
 	return content
 
+def generate_hub_msg_unread_session(chat_title : str, handle : str):
+	content = (f'> Chat name: **{chat_title}**\n'
+		+ f'> Your identity: **{handle}**\n'
+		+ f'> Status: {emoji_red} {emoji_unread} **not connected – unread messages** \n' # TODO
+		+ f'> To open connection, click on the {emoji_open} below.'
+	)
+	return content
+
 def generate_hub_msg(handle : str, session_status : str, chat_title : str=None, discord_channel=None):
 	if session_status == session_status_active:
 		if discord_channel is None:
-			raise RuntimeError(f'Attempted to create chat hub msg for active session, but there is no channel. Dump: {participant.to_string()}')
+			raise RuntimeError(f'Attempted to write chat hub msg for active session, but there is no channel. Dump: {participant.to_string()}')
 		return generate_hub_msg_active_session(discord_channel, handle)
-	else:
+	elif session_status == session_status_inactive:
 		return generate_hub_msg_inactive_session(chat_title, handle)
+	elif session_status == session_status_unread:
+		return generate_hub_msg_unread_session(chat_title, handle)
 
-async def update_chat_hub_message(guild, chat_channel, participant):
-	# TODO: with multi-part chats, the title should be the chat name
-	# but for 2party ones it should be the channel name
-	new_content = generate_hub_msg(participant.handle, participant.session_status, participant.channel_name, chat_channel)
-
+async def update_chat_hub_message(guild, chat_channel, participant, has_changed : bool=False, repost : bool=False):
+	message = None
 	chat_hub_channel = actors.get_chat_hub_channel(participant.actor_id)
+	if participant.chat_hub_msg_id is not None:
+		try:
+			message = await chat_hub_channel.fetch_message(participant.chat_hub_msg_id)
+		except discord.errors.NotFound:
+			# No message found -- we will create a new one
+			pass
 
-	if participant.chat_hub_msg_id is None:
-		message = await chat_hub_channel.send(new_content)
-	else:
-		message = await chat_hub_channel.fetch_message(participant.chat_hub_msg_id)
-		edit_task = asyncio.create_task(message.edit(content=new_content))
-		clear_reactions_task = asyncio.create_task(message.clear_reactions())
-		await asyncio.gather(edit_task, clear_reactions_task)
-
+	if message is None or has_changed:
+		# TODO: with multi-part chats, the title should be the chat name
+		# but for 2party ones it should be the channel name
+		new_content = generate_hub_msg(participant.handle, participant.session_status, participant.channel_name, chat_channel)
+		if message is None:
+			message = await chat_hub_channel.send(new_content)
+		elif repost:
+			# Delete the message and post a new one -- will make sure it shows up as unread
+			clear_hub_msg_connection_mapping(str(message.id))
+			await message.delete()
+			message = await chat_hub_channel.send(new_content)
+		else:
+			# Pre-existing message, but we must update it
+			edit_task = asyncio.create_task(message.edit(content=new_content))
+			clear_reactions_task = asyncio.create_task(message.clear_reactions())
+			await asyncio.gather(edit_task, clear_reactions_task)
 	await add_initial_reaction_chat_hub_msg(message, participant.session_status)
+
+	chat_connection = ChatConnectionMapping(participant.chat_name, participant.actor_id, participant.handle)
+	store_chat_connection_for_hub_msg(str(message.id), chat_connection)
+
 	return message
 
 async def add_initial_reaction_chat_hub_msg(message, session_status : str):
-	initial_emoji = emoji_open if session_status == session_status_inactive else emoji_cancel
+	initial_emoji = emoji_open if session_status != session_status_active else emoji_cancel
 	await message.add_reaction(initial_emoji)
 
 async def process_reaction_in_chat_hub(message, emoji : str):
@@ -563,10 +625,13 @@ async def process_reaction_in_chat_hub(message, emoji : str):
 		and emoji == emoji_cancel
 		):
 		await close_session_from_reaction(chat_state, participant)
-	elif (participant.session_status == session_status_inactive
+	elif (participant.session_status != session_status_active
 		and emoji == emoji_open
 		):
-		await open_chat_from_reaction(chat_state, participant)
+		success = await open_chat_from_reaction(chat_state, participant)
+		if not success:
+			warning = f'Cannot open {chat_connection.chat_name} -- you have too many open chats! Close one before opening another.'
+			await message.channel.send(content = warning, delete_after=6)
 
 
 
@@ -604,13 +669,15 @@ async def close_chat_session(chat_state, participant : ChatParticipant):
 	chat_state = get_chat_state(participant.chat_name)
 
 	# update chat -> channel ID mapping
-	if participant.session_status == session_status_inactive:
+	if participant.session_status != session_status_active:
 		return f'Tried to close {participant.chat_name} for {participant.handle} but the session was not open.'
 
 	if participant.channel_id is None:
 		raise RuntimeError(f'Attempted to close {participant.chat_name} for {participant.handle}, recorded as active, '
 			+'but channel ID is missing. Dump: {participant.to_string()}'
 		)
+
+	decrease_num_active_chats(participant.actor_id)
 
 	channel_id_to_close = participant.channel_id
 
@@ -624,13 +691,8 @@ async def close_chat_session(chat_state, participant : ChatParticipant):
 	# Close the session, i.e. delete the actor's discord channel
 	await channels.delete_discord_channel(channel_id_to_close)
 
-	chat_hub_message = await update_chat_hub_message(guild, None, participant)
+	chat_hub_message = await update_chat_hub_message(guild, None, participant, has_changed=True)
 	participant.chat_hub_msg_id = str(chat_hub_message.id)
-
-	# Update message ID -> chat mapping
-	# We have updated the hub message, so must update its mapping
-	chat_connection = ChatConnectionMapping(participant.chat_name, participant.actor_id, participant.handle)
-	store_chat_connection_for_hub_msg(participant.chat_hub_msg_id, chat_connection)
 
 	# 'participant' is the chat -> actor, channel ID, msg ID mapping
 	store_participant(participant.chat_name, participant)
@@ -655,25 +717,39 @@ async def close_session_from_reaction(chat_state, participant : ChatParticipant)
 
 ### Messages in chat
 
-async def find_chat_channel_and_post(guild, chat_state, message, participant : ChatParticipant, sender_handle : str, full_post : bool):
-	if participant.session_status == session_status_inactive:
-		# A new channel will be created => we should always include the full header on the first message
+async def post_to_participant(guild, chat_state, message, participant : ChatParticipant, sender_handle : str, full_post : bool):
+	if participant.session_status != session_status_active:
+		# A new channel may be created => we should always include the full header on the first message
 		full_post = True
 
 	# Try to activate the session for the recipient
 	chat_ui = await get_chat_ui(guild, chat_state, participant, activate=True)
-	if chat_ui.session_status != session_status_active or chat_ui.channel is None:
-		# TODO: when the channel limit is reached, the hub msg will be updated but no channel created
-		# => no channel returned
-		# => we'll end up here but it will not be an error case
-		raise RuntimeError(f'Tried to activate chat session but failed. Dump: {participant.to_string()}')
-	poster_id = sender_handle if full_post else None
-	await posting.repost_message_to_channel(chat_ui.channel, message, poster_id)
+	if chat_ui.session_status == session_status_active:
+		if chat_ui.channel is None:
+			print(f'Failed to reach participant of chat. Dump: {participant.to_string()}')
+		else:
+			# Send the message to the open channel
+			poster_id = sender_handle if full_post else None
+			await posting.repost_message_to_channel(chat_ui.channel, message, poster_id)
+	elif chat_ui.session_status == session_status_inactive:
+		# The channel was not opened when requested -- recipient must be at their chat session limit
+		participant.session_status = session_status_unread
+		# Update and repost the chat hub message:
+		chat_hub_message = await update_chat_hub_message(guild, chat_ui.channel, participant, has_changed=True, repost=True)
+		participant.chat_hub_msg_id = str(chat_hub_message.id)
+		# chat -> (actor, channel ID, msg ID mapping) has been updated
+		store_participant(participant.chat_name, participant)
+	elif chat_ui.session_status == session_status_unread:
+		# Chat already has unread messages -- nothing changes when we add one more
+		pass
+	else:
+		raise RuntimeError(f'Unexpected case! Dump: {participant.to_string()}, {chat_ui.session_status}')
+
 
 def create_reposting_tasks(guild, chat_name : str, message, sender_handle : str, full_post : bool):
 	chat_state = get_chat_state(chat_name)
 	for participant in get_participants(chat_state):
-		yield asyncio.create_task(find_chat_channel_and_post(guild, chat_state, message, participant, sender_handle, full_post))
+		yield asyncio.create_task(post_to_participant(guild, chat_state, message, participant, sender_handle, full_post))
 
 async def process_message(message):
 	task1 = asyncio.create_task(message.delete())

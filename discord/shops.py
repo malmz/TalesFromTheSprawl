@@ -618,10 +618,10 @@ async def order_product(shop : Shop, product : Product, payer_handle : str, deli
 
 
 def generate_order_message(order : Order):
-	content = f'**#{order.order_id}** for **{order.delivery_id}**\n'
+	content = f'> **#{order.order_id}** for **{order.delivery_id}**\n'
 	for item, amount in order.items_ordered.items():
-		content += f'{amount} {item}\n'
-	content += f'Total: {coin} {order.price_total} (paid)'
+		content += f'> {amount} {item}\n'
+	content += f'> Total: {coin} {order.price_total} (paid)'
 	return content
 
 async def process_reaction_in_catalogue(message, user_id : str, emoji : str):
