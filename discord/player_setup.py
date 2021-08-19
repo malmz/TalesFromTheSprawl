@@ -22,9 +22,9 @@ class PlayerSetupInfo(object):
 		self,
 		handle_id : str):
 		self.handle_id = handle_id
-		self.other_handles = ['__example_handle1', '__example_handle2']
-		self.npc_handles = ['__example_npc1', '__example_npc1']
-		self.burners = ['__example_burner1', '__example_burner1']
+		self.other_handles = [('__example_handle1', 0), ('__example_handle2', 0)]
+		self.npc_handles = [('__example_npc1', 0), ('__example_npc1', 0)]
+		self.burners = [('__example_burner1', 0), ('__example_burner1', 0)]
 		self.groups = ['__example_group1', '__example_group2']
 		self.shops = []
 		self.starting_money = 10
@@ -64,26 +64,29 @@ async def player_setup_for_new_handle(handle : Handle):
 		return None
 	report = f'Loading known data for **{handle.handle_id}**...\n\n'
 	any_regular = False
-	for other_handle_id in info.other_handles:
-		result = await handles.create_handle(handle.actor_id, other_handle_id, HandleTypes.Regular)
-		if result.handle_type != HandleTypes.Unused:
+	for (other_handle_id, amount) in info.other_handles:
+		other_handle = await handles.create_handle(handle.actor_id, other_handle_id, HandleTypes.Regular)
+		if other_handle.handle_type != HandleTypes.Unused:
 			report += f'- Connected alias: regular handle **{other_handle_id}**\n'
+			await finances.add_funds(other_handle, int(amount))
 			any_regular = True
 	if any_regular:
 		report += '\n'
 	any_burners = False
-	for other_handle_id in info.burners:
-		result = await handles.create_handle(handle.actor_id, other_handle_id, HandleTypes.Burner)
-		if result.handle_type != HandleTypes.Unused:
+	for (other_handle_id, amount) in info.burners:
+		other_handle = await handles.create_handle(handle.actor_id, other_handle_id, HandleTypes.Burner)
+		if other_handle.handle_type != HandleTypes.Unused:
 			report += f'- Connected alias: burner handle **{other_handle_id}**\n'
+			await finances.add_funds(other_handle, int(amount))
 			any_burners = True
 	if any_burners:
 		report += '  (Use \".burn <burner_name>\" to destroy a burner and erase its tracks)\n\n'
 	any_npcs = False
-	for other_handle_id in info.npc_handles:
-		result = await handles.create_handle(handle.actor_id, other_handle_id, HandleTypes.NPC)
-		if result.handle_type != HandleTypes.Unused:
+	for (other_handle_id, amount) in info.npc_handles:
+		other_handle = await handles.create_handle(handle.actor_id, other_handle_id, HandleTypes.NPC)
+		if other_handle.handle_type != HandleTypes.Unused:
 			report += f'  [OFF: added **{other_handle_id}** as an NPC account.]\n'
+			await finances.add_funds(other_handle, int(amount))
 			any_npcs = True
 	if any_npcs:
 		report += f'  [OFF: NPC accounts let you act as someone else, and cannot be traced to your other handles.]\n\n'

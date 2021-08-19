@@ -15,7 +15,7 @@ import asyncio
 # TODO: BITCOIN BITCOIN BITCOIN!!!
 
 balance_index = '___balance'
-system_fake_handle = '___system'
+system_fake_handle = '[system]'
 
 
 # 'finances' holds the money associated with each 
@@ -135,6 +135,8 @@ async def transfer_from_burner(burner : Handle, new_active : Handle, amount : in
     await record_transaction(transaction)
 
 async def add_funds(handle : Handle, amount : int):
+    if amount == 0:
+        return
     previous_balance = int(finances[handle.handle_id][balance_index])
     new_balance = previous_balance + amount
     finances[handle.handle_id][balance_index] = str(new_balance)
