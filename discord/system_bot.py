@@ -249,9 +249,10 @@ async def collect_command(ctx):
 
     player_id = players.get_player_id(str(ctx.message.author.id))
     response = 'Collecting all funds to the account of the current handle...'
-    await asyncio.create_task(ctx.send(response))
-    await asyncio.create_task(finances.collect_all_funds(player_id))
-    #await show_balance_command(ctx)
+    task_list = [asyncio.create_task(ctx.send(response)), asyncio.create_task(finances.collect_all_funds(player_id))]
+    [_, report] = await asyncio.gather(*task_list)
+    if report is not None:
+        ctx.send(report)
 
 
 # Admin-only commands for testing etc.
@@ -347,7 +348,7 @@ async def add_known_handle_command(ctx, handle_id : str):
         await ctx.send('Error: provide a handle')
     else:
         player_setup.add_known_handle(handle_id)
-        await ctx.send(f'Added entry for {handle_id}')
+        await ctx.send(f'Added entry for {handle_id}. Please update its contents manually by editing the file.')
 
 
 

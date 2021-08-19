@@ -8,7 +8,9 @@ import players
 import handles
 import channels
 import server
+import finances
 from custom_types import Handle, HandleTypes
+from common import coin
 
 
 # Known_handles is meant to be read-only during the event
@@ -50,13 +52,44 @@ def read_player_setup_info(handle_id : str):
 		return PlayerSetupInfo.from_string(known_handles[handle_id])
 
 
+def reload_known_handles():
+	global known_handles
+	known_handles = ConfigObj('known_handles.conf')
+
+
 async def player_setup_for_new_handle(handle : Handle):
 	info = read_player_setup_info(handle.handle_id)
+	reload_known_handles()
 	if info is None:
-		return
+		return None
+	report = f'Loading known data for **{handle.handle_id}**...\n\n'
+	any_regular = False
 	for other_handle_id in info.other_handles:
-		handles.create_handle(handle.actor_id, other_handle_id, HandleTypes.Regular)
-	for other_handle_id in info.npc_handles:
-		handles.create_handle(handle.actor_id, other_handle_id, HandleTypes.NPC)
+		result = await handles.create_handle(handle.actor_id, other_handle_id, HandleTypes.Regular)
+		if result.handle_type != HandleTypes.Unused:
+			report += f'- Connected alias: regular handle **{other_handle_id}**\n'
+			any_regular = True
+	if any_regular:
+		report += '\n'
+	any_burners = False
 	for other_handle_id in info.burners:
-		handles.create_handle(handle.actor_id, other_handle_id, HandleTypes.Burner)
+		result = await handles.create_handle(handle.actor_id, other_handle_id, HandleTypes.Burner)
+		if result.handle_type != HandleTypes.Unused:
+			report += f'- Connected alias: burner handle **{other_handle_id}**\n'
+			any_burners = True
+	if any_burners:
+		report += '  (Use \".burn <burner_name>\" to destroy a burner and erase its tracks)\n\n'
+	any_npcs = False
+	for other_handle_id in info.npc_handles:
+		result = await handles.create_handle(handle.actor_id, other_handle_id, HandleTypes.NPC)
+		if result.handle_type != HandleTypes.Unused:
+			report += f'  [OFF: added **{other_handle_id}** as an NPC account.]\n'
+			any_npcs = True
+	if any_npcs:
+		report += f'  [OFF: NPC accounts let you act as someone else, and cannot be traced to your other handles.]\n\n'
+	if finances.can_have_finances(handle.handle_type):
+		await finances.add_funds(handle, int(info.starting_money))
+		report += f'Current balance of **{handle.handle_id}**: {coin} **{info.starting_money}**\n\n'
+
+	report += f'All data loaded. Welcome, **{handle.handle_id}**.'
+	return report

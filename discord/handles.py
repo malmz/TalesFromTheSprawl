@@ -7,6 +7,7 @@ from common import forbidden_content, forbidden_content_print, coin
 from custom_types import Handle, HandleTypes
 
 from configobj import ConfigObj
+from typing import List
 import re
 
 ### Module handles.py
@@ -43,7 +44,7 @@ async def init_handles_for_actor(actor_id : str, first_handle : str=None, overwr
         first_handle = actor_id
     if overwrite or actor_id not in handles:
         handles[actor_id] = {}
-        handle : Handle = await create_regular_handle(actor_id, first_handle)
+        handle : Handle = await create_handle(actor_id, first_handle, HandleTypes.Regular)
         switch_to_handle(actor_id, handle)
 
 def is_forbidden_handle(new_handle : str):
@@ -62,7 +63,6 @@ async def create_handle(actor_id : str, handle_id : str, handle_type : HandleTyp
     else:
         store_handle(actor_id, handle)
         finances.init_finances_for_handle(handle)
-        await player_setup.player_setup_for_new_handle(handle)
     return handle
 
 # TODO: we don't really need actor_id as a separate field here
@@ -102,13 +102,6 @@ def get_last_regular(actor_id : str):
 def is_active_handle_type(handle_type : HandleTypes):
     return handle_type not in [HandleTypes.Burnt, HandleTypes.Unused]
 
-
-async def create_regular_handle(actor_id : str, new_handle : str):
-	return await create_handle(actor_id, new_handle, HandleTypes.Regular)
-
-async def create_burner_handle(actor_id : str, new_burner_handle : str):
-	return await create_handle(actor_id, new_burner_handle, HandleTypes.Burner)
-
 # returns the amount of money (if any) that was transferred away from the burner
 async def destroy_burner(guild, actor_id : str, burner : Handle):
     balance = 0
@@ -141,14 +134,20 @@ def switch_to_handle(actor_id : str, handle : Handle):
     handles.write()
 
 def get_handles_for_actor(actor_id : str, include_burnt : bool=False, include_npc : bool=True):
+    types_list = [HandleTypes.Regular, HandleTypes.Burner]
+    if include_burnt:
+        types_list.append(HandleTypes.Burnt)
+    if include_npc:
+        types_list.append(HandleTypes.NPC)
+    return get_handles_for_actor_of_types(actor_id, types_list)
+
+def get_handles_for_actor_of_types(actor_id : str, types_list : List[HandleTypes]):
     for handle_id in handles[actor_id]:
         if handle_id != active_index and handle_id != last_regular_index:
             handle = read_handle(actor_id, handle_id)
-            if (
-                (include_burnt or handle.handle_type != HandleTypes.Burnt)
-                and (include_npc or handle.handle_type != HandleTypes.NPC)
-                ):
+            if handle.handle_type in types_list:
                 yield handle
+
 
 def get_all_handles():
     for actor_id in handles:
@@ -208,6 +207,10 @@ async def create_handle_and_switch(actor_id : str, new_handle_id : str, handle_t
     handle : Handle = await create_handle(actor_id, new_handle_id, handle_type)
     if handle.handle_type == handle_type and handle.handle_type != HandleTypes.Unused:
         switch_to_handle(actor_id, handle)
+        response = await player_setup.player_setup_for_new_handle(handle)
+        if response is not None:
+            # If something happened in player_setup_for_new_handle(), that report will be enough
+            return response
         if handle_type == HandleTypes.Burner:
             # TODO: note about possibly being hacked until destroyed?
             response = (f'Switched to new burner handle **{handle.handle_id}** (created now). '
@@ -248,6 +251,7 @@ async def process_handle_command(ctx, new_handle_id : str=None, burner : bool=Fa
             response = await create_handle_and_switch(actor_id, new_handle_id, handle_type)
         if existing_handle.handle_id != new_handle_id:
             response += f'\nNote that handles are lowercase only: {new_handle_id} -> **{existing_handle.handle_id}**.'
+
     return response
 
 async def process_burn_command(ctx, burner_id : str=None):

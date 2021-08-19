@@ -80,10 +80,24 @@ def can_have_finances(handle_type : HandleTypes):
     return handles.is_active_handle_type(handle_type)
 
 def get_all_handles_balance_report(actor_id : str):
+    report = ''
+
     current_handle : Handle = handles.get_active_handle(actor_id)
-    report = 'Current balance for all your accounts:\n'
+    any_npc_found = False
+    for handle in handles.get_handles_for_actor_of_types(actor_id, [HandleTypes.NPC]):
+        if not any_npc_found:
+            any_npc_found = True
+            report += '[OFF: Current balance for NPC accounts you control:]\n'
+        balance = get_current_balance(handle)
+        balance_str = str(balance)
+        if handle.handle_id == current_handle.handle_id:
+            report = report + f'> [**{handle.handle_id}**: {coin} **{balance_str}**]\n'
+        else:
+            report = report + f'> [{handle.handle_id}: {coin} **{balance_str}**]\n'
+
+    report += 'Current balance for all your accounts:\n'
     total = 0
-    for handle in handles.get_handles_for_actor(actor_id):
+    for handle in handles.get_handles_for_actor(actor_id, include_npc=False):
         balance = get_current_balance(handle)
         total += balance
         balance_str = str(balance)
@@ -131,10 +145,18 @@ async def add_funds(handle : Handle, amount : int):
 
 async def collect_all_funds(actor_id : str):
     current_handle : Handle = handles.get_active_handle(actor_id)
+    if current_handle.handle_type in [HandleTypes.Burnt, HandleTypes.NPC]:
+        return f'Error: cannot collect funds to {current_handle.handle_id}. [OFF: it is an NPC account]'
     total = 0
-    transaction = Transaction(payer=None, payer_actor=None, recip=transaction_collector, recip_actor=None, amount=0, success=True)
+    transaction = Transaction(
+        payer=None,
+        payer_actor=None,
+        recip=transaction_collector,
+        recip_actor=None,
+        amount=0,
+        success=True)
     balance_on_current = 0
-    for handle in handles.get_handles_for_actor(actor_id):
+    for handle in handles.get_handles_for_actor(actor_id, include_npc=False):
         collected = get_current_balance_handle_id(handle)
         if collected > 0:
             total += collected
@@ -152,6 +174,7 @@ async def collect_all_funds(actor_id : str):
     transaction.recip = current_handle
     transaction.last_in_sequence = True
     await record_transaction(transaction)
+    return None
 
 
 # Related to transactions
