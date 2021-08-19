@@ -165,6 +165,10 @@ async def init_personal_channel(discord_channel):
     await set_base_permissions(discord_channel, private=True, read_only=read_only)
     await init_channel_state(discord_channel)
 
+async def make_read_only(channel_id : str):
+    channel = get_discord_channel(channel_id)
+    await set_base_permissions(channel, private=True, read_only=True)
+
 ### Anonymous channels:
 
 def get_public_anon_channel(guild):
@@ -334,8 +338,8 @@ async def create_chat_session_channel(guild, actor_id : str, discord_channel_nam
     overwrites = server.generate_overwrites_own_new_private_channel(role)
     return await create_discord_channel(guild, overwrites, discord_channel_name, chats_category_name)
 
-async def create_chat_session_channel_no_role(guild, discord_channel_name : str):
-    base_overwrites = server.generate_base_overwrites(private = True, read_only = False)
+async def create_chat_session_channel_no_role(guild, discord_channel_name : str, read_only : bool=False):
+    base_overwrites = server.generate_base_overwrites(private = True, read_only = read_only)
     return await create_discord_channel(guild, base_overwrites, discord_channel_name, chats_category_name)
 
 async def delete_all_chats(bot):

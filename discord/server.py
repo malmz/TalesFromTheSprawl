@@ -30,7 +30,7 @@ private_read_only_base = no_access
 # but it means that anyone who does get read access will automatically also have send access
 private_normal_base = discord.PermissionOverwrite(read_messages=False, send_messages=True)
 public_read_only_base = discord.PermissionOverwrite(read_messages=True, send_messages=False)
-public_normal_base = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+public_normal_base = super_access
 
 async def init(bot, current_guild):
 	global system_role
@@ -50,9 +50,8 @@ async def init(bot, current_guild):
 def get_guild():
 	return guild
 
-# TODO: this could perhaps be refactored to use the overwrite generation functions
 async def give_role_access(channel, role):
-	await channel.set_permissions(role, read_messages=True)
+	await channel.set_permissions(role, overwrite=normal_access)
 
 def get_all_players_role():
 	return all_players_role

@@ -1,7 +1,8 @@
 import discord
 import asyncio
-from configobj import ConfigObj
 import simplejson
+from configobj import ConfigObj
+from enum import Enum
 
 import actors
 import players
@@ -10,7 +11,7 @@ import channels
 import server
 import posting
 import actors
-from common import emoji_cancel, emoji_open, emoji_green, emoji_red, emoji_unread
+from common import emoji_cancel, emoji_open, emoji_green, emoji_red, emoji_green_book, emoji_red_book, emoji_unread
 from custom_types import Handle, HandleTypes
 
 chats_dir = 'chats'
@@ -30,8 +31,8 @@ chat_participants_index = '___chat_participants'
 session_status_active = '___active'
 session_status_inactive = '___inactive'
 session_status_unread = '___inactive_unread'
-
-# TODO: support for burning a burner that was involved in a chat!
+session_status_closed_archive = '___inactive_archive'
+session_status_open_archive = '___open_archive'
 
 ### Classes, init and basic utilities
 
@@ -84,10 +85,17 @@ class ChatConnectionMapping(object):
 		return simplejson.dumps(self.__dict__)
 
 class ChatLogEntry(object):
-	def __init__(self, message : str, header : bool=False, closed_handle_id : str=None):
+	def __init__(
+		self,
+		message : str,
+		header : bool=False,
+		closed_handle_id : str=None,
+		archived_handle_id : str=None
+		):
 		self.message = message
 		self.header = header
 		self.closed_handle_id = closed_handle_id
+		self.archived_handle_id = archived_handle_id
 
 	@staticmethod
 	def from_string(string : str):
@@ -117,6 +125,11 @@ class ChatUI(object):
 		self.session_status = session_status
 		self.handle = handle # TODO: rename handle_id, or replace with handle
 		self.actor_id = actor_id
+
+class Activation(str, Enum):
+	No = 'no'
+	Msg = 'msg'
+	Open = 'open'
 
 
 def init_chats_confobj():
@@ -215,6 +228,12 @@ def get_chat_state(chat_name : str):
 	chat_file_name = f'{chat_name}.conf'
 	return ConfigObj(f'{chats_dir}/{chat_file_name}')
 
+def get_chats_for_handle(handle : Handle):
+	for msg_id in chats[chat_hub_msg_data_index]:
+		chat_connection : ChatConnectionMapping = read_chat_connection_from_hub_msg(msg_id)
+		if chat_connection.handle == handle.handle_id:
+			yield (chat_connection.chat_name, get_chat_state(chat_connection.chat_name))
+
 def get_participants(chat_state):
 	for participant_id in chat_state[chat_participants_index]:
 		yield read_participant(chat_state, participant_id)
@@ -254,8 +273,6 @@ def get_chat_log_iterable(chat_state, chat_name : str):
 		index_str = str(index)
 		if index_str in chat_state[chat_content_index]:
 			yield (index, read_chat_log_entry(chat_state, index))
-		else:
-			print(f'Missing value {index_str} in log for {chat_name}')
 
 def store_chat_log_entry(chat_name : str, index : int, entry : ChatLogEntry):
 	chat_state = get_chat_state(chat_name)
@@ -371,7 +388,7 @@ async def create_2party_chat(my_handle : Handle, partner_handle_id : str):
 			chat_name,
 			my_handle,
 			port_name = partner_handle.handle_id,
-			activate = True
+			activation = Activation.Open
 		)
 	)
 
@@ -425,7 +442,7 @@ async def add_participant_to_chat(
 	chat_name : str,
 	handle : Handle,
 	port_name : str,
-	activate : bool=False
+	activation : Activation=Activation.No
 	):
 	channel_name = f'{handle.handle_id}_to_{port_name}'
 	
@@ -433,8 +450,7 @@ async def add_participant_to_chat(
 	if participant == None:
 		# This is a newly added participant
 		participant = create_new_participant(chat_name, channel_name, session_status_inactive, handle)
-	# TODO: customise further: add option to UPDATE a chat session (i.e. update the hub msg) without actually creating a channel
-	return await get_chat_ui(guild, chat_state, participant, activate)
+	return await get_chat_ui(guild, chat_state, participant, activation)
 
 def create_new_participant(chat_name : str, channel_name : str, session_status : str, handle : Handle):
 	return ChatParticipant(
@@ -446,9 +462,9 @@ def create_new_participant(chat_name : str, channel_name : str, session_status :
 		chat_hub_msg_id=None,
 		channel_id=None)
 
-async def get_chat_ui(guild, chat_state, participant : ChatParticipant, activate : bool):
+async def get_chat_ui(guild, chat_state, participant : ChatParticipant, activation : Activation=Activation.No):
 	# Chat already exists
-	if participant.session_status == session_status_active:
+	if participant.session_status in [session_status_active, session_status_open_archive]:
 		# Chat not only exists, but is already open
 		return await get_chat_ui_for_active_session(guild, participant)
 	else:
@@ -457,7 +473,7 @@ async def get_chat_ui(guild, chat_state, participant : ChatParticipant, activate
 			guild,
 			chat_state,
 			participant,
-			activate
+			activation
 		)
 
 
@@ -480,22 +496,30 @@ async def get_chat_ui_for_active_session(guild, participant):
 		participant.actor_id)
 
 
-async def get_chat_ui_for_inactive_session(guild, chat_state, participant : ChatParticipant, activate : bool):
-	if participant.session_status == session_status_active or participant.channel_id is not None:
+async def get_chat_ui_for_inactive_session(guild, chat_state, participant : ChatParticipant, activation : Activation):
+	if (participant.session_status in [session_status_active, session_status_open_archive]
+		or participant.channel_id is not None):
 		raise RuntimeError(f'Instructed to open session but it appears to be active. Dump: {participant.to_string()}')
 
 	channel = None
 
-	# TODO: we also need to check if there is room to create another channel
-	# If there is not, we should fail activation, and adapt the hub msg accordingly
 	status_change = False
-	if activate:
+	valid_activation_reason = (
+		activation == Activation.Open
+		or (activation == Activation.Msg
+			and participant.session_status in [session_status_inactive, session_status_unread]
+		)
+	)
+	if valid_activation_reason:
 		can_be_activated = try_to_add_active_chat(participant.actor_id)
 		if can_be_activated:
+			if participant.session_status == session_status_closed_archive:
+				participant.session_status = session_status_open_archive
+			else:
+				participant.session_status = session_status_active
 			channel = await create_channel_for_chat_session(guild, chat_state, participant)
 			participant.channel_id = str(channel.id)
 			# channel ID -> chat mapping
-			participant.session_status = session_status_active
 			chat_connection = ChatConnectionMapping(participant.chat_name, participant.actor_id, participant.handle)
 			store_chat_connection_for_channel(participant.channel_id, chat_connection)
 			status_change = True
@@ -517,7 +541,8 @@ async def get_chat_ui_for_inactive_session(guild, chat_state, participant : Chat
 	)
 
 async def create_channel_for_chat_session(guild, chat_state, participant : ChatParticipant):
-	channel = await channels.create_chat_session_channel_no_role(guild, participant.channel_name)
+	archived = participant.session_status in [session_status_open_archive, session_status_closed_archive]
+	channel = await channels.create_chat_session_channel_no_role(guild, participant.channel_name, read_only=archived)
 	await channel.send(
 		(
 			f'```This is the start of {participant.channel_name}. '
@@ -534,8 +559,8 @@ async def create_channel_for_chat_session(guild, chat_state, participant : ChatP
 async def open_chat_from_reaction(chat_state, participant : ChatParticipant):
 	guild = server.get_guild()
 	# activate the session:
-	chat_ui = await get_chat_ui(guild, chat_state, participant, activate=True)
-	return chat_ui.session_status == session_status_active
+	chat_ui = await get_chat_ui(guild, chat_state, participant, activation=Activation.Open)
+	return chat_ui.session_status in [session_status_active, session_status_open_archive]
 
 
 ### The messages in the chat_hub channel, which are linked to and from the chat state itself
@@ -565,6 +590,23 @@ def generate_hub_msg_unread_session(chat_title : str, handle_id : str):
 	)
 	return content
 
+def generate_hub_msg_open_archived_session(discord_channel, handle_id : str):
+	clickable_ref = channels.clickable_channel_ref(discord_channel)
+	content = (f'> Chat name: {clickable_ref}\n'
+		+ f'> Your identity: **{handle_id}**\n'
+		+ f'> Status: {emoji_green_book}  **archived** – **connected** to log server\n'
+		+ f'> To close archive, click on the {emoji_cancel} below.'
+	)
+	return content
+
+def generate_hub_msg_closed_archived_session(chat_title : str, handle_id : str):
+	content = (f'> Chat name: **{chat_title}**\n'
+		+ f'> Your identity: **{handle_id}**\n'
+		+ f'> Status: {emoji_red_book}  **archived** – **not connected** to log server\n' # TODO
+		+ f'> To read archive, click on the {emoji_open} below.'
+	)
+	return content
+
 def generate_hub_msg(handle_id : str, session_status : str, chat_title : str=None, discord_channel=None):
 	if session_status == session_status_active:
 		if discord_channel is None:
@@ -574,6 +616,12 @@ def generate_hub_msg(handle_id : str, session_status : str, chat_title : str=Non
 		return generate_hub_msg_inactive_session(chat_title, handle_id)
 	elif session_status == session_status_unread:
 		return generate_hub_msg_unread_session(chat_title, handle_id)
+	elif session_status == session_status_open_archive:
+		return generate_hub_msg_open_archived_session(discord_channel, handle_id)
+	elif session_status == session_status_closed_archive:
+		return generate_hub_msg_closed_archived_session(chat_title, handle_id)
+	else:
+		return "Archived chat -- not implemented yet!"
 
 async def update_chat_hub_message(guild, chat_channel, participant, has_changed : bool=False, repost : bool=False):
 	message = None
@@ -609,7 +657,10 @@ async def update_chat_hub_message(guild, chat_channel, participant, has_changed 
 	return message
 
 async def add_initial_reaction_chat_hub_msg(message, session_status : str):
-	initial_emoji = emoji_open if session_status != session_status_active else emoji_cancel
+	initial_emoji = (
+		emoji_cancel
+		if session_status in [session_status_active, session_status_open_archive]
+		else emoji_open)
 	await message.add_reaction(initial_emoji)
 
 async def process_reaction_in_chat_hub(message, emoji : str):
@@ -627,13 +678,13 @@ async def process_reaction_in_chat_hub(message, emoji : str):
 	chat_state = get_chat_state(chat_connection.chat_name)
 	participant : ChatParticipant = read_participant(chat_state, chat_connection.handle)
 
-	if (participant.session_status == session_status_active
+	if (participant.session_status in [session_status_active, session_status_open_archive]
 		and emoji == emoji_cancel
 		):
 		# Ignore return value -- it's not worth the effort to send it to actor's command line
 		# (and they may not even have one)
 		await close_chat_session(chat_state, participant)
-	elif (participant.session_status != session_status_active
+	elif (participant.session_status in [session_status_inactive, session_status_unread, session_status_closed_archive]
 		and emoji == emoji_open
 		):
 		success = await open_chat_from_reaction(chat_state, participant)
@@ -646,7 +697,7 @@ async def process_reaction_in_chat_hub(message, emoji : str):
 
 async def close_chat_session_from_command(ctx, partner_handle_id : str):
 	my_user_id = str(ctx.message.author.id)
-	my_actor_id = actors.get_actor_id(my_user_id)
+	my_actor_id = players.get_player_id(my_user_id)
 	my_handle = handles.get_handle(my_actor_id)
 	report = await close_2party_chat_session(my_handle, partner_handle_id)
 	if report != None:
@@ -665,7 +716,7 @@ async def close_2party_chat_session(my_handle : Handle, partner_handle_id : str)
 
 	partner_handle : Handle = handles.get_handle(partner_handle_id)
 	if not handles.is_active_handle_type(partner_handle.handle_type):
-		return f'Error: no chat with {partner_handle} found; recipient does not exist. Check the spelling.'
+		return f'Error: no chat with {partner_handle.handle_id} found; recipient does not exist. Check the spelling.'
 
 	chat_name = create_2party_chat_name(my_handle, partner_handle)
 	if not chat_exists(chat_name):
@@ -687,7 +738,13 @@ async def close_chat_session(chat_state, participant : ChatParticipant):
 	chat_state = get_chat_state(participant.chat_name)
 
 	# update chat -> channel ID mapping
-	if participant.session_status != session_status_active:
+	should_log = True
+	if participant.session_status == session_status_active:
+		participant.session_status = session_status_inactive
+	elif participant.session_status == session_status_open_archive:
+		participant.session_status = session_status_closed_archive
+		should_log = False
+	else:
 		return f'Tried to close {participant.chat_name} for {participant.handle} but the session was not open.'
 
 	if participant.channel_id is None:
@@ -696,15 +753,15 @@ async def close_chat_session(chat_state, participant : ChatParticipant):
 		)
 
 	decrease_num_active_chats(participant.actor_id)
-
 	channel_id_to_close = participant.channel_id
+
+	# Update participant
+	participant.channel_id = None
 
 	# Remove channel ID -> chat mapping
 	clear_channel_connection_mappings(channel_id_to_close)
 
-	# Update participant
-	participant.channel_id = None
-	participant.session_status = session_status_inactive
+	# TODO: we could put the channel closing and the chat hub update in an asyncio.gather if we wanted
 
 	# Close the session, i.e. delete the actor's discord channel
 	await channels.delete_discord_channel(channel_id_to_close)
@@ -715,10 +772,80 @@ async def close_chat_session(chat_state, participant : ChatParticipant):
 	# 'participant' is the chat -> actor, channel ID, msg ID mapping
 	store_participant(participant.chat_name, participant)
 
-	# Add chat log entry for this event
-	entry = ChatLogEntry(None, closed_handle_id=participant.handle)
+	if should_log:
+		# Add chat log entry for this event
+		entry = ChatLogEntry(None, closed_handle_id=participant.handle)
+		write_new_chat_log_entry(participant.chat_name, entry)
+
+
+### Archiving chats -- currently only happens when burning burner handles
+
+async def archive_all_chats_for_handle(handle : Handle):
+	task_list = []
+	for (chat_name, chat_state) in get_chats_for_handle(handle):
+		task_list.append(asyncio.create_task(archive_chat_for_handle(handle, chat_name, chat_state)))
+	await asyncio.gather(*task_list)
+
+def participant_is_handle(handle : Handle, participant : ChatParticipant):
+	return participant.handle == handle.handle_id
+
+def is_archived(participant : ChatParticipant):
+	return participant.session_status in [session_status_open_archive, session_status_closed_archive]
+
+async def archive_chat_for_handle(handle: Handle, chat_name : str, chat_state):
+	participants = list(get_participants(chat_state))
+	participant_to_archive = next(p for p in participants if participant_is_handle(handle, p))
+	guild = server.get_guild()
+	archived_participant = await archive_chat_for_participant(guild, chat_state, participant_to_archive)
+	store_participant(chat_name, archived_participant)
+
+	other_participants = [p for p in participants if not participant_is_handle(handle, p)]
+	is_non_archived = [1 for p in other_participants if not is_archived(p)]
+
+	archive_for_remaining = len(is_non_archived) <= 1
+
+	print(f'Archiving chat for {handle.handle_id}. Other participant is {other_participants[0].to_string()}. is_non_archived: {is_non_archived}, archive_for_remaining: {archive_for_remaining}')
+	task_list = (
+		asyncio.create_task(
+			update_other_participant_after_archiving(guild, p, handle, chat_state, archive_for_remaining)
+		) for p in other_participants
+	)
+	await asyncio.gather(*task_list)
+
+
+async def archive_chat_for_participant(guild, chat_state, participant : ChatParticipant):
+	chat_ui = await get_chat_ui(guild, chat_state, participant)
+	if chat_ui.session_status == session_status_active:
+		participant.session_status = session_status_open_archive
+		await chat_ui.channel.send(get_archived_alert(participant.handle))
+		await channels.make_read_only(participant.channel_id)
+	elif chat_ui.session_status in [session_status_inactive, session_status_unread]:
+		participant.session_status = session_status_closed_archive
+	elif chat_ui.session_status in [session_status_open_archive, session_status_closed_archive]:
+		# No need to do anything
+		return
+	else:
+		raise RuntimeError(f'Unexpected session status {chat_ui.session_status}. Dump: {participant.to_string()}')
+
+	entry = ChatLogEntry(None, archived_handle_id=participant.handle)
 	write_new_chat_log_entry(participant.chat_name, entry)
 
+	chat_hub_message = await update_chat_hub_message(guild, chat_ui.channel, participant, has_changed=True)
+	return participant
+
+async def update_other_participant_after_archiving(
+	guild,
+	participant : ChatParticipant,
+	archived_handle : Handle,
+	chat_state,
+	should_be_archived : bool):
+	if should_be_archived:
+		participant = await archive_chat_for_participant(guild, chat_state, participant)
+		store_participant(participant.chat_name, participant)
+	else:
+		chat_ui = await get_chat_ui(guild, chat_state, participant)
+		if chat_ui.session_status == session_status_active:
+			await chat_ui.channel.send(get_other_unreachable_alert(archived_handle.handle_id))
 
 
 
@@ -730,7 +857,7 @@ async def post_to_participant(guild, chat_state, message, participant : ChatPart
 		full_post = True
 
 	# Try to activate the session for the recipient
-	chat_ui = await get_chat_ui(guild, chat_state, participant, activate=True)
+	chat_ui = await get_chat_ui(guild, chat_state, participant, activation=Activation.Msg)
 	if chat_ui.session_status == session_status_active:
 		if chat_ui.channel is None:
 			print(f'Failed to reach participant of chat. Dump: {participant.to_string()}')
@@ -749,6 +876,8 @@ async def post_to_participant(guild, chat_state, message, participant : ChatPart
 	elif chat_ui.session_status == session_status_unread:
 		# Chat already has unread messages -- nothing changes when we add one more
 		pass
+	elif chat_ui.session_status in [session_status_open_archive, session_status_closed_archive]:
+		print(f'Just for logging: posting message in chat with archived participant {participant.handle}')
 	else:
 		raise RuntimeError(f'Unexpected case! Dump: {participant.to_string()}, {chat_ui.session_status}')
 
@@ -763,6 +892,9 @@ async def process_message(message):
 
 	sender_channel = message.channel
 	chat_channel_data : ChatConnectionMapping = read_chat_connection_from_channel(str(sender_channel.id))
+	if chat_channel_data is None:
+		print(f'Could not find channel mapping for channel {sender_channel.id}.')
+		return
 	poster_id = chat_channel_data.handle
 	chat_name = chat_channel_data.chat_name
 
@@ -786,6 +918,18 @@ async def repost_string_buffer(channel, string_buffer : str):
 		string_buffer = ''
 	return string_buffer
 
+def get_archived_alert(handle_id : str):
+	return f'```Cannot connect to any of the recipients from {handle_id}. This chat is archived in read-only form.```'
+
+def get_other_unreachable_alert(handle_id : str):
+	return f'```====== connection lost to {handle_id} ======```'
+
+def get_last_session_closed_alert():
+	return '```====== last chat session was closed here ======```'
+
+def get_reopened_chat_alert(chat_name : str):
+	return f'```====== re-opened chat {chat_name} ======```'
+
 async def repost_message_history(channel, chat_state, participant : ChatParticipant):
 	any_history = False
 	index_to_remove : int = -1
@@ -800,10 +944,21 @@ async def repost_message_history(channel, chat_state, participant : ChatParticip
 			# Empty the current buffer:
 			string_buffer = await repost_string_buffer(channel, string_buffer)
 			# Print delimiter:
-			await channel.send(
-				f'```====== last chat session was closed here ======```'
-			)
+			await channel.send(get_last_session_closed_alert())
+			# We don't need to remember every time someone has closed a chat, just the last one:
 			index_to_remove = index
+		elif (entry.archived_handle_id is not None):
+			if (entry.archived_handle_id != participant.handle
+			and any_history):
+				# This entry denotes the point where connection was lost to another participant
+				# Empty the current buffer:
+				string_buffer = await repost_string_buffer(channel, string_buffer)
+				# Print delimiter:
+				await channel.send(get_other_unreachable_alert(entry.archived_handle_id))
+			elif entry.archived_handle_id == participant.handle:
+				# This denotes the point where connection was lost to us
+				# We shall not read any histoy past this point
+				break
 		elif entry.message is not None:
 			any_history = True
 			if entry.header:
@@ -815,10 +970,10 @@ async def repost_message_history(channel, chat_state, participant : ChatParticip
 				string_buffer += f'\n{entry.message}'
 	# Finish by sending anything that is left over
 	await repost_string_buffer(channel, string_buffer)
-	if any_history:
-		await channel.send(
-			f'```====== re-opened chat {participant.channel_name} ======```'
-		)
+	if participant.session_status in [session_status_open_archive, session_status_closed_archive]:
+		await channel.send(get_archived_alert(participant.handle))
+	elif any_history:
+		await channel.send(get_reopened_chat_alert(participant.channel_name))
 
 	# Remove the entry that denoted last time session was closed
 	# TODO: chat_log_length_at_last_close could also be tracked on a participant level

@@ -1,6 +1,7 @@
 import finances
 import players
 import actors
+import chats
 from common import forbidden_content, forbidden_content_print, coin
 from custom_types import Handle, HandleTypes
 
@@ -116,6 +117,9 @@ async def destroy_burner(guild, actor_id : str, burner : Handle):
     balance = finances.get_current_balance(burner)
     if balance > 0:
         await finances.transfer_from_burner(burner, new_active, balance)
+
+    # archive any chats for the burner
+    await chats.archive_all_chats_for_handle(burner)
 
     # Destroy the burner
     burner.handle_type = HandleTypes.Burnt
