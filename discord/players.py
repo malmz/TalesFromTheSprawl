@@ -124,7 +124,7 @@ async def create_player(member):
 	try:
 		await member.edit(nick = new_player_id)
 	except discord.Forbidden:
-		print(f'Probably tried to edit server owner, which doesn\'t work. Please add role {new_player_id} to user {member.name}.')
+		print(f'Probably tried to edit server owner, which doesn\'t work. Please make sure user {member.name} has nickname {new_player_id}.')
 
 	player_data = PlayerData(new_player_id, cmd_line_channel.id)
 	store_player_data(player_data)
@@ -192,3 +192,20 @@ def get_cmd_line_channel(player_id : str):
 	if data is not None:
 		return channels.get_discord_channel(data.cmd_line_channel_id)
 
+
+
+def add_shop(player_id : str, shop_id : str):
+	player : PlayerData = read_player_data(player_id)
+	if shop_id not in player.shops:
+		player.shops.append(shop_id)
+	store_player_data(player)
+
+def get_shops(player_id : str):
+	return read_player_data(player_id).shops
+
+
+def add_group(player_id : str, group_id : str):
+	player : PlayerData = read_player_data(player_id)
+	if group_id not in player.groups:
+		player.groups.append(group_id)
+	store_player_data(player)

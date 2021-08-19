@@ -1,6 +1,6 @@
 import simplejson
 from enum import Enum
-
+from typing import List, Set
 
 class ActionResult(object):
 	def __init__(self, success : bool=False, report : str = None):
@@ -105,9 +105,13 @@ class PlayerData(object):
 	def __init__(
 		self,
 		player_id : str,
-		cmd_line_channel_id : int):
+		cmd_line_channel_id : int,
+		shops : List[str] = [],
+		groups : List[str] = []):
 		self.player_id = player_id
 		self.cmd_line_channel_id = cmd_line_channel_id
+		self.shops = shops
+		self.groups = groups
 
 	@staticmethod
 	def from_string(string : str):

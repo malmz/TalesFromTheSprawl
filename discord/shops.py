@@ -5,6 +5,7 @@ import asyncio
 import simplejson
 
 from configobj import ConfigObj
+from typing import List
 
 # Custom imports
 import common
@@ -71,7 +72,8 @@ class Shop(object):
 		actor_id : str,
 		owner_id : str,
 		storefront_channel_id : str,
-		order_flow_channel_id : str):
+		order_flow_channel_id : str,
+		employees : List[str] = []):
 		self.name = name
 		self.actor_id = actor_id
 		self.owner_id = owner_id
@@ -79,6 +81,7 @@ class Shop(object):
 		self.storefront_channel_id = storefront_channel_id
 		self.order_flow_channel_id = order_flow_channel_id
 		self.highest_order = 0
+		self.employees = [] if employees == [] else employees
 
 	@staticmethod
 	def from_string(string : str):
@@ -364,18 +367,46 @@ async def create_shop(guild, shop_name : str, owner_player_id : str):
 	shop = Shop(shop_name, actor.actor_id, owner_player_id, storefront_channel_id, order_flow_channel_id)
 	store_shop(shop)
 	clear_catalogue(shop.shop_id)
+	report = f'Created shop {shop.name}, run by {owner_player_id}'
 
-	try:
-		new_roles = member.roles
-		new_roles.append(role)
-		await member.edit(roles=new_roles)
-		report = f'Created shop {shop.name}, run by {owner_player_id}'
-	except discord.Forbidden:
-		report = f'Created shop {shop.name}, but could not add the new role to {owner_player_id}. Please add role {role.name} to user {member.name} manually.'
-
+	employment_report = await employ(guild, owner_player_id, shop)
+	if employment_report is not None:
+		report = report + '\n' + employment_report
 	return report
 
+async def employ(guild, player_id : str, shop : Shop):
+	report = None
 
+	member = await server.get_member_from_nick(player_id)
+	if not players.player_exists(player_id) or member is None:
+		return f'Error: player {player_id} does not exist, or does not conform to the server nick scheme.'
+
+	if player_id in shop.employees:
+		return f'Error: player {player_id} already works at {shop_name}.'
+
+	role = actors.get_actor_role(guild, shop.actor_id)
+	new_roles = member.roles
+	new_roles.append(role)
+	await member.edit(roles=new_roles)
+
+	players.add_shop(player_id, shop.actor_id)
+	shop.employees.append(player_id)
+	store_shop(shop)
+	return report
+
+#TODO: add bot command to do this
+async def process_employ_command(guild, player_id : str, shop_name : str):
+	if player_id is None:
+		return 'Error: must give a player ID'
+	if not players.player_exists(player_id, expect_to_find=False):
+		return f'Error: player {player_id} does not exist.'
+	if shop_name is None:
+		return 'Error: must give a shop name'
+	if not shop_exists(shop_name):
+		return f'Error: shop {shop_name} does not exist'
+
+	shop : Shop = read_shop(shop_name)
+	return employ(guild, player_id, shop)
 
 
 ## Adding and editing products for a shop
@@ -391,11 +422,24 @@ def get_emoji_for_new_product(symbol : str):
 		return symbol
 
 
-def add_product(shop_name : str, product_name : str, description : str, price : int, symbol : str):
+def add_product(user_id : str, product_name : str, description : str, price : int, symbol : str, shop_name : str):
+	if user_id is None:
+		raise RuntimeError('Tried to add product but no user_id found.')
+	player_id = players.get_player_id(user_id)
+	shops_of_player = players.get_shops(player_id)
+	if len(shops_of_player) == 0:
+		return f'Error: player {player_id} does not have access to any shops'
 	if shop_name is None:
-		return 'Error: must give a shop name'
+		# If no shop given, assume the player wants us to use their first one
+		# If a player works at more than one shop, they will have to use the
+		# full syntax of specifying which shop they mean
+		shop_name = shops_of_player[0]
+	else:
+		if shop_name.lower() not in shops_of_player:
+			return f'Error: player {player_id} does not have access to shop {shop_name}'
+
 	if product_name is None:
-		return f'Error: must give a product name; use \".add_product {shop_name} <product_name>. (Optional: add description, price, and type/symbol)\"'
+		return f'Error: must give a product name; use \".add_product <product_name>. (Optional: add description, price, and type/symbol)\"'
 	if not shop_exists(shop_name):
 		return f'Error: shop {shop_name} does not exist'
 	if product_exists(shop_name, product_name):
