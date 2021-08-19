@@ -2,6 +2,7 @@ import finances
 import players
 import actors
 import chats
+import player_setup
 from common import forbidden_content, forbidden_content_print, coin
 from custom_types import Handle, HandleTypes
 
@@ -23,6 +24,10 @@ last_regular_index = '___last_regular'
 alphanumeric_regex = re.compile(f'^[a-zA-Z0-9][a-zA-Z0-9_]*[a-zA-Z0-9]$')
 double_underscore = '__'
 
+async def init(clear_all : bool=False):
+    if clear_all:
+        await clear_all_handles()
+
 async def clear_all_handles():
     for actor_id in handles:
         await clear_all_handles_for_actor(actor_id)
@@ -33,12 +38,13 @@ async def clear_all_handles_for_actor(actor_id : str):
     del handles[actor_id]
     handles.write()
 
-def init_handles_for_actor(actor_id : str, first_handle : str=None):
+async def init_handles_for_actor(actor_id : str, first_handle : str=None, overwrite=True):
     if first_handle is None:
         first_handle = actor_id
-    handles[actor_id] = {}
-    handle : Handle = create_regular_handle(actor_id, first_handle)
-    switch_to_handle(actor_id, handle)
+    if overwrite or actor_id not in handles:
+        handles[actor_id] = {}
+        handle : Handle = await create_regular_handle(actor_id, first_handle)
+        switch_to_handle(actor_id, handle)
 
 def is_forbidden_handle(new_handle : str):
     matches = re.search(alphanumeric_regex, new_handle)
@@ -49,13 +55,14 @@ def is_forbidden_handle(new_handle : str):
     else:
         return False
 
-def create_handle(actor_id : str, handle_id : str, handle_type : HandleTypes):
+async def create_handle(actor_id : str, handle_id : str, handle_type : HandleTypes):
     handle = Handle(handle_id, handle_type = handle_type, actor_id = actor_id)
     if is_forbidden_handle(handle_id):
         handle.handle_type = HandleTypes.Unused
     else:
         store_handle(actor_id, handle)
         finances.init_finances_for_handle(handle)
+        await player_setup.player_setup_for_new_handle(handle)
     return handle
 
 # TODO: we don't really need actor_id as a separate field here
@@ -96,11 +103,11 @@ def is_active_handle_type(handle_type : HandleTypes):
     return handle_type not in [HandleTypes.Burnt, HandleTypes.Unused]
 
 
-def create_regular_handle(actor_id : str, new_handle : str):
-	return create_handle(actor_id, new_handle, HandleTypes.Regular)
+async def create_regular_handle(actor_id : str, new_handle : str):
+	return await create_handle(actor_id, new_handle, HandleTypes.Regular)
 
-def create_burner_handle(actor_id : str, new_burner_handle : str):
-	return create_handle(actor_id, new_burner_handle, HandleTypes.Burner)
+async def create_burner_handle(actor_id : str, new_burner_handle : str):
+	return await create_handle(actor_id, new_burner_handle, HandleTypes.Burner)
 
 # returns the amount of money (if any) that was transferred away from the burner
 async def destroy_burner(guild, actor_id : str, burner : Handle):
@@ -197,8 +204,8 @@ def switch_to_own_existing_handle(actor_id : str, handle : Handle, expected_type
         raise RuntimeError(f'Unexpected handle type of active handle. Dump: {handle.to_string()}')
     return response
 
-def create_handle_and_switch(actor_id : str, new_handle_id : str, handle_type : HandleTypes):
-    handle : Handle = create_handle(actor_id, new_handle_id, handle_type)
+async def create_handle_and_switch(actor_id : str, new_handle_id : str, handle_type : HandleTypes):
+    handle : Handle = await create_handle(actor_id, new_handle_id, handle_type)
     if handle.handle_type == handle_type and handle.handle_type != HandleTypes.Unused:
         switch_to_handle(actor_id, handle)
         if handle_type == HandleTypes.Burner:
@@ -238,7 +245,7 @@ async def process_handle_command(ctx, new_handle_id : str=None, burner : bool=Fa
             else:
                 response = f'Error: the handle {new_handle_id} not available.'
         else:
-            response = create_handle_and_switch(actor_id, new_handle_id, handle_type)
+            response = await create_handle_and_switch(actor_id, new_handle_id, handle_type)
         if existing_handle.handle_id != new_handle_id:
             response += f'\nNote that handles are lowercase only: {new_handle_id} -> **{existing_handle.handle_id}**.'
     return response

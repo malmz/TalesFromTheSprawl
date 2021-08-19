@@ -21,13 +21,16 @@ actors = ConfigObj('actors.conf')
 actors_input = ConfigObj('actors_input.conf')
 
 
-# TODO: loop through all users, find their actor_ids and re-map personal channels if not available
 async def init(bot, guild, clear_all=False):
 	if clear_all:
 		for actor_id in actors:
 			del actors[actor_id]
 		await channels.delete_all_personal_channels(bot)
 		await handles.clear_all_handles()
+	else:
+		for actor in get_all_actors():
+			await handles.init_handles_for_actor(actor.actor_id, overwrite=False)
+			# TODO: re-map all personal channels?
 	await delete_all_actor_roles(guild, spare_used=(not clear_all))
 	actors.write()
 
@@ -108,7 +111,8 @@ async def create_new_actor(guild, actor_index : str, actor_id : str):
 	# Send welcome messages to the channels (no-one has the role to see it yet)
 	chat_hub_welcome = asyncio.create_task(send_startup_message_chat_hub(chat_hub_channel, actor_id))
 	finance_welcome = asyncio.create_task(send_startup_message_finance(finances_channel, actor_id))
-	await asyncio.gather(chat_hub_welcome, finance_welcome)
+	init_handles = asyncio.create_task(handles.init_handles_for_actor(actor_id))
+	await asyncio.gather(chat_hub_welcome, finance_welcome, init_handles)
 
 	actor = Actor(
 		actor_index=actor_index,
@@ -117,9 +121,6 @@ async def create_new_actor(guild, actor_index : str, actor_id : str):
 		finance_stmt_msg_id=0,
 		chat_channel_id=chat_hub_channel.id)
 	store_actor(actor)
-
-	handles.init_handles_for_actor(actor_id)
-
 	return actor
 
 async def send_startup_message_finance(channel, actor_id : str):

@@ -10,7 +10,6 @@ import handles
 import channels
 import server
 import posting
-import actors
 from common import emoji_cancel, emoji_open, emoji_green, emoji_red, emoji_green_book, emoji_red_book, emoji_unread
 from custom_types import Handle, HandleTypes
 
@@ -602,7 +601,7 @@ def generate_hub_msg_open_archived_session(discord_channel, handle_id : str):
 def generate_hub_msg_closed_archived_session(chat_title : str, handle_id : str):
 	content = (f'> Chat name: **{chat_title}**\n'
 		+ f'> Your identity: **{handle_id}**\n'
-		+ f'> Status: {emoji_red_book}  **archived** – **not connected** to log server\n' # TODO
+		+ f'> Status: {emoji_red_book}  **archived** – **not connected** to log server\n'
 		+ f'> To read archive, click on the {emoji_open} below.'
 	)
 	return content

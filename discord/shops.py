@@ -68,12 +68,12 @@ class Shop(object):
 	def __init__(
 		self,
 		name : str,
-		shop_actor_index : str,
+		actor_id : str,
 		owner_id : str,
 		storefront_channel_id : str,
 		order_flow_channel_id : str):
 		self.name = name
-		self.shop_actor_index = shop_actor_index
+		self.actor_id = actor_id
 		self.owner_id = owner_id
 		self.shop_id = name.lower() if name is not None else None
 		self.storefront_channel_id = storefront_channel_id
@@ -361,7 +361,7 @@ async def create_shop(guild, shop_name : str, owner_player_id : str):
 	order_flow_channel_id = str(order_flow_channel.id)
 
 	# TODO: send welcome message in order_flow_channel
-	shop = Shop(shop_name, shop_actor_index, owner_player_id, storefront_channel_id, order_flow_channel_id)
+	shop = Shop(shop_name, actor.actor_id, owner_player_id, storefront_channel_id, order_flow_channel_id)
 	store_shop(shop)
 	clear_catalogue(shop.shop_id)
 
@@ -573,6 +573,9 @@ async def order_product_from_command(shop_name : str, product_name : str, payer_
 	if payer_handle is None:
 		return 'Error: no payer ID supplied.'
 	payer_handle : Handle = handles.get_handle(payer_handle)
+	if not handles.is_active_handle_type(payer_handle.handle_type):
+		return f'Error: cannot find buyer handle {payer_handle.handle_id}.'
+
 	if delivery_id is None:
 		delivery_id = payer_handle.handle_id
 
@@ -619,7 +622,7 @@ async def order_product(shop : Shop, product : Product, payer_handle : Handle, d
 
 
 def generate_order_message(order : Order):
-	content = f'> **#{order.order_id}** for **{order.delivery_id}**\n'
+	content = f'**#{order.order_id}** for **{order.delivery_id}**\n'
 	for item, amount in order.items_ordered.items():
 		content += f'> {amount} {item}\n'
 	content += f'> Total: {coin} {order.price_total} (paid)'

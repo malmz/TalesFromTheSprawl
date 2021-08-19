@@ -21,6 +21,7 @@ import custom_types
 import chats
 import server
 import shops
+import player_setup
 from common import coin
 
 
@@ -55,7 +56,7 @@ async def on_ready():
     await actors.init(bot, guild, clear_all=clear_all)
     await players.init(bot, guild, clear_all=clear_all)
     await channels.init_channels(bot)
-    #handles.init() #TODO: ensure that every user has a handle?
+    await handles.init(clear_all)
     finances.init_finances()
     await chats.init(bot, clear_all=clear_all)
     await shops.init(bot, guild, clear_all=clear_all)
@@ -158,6 +159,16 @@ async def create_burner_command(ctx, new_id : str=None):
 async def burn_command(ctx, burner_id : str=None):
     response = await handles.process_burn_command(ctx, burner_id)
     await ctx.send(response)
+
+@bot.command(name='clear_all_handles', help='Admin-only: clear all handles, reinitializing players to their player_id only.')
+async def clear_handles_command(ctx, burner_id : str=None):
+    await handles.clear_all_handles()
+    await actors.init(bot, guild, clear_all=False)
+    await ctx.send('Done.')
+
+
+
+
 
 
 # Commands related to money
@@ -311,9 +322,6 @@ async def clear_actor_command(ctx, actor_id : str):
     except discord.errors.NotFound:
         print(f'Cleared actor {actor_id}. Could not send report because channel is missing – '
             +'the command was probably given in a player-only command line that was deleted.')
-
-
-
     
 
 @bot.command(name='init_all_players', help='Admin-only: initialise all current members of the server as players.')
@@ -330,6 +338,19 @@ async def ping_command(ctx, handle_id : str):
         await channel.send(f'Testing ping for {handle_id}')
     else:
         await ctx.send(f'Error: could not find the command line channel for {handle_id}')
+
+
+@bot.command(name='add_known_handle', help='Admin-only function to add a known handle, before the player joins the server.')
+@commands.has_role('gm')
+async def add_known_handle_command(ctx, handle_id : str):
+    if handle_id is None:
+        await ctx.send('Error: provide a handle')
+    else:
+        player_setup.add_known_handle(handle_id)
+        await ctx.send(f'Added entry for {handle_id}')
+
+
+
 
 # Chats
 

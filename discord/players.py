@@ -14,7 +14,6 @@ from configobj import ConfigObj
 
 
 players = ConfigObj('players.conf')
-players_input = ConfigObj('players_input.conf')
 
 user_id_mappings_index = '___user_id_to_player_id'
 
