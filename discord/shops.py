@@ -52,7 +52,6 @@ shops = ConfigObj(f'shops.conf')
 
 shop_data_index = '__shop_data'
 channel_mapping_index = '__channel_mapping'
-catalogue_mapping_index = '__catalogue_mapping'
 
 ### Module to allow one or more players to run a shop together.
 # Having a shop grants:
@@ -198,8 +197,6 @@ async def init(guild, clear_all=False):
 			del shops[shop_data_index][shop_name]
 		for channel in shops[channel_mapping_index]:
 			del shops[channel_mapping_index][channel]
-		for cat_item in shops[catalogue_mapping_index]:
-			del shops[catalogue_mapping_index][cat_item]
 		shops.write()
 		await channels.delete_all_shops()
 
@@ -209,8 +206,6 @@ async def init(guild, clear_all=False):
 		shops[shop_data_index][highest_ever_index] = str(shop_role_start)
 	if channel_mapping_index not in shops:
 		shops[channel_mapping_index] = {}
-	if catalogue_mapping_index not in shops:
-		shops[catalogue_mapping_index] = {}
 	shops.write()
 
 	await delete_all_shop_roles(guild, spare_used=not clear_all)
@@ -288,35 +283,18 @@ def read_storefront_channel_mapping(channel_id : str):
 		return shops[channel_mapping_index][channel_id]
 
 
-def store_catalogue_item_mapping(msg_id : str, mapping : CatalogueItemMapping):
-	shops[catalogue_mapping_index][msg_id] = mapping.to_string()
-	shops.write()
-
-def read_catalogue_item_mapping(msg_id : str):
-	if msg_id in shops[catalogue_mapping_index]:
-		return CatalogueItemMapping.from_string(shops[catalogue_mapping_index][msg_id])
-
-def delete_catalogue_item_mapping(msg_id : str):
-	if msg_id in shops[catalogue_mapping_index]:
-		del shops[catalogue_mapping_index][msg_id]
-		shops.write()
-
-def delete_catalogue_item_mappings_for_shop(shop_id : str):
-	for msg_id in shops[catalogue_mapping_index]:
-		cat_map = read_catalogue_item_mapping(msg_id)
-		if cat_map.shop_id == shop_id:
-			del shops[catalogue_mapping_index][msg_id]
-	shops.write()
-
+catalogue_suffix = '_catalogue.conf'
+product_entries_index = '___products'
+msg_mapping_index = '___storefront_msg_mappings'
 
 def get_catalogue(shop_name : str):
 	shop_id = shop_name.lower()
-	catalogue_file_name = f'{shop_id}.conf'
+	catalogue_file_name = f'{shop_id}{catalogue_suffix}'
 	return ConfigObj(f'{catalogues_dir}/{catalogue_file_name}')
 
 def get_all_products(shop_name : str):
 	catalogue = get_catalogue(shop_name)
-	for product_id in catalogue:
+	for product_id in catalogue[product_entries_index]:
 		yield read_product_from_cat(catalogue, product_id)
 
 def product_exists(shop_name : str, product_name : str):
@@ -326,14 +304,14 @@ def product_exists(shop_name : str, product_name : str):
 def store_product(shop_name : str, product : Product):
 	if shop_exists(shop_name):
 		catalogue = get_catalogue(shop_name)
-		catalogue[product.product_id] = product.to_string()
+		catalogue[product_entries_index][product.product_id] = product.to_string()
 		catalogue.write()
 
 def delete_product(shop_name : str, product_id : str):
 	if shop_exists(shop_name):
 		catalogue = get_catalogue(shop_name)
-		if product_id in catalogue:
-			del catalogue[product_id]
+		if product_id in catalogue[product_entries_index]:
+			del catalogue[product_entries_index][product_id]
 			catalogue.write()
 
 def read_product(shop_name : str, product_name : str):
@@ -343,14 +321,43 @@ def read_product(shop_name : str, product_name : str):
 
 def read_product_from_cat(catalogue, product_name : str):
 	product_id = product_name.lower()
-	if product_id in catalogue:
-		return Product.from_string(catalogue[product_id])
+	if product_id in catalogue[product_entries_index]:
+		return Product.from_string(catalogue[product_entries_index][product_id])
+
+
+def store_catalogue_item_mapping(msg_id : str, mapping : CatalogueItemMapping):
+	if shop_exists(mapping.shop_id):
+		catalogue = get_catalogue(mapping.shop_id)
+		catalogue[msg_mapping_index][msg_id] = mapping.to_string()
+		catalogue.write()
+
+def delete_catalogue_item_mapping(shop_name : str, msg_id : str):
+	if shop_exists(shop_name):
+		catalogue = get_catalogue(shop_name)
+		if msg_id in catalogue[msg_mapping_index]:
+			del catalogue[msg_mapping_index][msg_id]
+			catalogue.write()
+
+def read_catalogue_item_mapping(shop_name : str, msg_id : str):
+	if shop_exists(shop_name):
+		catalogue = get_catalogue(shop_name)
+		if msg_id in catalogue[msg_mapping_index]:
+			return CatalogueItemMapping.from_string(catalogue[msg_mapping_index][msg_id])
+
+
+def delete_catalogue_item_mappings_for_shop(shop_name : str):
+	if shop_exists(shop_name):
+		catalogue = get_catalogue(shop_name)
+		for msg_id in catalogue[msg_mapping_index]:
+			del catalogue[msg_mapping_index][msg_id]
+		catalogue.write()
+
 
 def clear_catalogue(shop_name : str):
 	if shop_exists(shop_name):
 		catalogue = get_catalogue(shop_name)
-		for product_id in catalogue:
-			del catalogue[product_id]
+		catalogue[product_entries_index] = {}
+		catalogue[msg_mapping_index] = {}
 		catalogue.write()
 
 
@@ -525,7 +532,7 @@ async def remove_product(user_id : str, product_name : str, shop_name : str):
 	# First, remove its listing:
 	product.available = False
 	channel = channels.get_discord_channel(shop.storefront_channel_id)
-	msg_id = await update_catalogue_item_message(channel, product)
+	msg_id = await update_catalogue_item_message(shop, channel, product)
 	if msg_id is not None:
 		raise RuntimeError(f'Error: tried to remove product but it was still published, dump: {product.to_string()}')
 
@@ -597,7 +604,7 @@ async def post_catalogue(user_id : str, shop_name : str):
 	channel = channels.get_discord_channel(shop.storefront_channel_id)
 
 	for product in get_all_products(shop.shop_id):
-		msg_id = await update_catalogue_item_message(channel, product)
+		msg_id = await update_catalogue_item_message(shop, channel, product)
 		if msg_id is None:
 			if product.available:
 				raise RuntimeError(f'Error: failed to publish product, dump: {product.to_string()}')
@@ -622,7 +629,7 @@ async def post_catalogue_item(user_id : str, product_name : str, shop_name : str
 		return f'Error: there is no product called {product_name} at {shop.shop_id}'
 
 	channel = channels.get_discord_channel(shop.storefront_channel_id)
-	msg_id = await update_catalogue_item_message(channel, product)
+	msg_id = await update_catalogue_item_message(shop, channel, product)
 	if msg_id is None:
 		if product.available:
 			raise RuntimeError(f'Error: failed to publish product, dump: {product.to_string()}')
@@ -634,10 +641,10 @@ async def post_catalogue_item(user_id : str, product_name : str, shop_name : str
 		store_catalogue_item_mapping(msg_id, mapping)
 
 
-async def update_catalogue_item_message(channel, product):
+async def update_catalogue_item_message(shop : Shop, channel, product : Product):
 	if not product.available:
 		if product.storefront_msg_id is not None:
-			delete_catalogue_item_mapping(product.storefront_msg_id)
+			delete_catalogue_item_mapping(shop.shop_id, product.storefront_msg_id)
 			try:
 				message = await channel.fetch_message(product.storefront_msg_id)
 				await message.delete()
@@ -653,7 +660,7 @@ async def update_catalogue_item_message(channel, product):
 	previous_msg = product.storefront_msg_id
 	if previous_msg is not None:
 		# Instead of sending a new message, update the existing one
-		delete_catalogue_item_mapping(product.storefront_msg_id)
+		delete_catalogue_item_mapping(shop.shop_id, product.storefront_msg_id)
 		try:
 			message = await channel.fetch_message(product.storefront_msg_id)
 			await asyncio.gather(
@@ -775,7 +782,7 @@ async def process_reaction_in_catalogue(message, user_id : str, emoji : str):
 	if shop is None:
 		result.report = f'Error: tried to order {emoji} from shop but could not find shop.'
 		return result
-	cat_mapping : CatalogueItemMapping = read_catalogue_item_mapping(str(message.id))
+	cat_mapping : CatalogueItemMapping = read_catalogue_item_mapping(shop.shop_id, str(message.id))
 	if cat_mapping is None:
 		result.report = f'Error: tried to order {emoji} from {shop.name} but could not map the message to a product.'
 		return result
