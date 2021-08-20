@@ -25,11 +25,11 @@ async def init(bot, guild, clear_all=False):
 		players[user_id_mappings_index][highest_ever_index] = str(player_personal_role_start)
 	if clear_all:
 		for player_id in get_all_players():
-			await actors.clear_actor(bot, guild, player_id)
+			await actors.clear_actor(guild, player_id)
 			del players[player_id]
-			await channels.delete_all_personal_channels(bot, player_id)
+			await channels.delete_all_personal_channels(player_id)
 	await delete_all_player_roles(guild, spare_used=not clear_all)
-		#await channels.delete_all_personal_channels(bot)
+		#await channels.delete_all_personal_channels()
 		#await handles.clear_all_handles()
 		# TODO: only clear out players, not shops
 
@@ -198,7 +198,13 @@ def add_shop(player_id : str, shop_id : str):
 	player : PlayerData = read_player_data(player_id)
 	if shop_id not in player.shops:
 		player.shops.append(shop_id)
-	store_player_data(player)
+		store_player_data(player)
+
+def remove_shop(player_id : str, shop_id : str):
+	player : PlayerData = read_player_data(player_id)
+	if shop_id in player.shops:
+		player.shops = [s for s in player.shops if s != shop_id]
+		store_player_data(player)
 
 def get_shops(player_id : str):
 	return read_player_data(player_id).shops

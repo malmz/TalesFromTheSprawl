@@ -83,4 +83,5 @@ async def get_member_from_nick(nick : str):
 		members = await guild.fetch_members(limit=100).flatten()
 		return discord.utils.find(lambda m: m.nick == nick, members)
 
-
+async def get_all_channels():
+	return await guild.fetch_channels()

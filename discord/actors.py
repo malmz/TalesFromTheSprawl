@@ -21,11 +21,11 @@ actors = ConfigObj('actors.conf')
 actors_input = ConfigObj('actors_input.conf')
 
 
-async def init(bot, guild, clear_all=False):
+async def init(guild, clear_all=False):
 	if clear_all:
 		for actor_id in actors:
 			del actors[actor_id]
-		await channels.delete_all_personal_channels(bot)
+		await channels.delete_all_personal_channels()
 		await handles.clear_all_handles()
 	else:
 		for actor in get_all_actors():
@@ -34,12 +34,12 @@ async def init(bot, guild, clear_all=False):
 	await delete_all_actor_roles(guild, spare_used=(not clear_all))
 	actors.write()
 
-async def clear_actor(bot, guild, actor_id : str):
+async def clear_actor(guild, actor_id : str):
 	if actor_exists(actor_id):
 		actor = read_actor(actor_id)
 		del actors[actor_id]
 		actors.write()
-		await channels.delete_all_personal_channels(bot, actor.actor_id)
+		await channels.delete_all_personal_channels(channel_suffix=actor.actor_id)
 		await handles.clear_all_handles_for_actor(actor_id)
 		await delete_all_actor_roles(guild, spare_used=True)
 		return 'Done'

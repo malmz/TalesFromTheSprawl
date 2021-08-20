@@ -140,7 +140,7 @@ def init_chats_confobj():
 		chats[chats_with_logs_index] = {}
 
 
-async def init(bot, clear_all : bool=False):
+async def init(clear_all : bool=False):
 	init_chats_confobj()
 	# Loop through all chats that are supposed to exist according to conf files
 	for chat_name in chats[chats_with_logs_index]:
@@ -164,13 +164,14 @@ async def init(bot, clear_all : bool=False):
 	if clear_all:
 		chats[chat_hub_msg_data_index] = {}
 		chats[chats_with_logs_index] = {}
+		channel_list = await channels.get_all_chat_hub_channels()
 		await asyncio.gather(
 			*[asyncio.create_task(c.purge())
 			for c
-			in channels.get_all_chat_hub_channels(bot)])
+			in channel_list])
 
 	# Any left-over channels after this should be deleted
-	await channels.delete_all_chats(bot)
+	await channels.delete_all_chats()
 	for actor_id in chat_channel_budget:
 		del chat_channel_budget[actor_id]
 		chat_channel_budget.write()

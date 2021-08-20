@@ -127,11 +127,12 @@ async def init_discord_channel(discord_channel):
         print(f'Will not create channel state for channel {discord_channel.name} which has no category')
 
 
-async def init_channels(bot):
+async def init():
     for elem in channel_states:
         del channel_states[elem]
     channel_states.write()
-    task_list = (asyncio.create_task(init_discord_channel(c)) for c in bot.get_all_channels())
+    channel_list = await server.get_all_channels()
+    task_list = (asyncio.create_task(init_discord_channel(c)) for c in channel_list)
     await asyncio.gather(*task_list)
 
 async def init_channel_state(discord_channel):
@@ -263,20 +264,20 @@ chat_hub_base = 'chat_hub_'
 order_flow_base = 'orders_'
 # TODO: some sort of dictionary for these, with an enum type
 
-async def delete_all_personal_channels(bot, channel_suffix : str=None):
-    task_list = (asyncio.create_task(c.delete()) for c in get_all_personal_channels(bot, channel_suffix))
+async def delete_all_personal_channels(channel_suffix : str=None):
+    channels_list = await get_all_personal_channels(channel_suffix)
+    task_list = (asyncio.create_task(c.delete()) for c in channels_list)
     await asyncio.gather(*task_list)
 
-def get_all_personal_channels(bot, channel_suffix : str=None):
-    for channel in bot.get_all_channels():
-        if is_personal_channel(channel, channel_suffix):
-            yield channel
+async def get_all_personal_channels(channel_suffix : str=None):
+    channel_list = await server.get_all_channels()
+    return [c for c in channel_list if is_personal_channel(c, channel_suffix)]
 
-def get_all_chat_hub_channels(bot, channel_suffix : str=None):
-    for channel in bot.get_all_channels():
-        if is_chat_hub(channel.name):
-            if channel_suffix is None or channel.name.endswith(channel_suffix):
-                yield channel
+async def get_all_chat_hub_channels(channel_suffix : str=None):
+    channel_list = await server.get_all_channels()
+    def is_match(channel_name : str):
+        return is_chat_hub(channel_name) and (channel_suffix is None or channel_name.endswith(channel_suffix))
+    return [c for c in channel_list if is_match(c.name)]
 
 async def create_personal_channel(guild, role, channel_name : str, read_only : bool=False):
     overwrites = server.generate_overwrites_own_new_private_channel(role, read_only)
@@ -342,14 +343,14 @@ async def create_chat_session_channel_no_role(guild, discord_channel_name : str,
     base_overwrites = server.generate_base_overwrites(private = True, read_only = read_only)
     return await create_discord_channel(guild, base_overwrites, discord_channel_name, chats_category_name)
 
-async def delete_all_chats(bot):
-    task_list = (asyncio.create_task(c.delete()) for c in get_all_chat_channels(bot))
+async def delete_all_chats():
+    channel_list = await get_all_chat_channels()
+    task_list = (asyncio.create_task(c.delete()) for c in channel_list)
     await asyncio.gather(*task_list)
 
-def get_all_chat_channels(bot):
-    for channel in bot.get_all_channels():
-        if is_chat_channel(channel):
-            yield channel
+async def get_all_chat_channels():
+    channel_list = await server.get_all_channels()
+    return [c for c in channel_list if is_chat_channel(c)]
 
 
 ### Shop channels:
@@ -360,11 +361,11 @@ async def create_shop_channel(guild, channel_name : str):
     overwrites = server.generate_base_overwrites(private = False, read_only = True)
     return await create_discord_channel(guild, overwrites, channel_name, shops_category_name)
 
-async def delete_all_shops(bot):
-    task_list = (asyncio.create_task(c.delete()) for c in get_all_shop_related_channels(bot))
+async def delete_all_shops():
+    channel_list = await get_all_shop_related_channels()
+    task_list = (asyncio.create_task(c.delete()) for c in channel_list)
     await asyncio.gather(*task_list)
 
-def get_all_shop_related_channels(bot):
-    for channel in bot.get_all_channels():
-        if is_shop_channel(channel) or is_order_flow(channel.name):
-            yield channel
+async def get_all_shop_related_channels():
+    channel_list = await server.get_all_channels()
+    return [c for c in channel_list if is_shop_channel(c) or is_order_flow(c.name)]

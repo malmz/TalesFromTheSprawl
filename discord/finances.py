@@ -263,6 +263,9 @@ async def try_to_pay(transaction : Transaction, from_reaction : bool=False):
 # Record for transactions:
 
 async def record_transaction(transaction : Transaction):
+    if int(transaction.amount) == 0:
+        # No need to write anything for 0-transactions, should they occur
+        return
     record_payer = generate_record_for_payer(transaction)
     if record_payer is not None:
         await actors.write_financial_record(

@@ -53,13 +53,13 @@ async def on_ready():
     clear_all = False
     guild = discord.utils.find(lambda g: g.name == guild_name, bot.guilds)
     await server.init(bot, guild)
-    await actors.init(bot, guild, clear_all=clear_all)
+    await actors.init(guild, clear_all=clear_all)
     await players.init(bot, guild, clear_all=clear_all)
-    await channels.init_channels(bot)
+    await channels.init()
     await handles.init(clear_all)
     finances.init_finances()
-    await chats.init(bot, clear_all=clear_all)
-    await shops.init(bot, guild, clear_all=clear_all)
+    await chats.init(clear_all=clear_all)
+    await shops.init(guild, clear_all=clear_all)
     print('Initialization complete.')
     ready = True
 
@@ -163,7 +163,7 @@ async def burn_command(ctx, burner_id : str=None):
 @bot.command(name='clear_all_handles', help='Admin-only: clear all handles, reinitializing players to their player_id only.')
 async def clear_handles_command(ctx, burner_id : str=None):
     await handles.clear_all_handles()
-    await actors.init(bot, guild, clear_all=False)
+    await actors.init(guild, clear_all=False)
     await ctx.send('Done.')
 
 
@@ -307,7 +307,7 @@ async def clear_all_players_command(ctx):
 @bot.command(name='clear_all_actors', help='Admin-only: de-initialise all actors (players and shops).')
 @commands.has_role('gm')
 async def clear_all_actors_command(ctx):
-    await actors.init(bot, guild, clear_all=True)
+    await actors.init(guild, clear_all=True)
     try:
         await ctx.send('Done.')
     except discord.errors.NotFound:
@@ -317,7 +317,7 @@ async def clear_all_actors_command(ctx):
 @bot.command(name='clear_actor', help='Admin-only: de-initialise an actor (player or shop).')
 @commands.has_role('gm')
 async def clear_actor_command(ctx, actor_id : str):
-    report = await actors.clear_actor(bot, guild, actor_id)
+    report = await actors.clear_actor(guild, actor_id)
     try:
         await ctx.send(report)
     except discord.errors.NotFound:
@@ -399,7 +399,7 @@ async def close_chat_other_command(ctx, my_handle : str, other_handle : str):
 @bot.command(name='clear_all_chats', help='Admin-only: delete all chats and chat channels for all users.')
 @commands.has_role('gm')
 async def clear_all_chats_command(ctx):
-    await chats.init(bot, clear_all=True)
+    await chats.init(clear_all=True)
     await ctx.send('Done.')
 
 
@@ -418,7 +418,17 @@ async def create_shop_command(ctx, shop_name : str=None, player_id : str=None):
     if report is not None:
         await ctx.send(report)
 
-@bot.command(name='add_product', help='Admin-only: add a new product to a shop.')
+@bot.command(name='employ', help='Employee only: add a new player to a shop')
+async def employ_command(ctx, player_id : str=None, shop_name : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = await shops.process_employ_command(str(ctx.message.author.id), ctx.guild, player_id, shop_name)
+    if report is not None:
+        await ctx.send(report)
+
+
+@bot.command(name='add_product', help='Employee only: add a new product to a shop.')
 async def add_product_command(ctx,
     product_name : str=None,
     description : str=None,
@@ -432,63 +442,80 @@ async def add_product_command(ctx,
     if report is not None:
         await ctx.send(report)
 
-@bot.command(name='edit_product', help='Admin-only: edit a product.')
-@commands.has_role('gm') # TODO: allow shop owner / employee to do this live?
+@bot.command(name='edit_product', help='Employee only: edit a product.')
 async def edit_product_command(ctx,
-    shop_name : str=None,
     product_name : str=None,
     key : str=None,
-    value : str=None):
+    value : str=None,
+    shop_name : str=None):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = shops.edit_product(shop_name, product_name, key, value)
+    report = shops.edit_product_from_command(str(ctx.message.author.id), product_name, key, value, shop_name)
     if report is not None:
         await ctx.send(report)
 
-@bot.command(name='in_stock', help='Admin-only: set a product to be in stock/out of stock.')
-@commands.has_role('gm') # TODO: allow shop owner / employee to do this live?
-async def in_stock_command(ctx,
-    shop_name : str=None,
+@bot.command(name='remove_product', help='Employee only: delete a product from a shop.')
+async def remove_product_command(ctx,
     product_name : str=None,
-    value : bool=True):
+    shop_name : str=None):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = await shops.edit_product(shop_name, product_name, 'in_stock', str(value))
+    report = await shops.remove_product(str(ctx.message.author.id), product_name, shop_name)
     if report is not None:
         await ctx.send(report)
 
-@bot.command(name='clear_orders', help='Admin-only: clear a shop\'s orders and update its menu.')
-@commands.has_role('gm') # TODO: allow shop owner / employee to do this live?
+
+@bot.command(name='in_stock', help='Employee only: set a product to be in stock/out of stock.')
+async def in_stock_command(ctx,
+    product_name : str=None,
+    value : bool=True,
+    shop_name : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = await shops.edit_product_from_command(str(ctx.message.author.id), product_name, 'in_stock', str(value), shop_name)
+    if report is not None:
+        await ctx.send(report)
+
+@bot.command(name='clear_orders', help='Shop owner only: clear a shop\'s orders and update its menu.')
 async def clear_orders_command(ctx, shop_name : str=None):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    await shops.reinitialize(shop_name)
+    await shops.reinitialize(str(ctx.message.author.id), shop_name)
     await publish_menu_command(ctx, shop_name)
 
 
-@bot.command(name='publish_menu', help='Admin-only: post a shop\'s catalogue/menu.')
-@commands.has_role('gm') # TODO: allow shop owner / employee to do this live?
-async def publish_menu_command(ctx, shop_name : str=None, product_name : str=None):
+@bot.command(name='publish_menu', help='Employee only: post a shop\'s catalogue/menu.')
+async def publish_menu_command(ctx, product_name : str=None, shop_name : str=None):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
     if product_name is not None:
-        report = await shops.post_catalogue_item(shop_name, product_name)
+        report = await shops.post_catalogue_item(str(ctx.message.author.id), product_name, shop_name)
     else:
-        report = await shops.post_catalogue(shop_name)
+        report = await shops.post_catalogue(str(ctx.message.author.id), shop_name)
     if report is not None:
         await ctx.send(report)
 
-@bot.command(name='order', help='Admin-only: order a product from a shop.')
-@commands.has_role('gm')
-async def order_command(ctx, product_name : str=None, shop_name : str=None, buyer : str=None):
+@bot.command(name='order', help='Order a product from a shop.')
+async def order_command(ctx, product_name : str=None, shop_name : str=None):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = await shops.order_product_from_command(shop_name, product_name, buyer)
+    report = await shops.order_product_from_command(str(ctx.message.author.id), shop_name, product_name)
+    if report is not None:
+        await ctx.send(report)
+
+@bot.command(name='order_other', help='Admin-only: order a product from a shop for someone else.')
+@commands.has_role('gm')
+async def order_other_command(ctx, product_name : str=None, shop_name : str=None, buyer : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = await shops.order_product_for_buyer(shop_name, product_name, buyer)
     if report is not None:
         await ctx.send(report)
 
@@ -500,7 +527,7 @@ async def clear_shops_command(ctx):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    await shops.init(bot, guild, clear_all=True)
+    await shops.init(guild, clear_all=True)
     await ctx.send('Done.')
 
 

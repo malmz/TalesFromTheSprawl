@@ -63,36 +63,43 @@ async def player_setup_for_new_handle(handle : Handle):
 	if info is None:
 		return None
 	report = f'Loading known data for **{handle.handle_id}**...\n\n'
-	any_regular = False
-	for (other_handle_id, amount) in info.other_handles:
-		other_handle = await handles.create_handle(handle.actor_id, other_handle_id, HandleTypes.Regular)
-		if other_handle.handle_type != HandleTypes.Unused:
-			report += f'- Connected alias: regular handle **{other_handle_id}**\n'
-			await finances.add_funds(other_handle, int(amount))
-			any_regular = True
-	if any_regular:
-		report += '\n'
-	any_burners = False
-	for (other_handle_id, amount) in info.burners:
-		other_handle = await handles.create_handle(handle.actor_id, other_handle_id, HandleTypes.Burner)
-		if other_handle.handle_type != HandleTypes.Unused:
-			report += f'- Connected alias: burner handle **{other_handle_id}**\n'
-			await finances.add_funds(other_handle, int(amount))
-			any_burners = True
-	if any_burners:
-		report += '  (Use \".burn <burner_name>\" to destroy a burner and erase its tracks)\n\n'
-	any_npcs = False
-	for (other_handle_id, amount) in info.npc_handles:
-		other_handle = await handles.create_handle(handle.actor_id, other_handle_id, HandleTypes.NPC)
-		if other_handle.handle_type != HandleTypes.Unused:
-			report += f'  [OFF: added **{other_handle_id}** as an NPC account.]\n'
-			await finances.add_funds(other_handle, int(amount))
-			any_npcs = True
-	if any_npcs:
-		report += f'  [OFF: NPC accounts let you act as someone else, and cannot be traced to your other handles.]\n\n'
 	if finances.can_have_finances(handle.handle_type):
 		await finances.add_funds(handle, int(info.starting_money))
-		report += f'Current balance of **{handle.handle_id}**: {coin} **{info.starting_money}**\n\n'
+		report += f'Initial balance of **{handle.handle_id}**: {coin} **{info.starting_money}**\n\n'
+
+	report += await setup_alternate_handles(handle, info.other_handles, HandleTypes.Regular)
+	report += await setup_alternate_handles(handle, info.burner, HandleTypes.Burners)
+	report += await setup_alternate_handles(handle, info.npc_handles, HandleTypes.NPC)
 
 	report += f'All data loaded. Welcome, **{handle.handle_id}**.'
 	return report
+
+
+async def setup_alternate_handles(main_handle, aliases, alias_type : HandleTypes):
+	report = ''
+	any_found = False
+	for (other_handle_id, amount) in aliases:
+		other_handle = await handles.create_handle(main_handle.actor_id, other_handle_id, alias_type)
+		if other_handle.handle_type != HandleTypes.Unused:
+			report += get_connected_alias_report(other_handle_id, alias_type)
+			await finances.add_funds(other_handle, int(amount))
+			any_found = True
+	if any_found:
+		report += get_all_connected_aliases_of_type_report(alias_type)
+	return report
+
+def get_connected_alias_report(handle_id : str, handle_type : HandleTypes):
+	if handle_type == HandleTypes.Regular:
+		return f'- Connected alias: regular handle **{handle_id}**\n'
+	elif handle_type == HandleTypes.Burner:
+		return f'- Connected alias: burner handle **{handle_id}**\n'
+	elif handle_type == HandleTypes.NPC:
+		return f'  [OFF: added **{handle_id}** as an NPC handle.]\n'
+
+def get_all_connected_aliases_of_type_report(handle_type : HandleTypes):
+	if handle_type == HandleTypes.Regular:
+		return '\n'
+	elif handle_type == HandleTypes.Burner:
+		return '  (Use \".burn <burner_name>\" to destroy a burner and erase its tracks)\n\n'
+	elif handle_type == HandleTypes.NPC:
+		return '  [OFF: NPC handles let you act as someone else, and cannot be traced to your other handles.]\n\n'

@@ -92,6 +92,12 @@ class Shop(object):
 	def to_string(self):
 		return simplejson.dumps(self.__dict__)
 
+class FindShopResult(object):
+	def __init__(self, shop : Shop=None, error_report : str=None):
+		self.shop = shop
+		self.error_report = error_report
+
+
 class Product(object):
 	def __init__(
 		self,
@@ -178,11 +184,16 @@ class Order(object):
 
 ### Init, getters, setters, deleters
 
+# TODO: gm-only function to remove a single shop
+# Necessary as fail-safe if we want players to create their own shops
 
-async def init(bot, guild, clear_all=False):
+async def init(guild, clear_all=False):
 	if clear_all:
 		for shop_name in get_all_shop_ids():
-			await actors.clear_actor(bot, guild, shop_name)
+			shop : Shop = read_shop(shop_name)
+			for player_id in shop.employees:
+				players.remove_shop(player_id, shop.shop_id)
+			await actors.clear_actor(guild, shop_name)
 			clear_catalogue(shop_name)
 			del shops[shop_data_index][shop_name]
 		for channel in shops[channel_mapping_index]:
@@ -190,7 +201,7 @@ async def init(bot, guild, clear_all=False):
 		for cat_item in shops[catalogue_mapping_index]:
 			del shops[catalogue_mapping_index][cat_item]
 		shops.write()
-		await channels.delete_all_shops(bot)
+		await channels.delete_all_shops()
 
 	if shop_data_index not in shops:
 		shops[shop_data_index] = {}
@@ -215,10 +226,12 @@ async def delete_if_shop_role(role, spare_used : bool):
 			await role.delete()
 
 
-async def reinitialize(shop_name : str):
-	shop : Shop = read_shop(shop_name)
-	if shop is None:
-		return
+async def reinitialize(user_id : str, shop_name : str):
+	result : FindShopResult = find_shop_for_command(user_id, shop_name, must_be_owner=True)
+	if result.error_report is not None or result.shop is None:
+		return result.error_report
+	shop : Shop = result.shop
+
 	order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
 	storefront_channel = channels.get_discord_channel(shop.storefront_channel_id)
 	await asyncio.gather(
@@ -316,6 +329,13 @@ def store_product(shop_name : str, product : Product):
 		catalogue[product.product_id] = product.to_string()
 		catalogue.write()
 
+def delete_product(shop_name : str, product_id : str):
+	if shop_exists(shop_name):
+		catalogue = get_catalogue(shop_name)
+		if product_id in catalogue:
+			del catalogue[product_id]
+			catalogue.write()
+
 def read_product(shop_name : str, product_name : str):
 	if shop_exists(shop_name):
 		catalogue = get_catalogue(shop_name)
@@ -374,15 +394,53 @@ async def create_shop(guild, shop_name : str, owner_player_id : str):
 		report = report + '\n' + employment_report
 	return report
 
-async def employ(guild, player_id : str, shop : Shop):
-	report = None
+def find_shop_for_command(user_id : str, shop_name : str, must_be_owner : bool=False):
+	if user_id is None:
+		raise RuntimeError('Tried to find a shop, but the action initiator user_id was not found.')
 
+	result = FindShopResult()
+	if shop_name is not None and not shop_exists(shop_name):
+		result.error_report = f'Error: there is no shop named {shop_name}.'
+		return result
+
+	player_id = players.get_player_id(user_id)
+	shops_of_player = players.get_shops(player_id)
+	if len(shops_of_player) == 0:
+		result.error_report = f'Error: player {player_id} does not have access to any shops'
+		return result
+
+	if shop_name is None:
+		# If no shop given, assume the player wants us to use their first one
+		# If a player works at more than one shop, they will have to use the
+		# full syntax of specifying which shop they mean
+		shop_name = shops_of_player[0]
+		if not shop_exists(shop_name):
+			result.error_report = f'Error: there is no shop named {shop_name}.'
+			return result
+	elif shop_name.lower() not in shops_of_player:
+		result.error_report = f'Error: player {player_id} does not have access to shop {shop_name}.'
+		return result
+
+
+	shop : Shop = read_shop(shop_name)
+	if must_be_owner and shop.owner_id != player_id:
+		result.error_report = f'Error: this action is only permitted for shop owner, which is {shop.owner_id}.'
+		return result
+
+	result.shop = shop
+	return result
+
+
+
+# Employees:
+
+async def employ(guild, player_id : str, shop : Shop):
 	member = await server.get_member_from_nick(player_id)
 	if not players.player_exists(player_id) or member is None:
 		return f'Error: player {player_id} does not exist, or does not conform to the server nick scheme.'
 
 	if player_id in shop.employees:
-		return f'Error: player {player_id} already works at {shop_name}.'
+		return f'Error: player {player_id} already works at {shop.shop_id}.'
 
 	role = actors.get_actor_role(guild, shop.actor_id)
 	new_roles = member.roles
@@ -392,21 +450,25 @@ async def employ(guild, player_id : str, shop : Shop):
 	players.add_shop(player_id, shop.actor_id)
 	shop.employees.append(player_id)
 	store_shop(shop)
-	return report
+	return (f'Added player {player_id} as an employee at {shop.name}. '
+		+ 'They now have access to the shop\'s finances, chat and order channels, and can edit the product catalogue.')
 
-#TODO: add bot command to do this
-async def process_employ_command(guild, player_id : str, shop_name : str):
-	if player_id is None:
+async def process_employ_command(user_id : str, guild, new_employee_player_id : str, shop_name : str):
+	result : FindShopResult = find_shop_for_command(user_id, shop_name)
+	if result.error_report is not None or result.shop is None:
+		return result.error_report
+	shop : Shop = result.shop
+
+	if new_employee_player_id is None:
 		return 'Error: must give a player ID'
-	if not players.player_exists(player_id, expect_to_find=False):
-		return f'Error: player {player_id} does not exist.'
-	if shop_name is None:
-		return 'Error: must give a shop name'
-	if not shop_exists(shop_name):
-		return f'Error: shop {shop_name} does not exist'
+	if not players.player_exists(new_employee_player_id):
+		return f'Error: player {new_employee_player_id} does not exist.'
 
-	shop : Shop = read_shop(shop_name)
-	return employ(guild, player_id, shop)
+	return await employ(guild, new_employee_player_id, shop)
+
+
+
+
 
 
 ## Adding and editing products for a shop
@@ -423,31 +485,19 @@ def get_emoji_for_new_product(symbol : str):
 
 
 def add_product(user_id : str, product_name : str, description : str, price : int, symbol : str, shop_name : str):
-	if user_id is None:
-		raise RuntimeError('Tried to add product but no user_id found.')
-	player_id = players.get_player_id(user_id)
-	shops_of_player = players.get_shops(player_id)
-	if len(shops_of_player) == 0:
-		return f'Error: player {player_id} does not have access to any shops'
-	if shop_name is None:
-		# If no shop given, assume the player wants us to use their first one
-		# If a player works at more than one shop, they will have to use the
-		# full syntax of specifying which shop they mean
-		shop_name = shops_of_player[0]
-	else:
-		if shop_name.lower() not in shops_of_player:
-			return f'Error: player {player_id} does not have access to shop {shop_name}'
+	result : FindShopResult = find_shop_for_command(user_id, shop_name)
+	if result.error_report is not None or result.shop is None:
+		return result.error_report
+	shop : Shop = result.shop
 
 	if product_name is None:
-		return f'Error: must give a product name; use \".add_product <product_name>. (Optional: add description, price, and type/symbol)\"'
-	if not shop_exists(shop_name):
-		return f'Error: shop {shop_name} does not exist'
-	if product_exists(shop_name, product_name):
-		existing_product = read_product(shop_name, product_name)
+		return f'Error: must give a product name; use \".add_product <product_name> [Optional: description, price, type/symbol]\"'
+	if product_exists(shop.shop_id, product_name):
+		existing_product = read_product(shop.shop_id, product_name)
 		if existing_product.name == product_name:
-			return f'Error: the shop {shop_name} already has a product called {product_name}.'
+			return f'Error: the shop {shop.shop_id} already has a product called {product_name}.'
 		else:
-			return (f'Error: cannot create {product_name} at {shop_name} because its internal ID '
+			return (f'Error: cannot create {product_name} at {shop.shop_id} because its internal ID '
 				+ f'({product_name.lower()}) clashes with {existing_product.name}.)')
 	emoji = get_emoji_for_new_product(symbol)
 
@@ -456,19 +506,48 @@ def add_product(user_id : str, product_name : str, description : str, price : in
 		description=description if description is not None else f'Order a {product_name}!',
 		price=price,
 		emoji=emoji)
-	store_product(shop_name, product)
-	return (f'Added product {product_name} to {shop_name}.')
+	store_product(shop.shop_id, product)
+	return (f'Added product {product_name} to {shop.shop_id}.')
 
 
-def edit_product(shop_name : str, product_name : str, key : str, value : str):
-	if shop_name is None:
-		return 'Error: must give a shop name'
+async def remove_product(user_id : str, product_name : str, shop_name : str):
+	result : FindShopResult = find_shop_for_command(user_id, shop_name)
+	if result.error_report is not None or result.shop is None:
+		return result.error_report
+	shop : Shop = result.shop
+
 	if product_name is None:
-		return f'Error: must give a product name; use \".add_product {shop_name} <product_name>. (Optional: add description, price, and type/symbol)\"'
-	if not shop_exists(shop_name):
-		return f'Error: shop {shop_name} does not exist'
+		return f'Error: must give a product name; use \".remove_product <product_name>\"'
+	if not product_exists(shop.shop_id, product_name):
+		return f'Error: shop {shop.shop_id} has no product called {product_name}.'
+
+	product = read_product(shop.shop_id, product_name)
+	# First, remove its listing:
+	product.available = False
+	channel = channels.get_discord_channel(shop.storefront_channel_id)
+	msg_id = await update_catalogue_item_message(channel, product)
+	if msg_id is not None:
+		raise RuntimeError(f'Error: tried to remove product but it was still published, dump: {product.to_string()}')
+
+	# Then, remove it completely from database:
+	delete_product(shop.shop_id, product.product_id)
+
+	return (f'Removed product {product_name} from {shop.shop_id}.')
+
+
+def edit_product_from_command(user_id : str, product_name : str, key : str, value : str, shop_name : str):
+	result : FindShopResult = find_shop_for_command(user_id, shop_name)
+	if result.error_report is not None or result.shop is None:
+		return result.error_report
+	shop : Shop = result.shop
+	edit_product(shop, product_name, key, value)
+
+
+def edit_product(shop : Shop, product_name : str, key : str, value : str):
+	if product_name is None:
+		return f'Error: must give a product name; use \".add_product {shop.shop_id} <product_name>. (Optional: add description, price, and type/symbol)\"'
 	if key is None:
-		return f'Error: must give the property to edit. usage: \".edit_product {shop_name} {product_name} <property> <value>\"'
+		return f'Error: must give the property to edit. usage: \".edit_product {shop.shop_id} {product_name} <property> <value>\"'
 
 	key = key.lower()
 	if key in ['available', 'in_stock'] and value is None:
@@ -476,7 +555,7 @@ def edit_product(shop_name : str, product_name : str, key : str, value : str):
 	if value is None:
 		return f'Error: must set the new value of property \"{key}\"'
 
-	product = read_product(shop_name, product_name)
+	product = read_product(shop.shop_id, product_name)
 	edited = False
 
 	if key == 'description':
@@ -502,20 +581,19 @@ def edit_product(shop_name : str, product_name : str, key : str, value : str):
 		except ValueError:
 			return f'Error: cannot set price to \"{value}\"; must be a number.'
 	if edited:
-		store_product(shop_name, product)
+		store_product(shop.shop_id, product)
 		return 'Done.'
 
 
 
 ### The menu/catalogue: product information messages where players can order by pressing reactions
 
-async def post_catalogue(shop_name : str):
-	if shop_name is None:
-		return 'Error: must give a shop name'
-	if not shop_exists(shop_name):
-		return f'Error: shop {shop_name} does not exist'
+async def post_catalogue(user_id : str, shop_name : str):
+	result : FindShopResult = find_shop_for_command(user_id, shop_name)
+	if result.error_report is not None or result.shop is None:
+		return result.error_report
+	shop : Shop = result.shop
 
-	shop : Shop = read_shop(shop_name)
 	channel = channels.get_discord_channel(shop.storefront_channel_id)
 
 	for product in get_all_products(shop.shop_id):
@@ -530,39 +608,51 @@ async def post_catalogue(shop_name : str):
 			mapping = CatalogueItemMapping(shop.shop_id, product.product_id)
 			store_catalogue_item_mapping(msg_id, mapping)
 		product.storefront_msg_id = msg_id
-		store_product(shop_name, product)
+		store_product(shop.shop_id, product)
 	return 'Done.'
 
-async def post_catalogue_item(shop_name, product_name):
-	if shop_name is None:
-		return 'Error: must give a shop name'
-	if not shop_exists(shop_name):
-		return f'Error: shop {shop_name} does not exist'
+async def post_catalogue_item(user_id : str, product_name : str, shop_name : str):
+	result : FindShopResult = find_shop_for_command(user_id, shop_name)
+	if result.error_report is not None or result.shop is None:
+		return result.error_report
+	shop : Shop = result.shop
 
-	product = read_product(shop_name, product_name)
+	product = read_product(shop.shop_id, product_name)
 	if product is None:
-		return f'Error: there is no product called {product_name} at {shop_name}'
+		return f'Error: there is no product called {product_name} at {shop.shop_id}'
 
-	shop : Shop = read_shop(shop_name)
 	channel = channels.get_discord_channel(shop.storefront_channel_id)
-
 	msg_id = await update_catalogue_item_message(channel, product)
-	mapping = CatalogueItemMapping(shop.shop_id, product.product_id)
-	store_catalogue_item_mapping(msg_id, mapping)
+	if msg_id is None:
+		if product.available:
+			raise RuntimeError(f'Error: failed to publish product, dump: {product.to_string()}')
+		else:
+			# Listing has been removed for non-available item, no issue here
+			pass
+	else:
+		mapping = CatalogueItemMapping(shop.shop_id, product.product_id)
+		store_catalogue_item_mapping(msg_id, mapping)
 
 
 async def update_catalogue_item_message(channel, product):
-	print(f'{product.to_string()}')
-
 	if not product.available:
 		if product.storefront_msg_id is not None:
 			delete_catalogue_item_mapping(product.storefront_msg_id)
+			try:
+				message = await channel.fetch_message(product.storefront_msg_id)
+				await message.delete()
+			except discord.errors.NotFound:
+				# Reference to a message in storefront that is no longer available
+				# Doesn't matter since the product should not be available anyway
+				pass
 		return None
 
+	# Since product is set to available, we need to either post the message or
+	# edit the existing one to updated description
 	content = generate_catalogue_item_message(product)
 	previous_msg = product.storefront_msg_id
 	if previous_msg is not None:
-		# Try updating the message instead of sending new one:
+		# Instead of sending a new message, update the existing one
 		delete_catalogue_item_mapping(product.storefront_msg_id)
 		try:
 			message = await channel.fetch_message(product.storefront_msg_id)
@@ -584,7 +674,6 @@ async def update_catalogue_item_message(channel, product):
 	return str(message.id)
 
 async def edit_catalogue_item_message(channel, product):
-	print(f'{product.to_string()}')
 	content = generate_catalogue_item_message(product)
 	message = await channel.send(content)
 	if product.in_stock:
@@ -592,7 +681,6 @@ async def edit_catalogue_item_message(channel, product):
 	return str(message.id)
 
 def generate_catalogue_item_message(product):
-	print(f'Generating message for product: {product.to_string()}')
 	if product.in_stock:
 		post = f'{product.emoji}   __**{product.name}**__\n'
 	else:
@@ -605,40 +693,45 @@ def generate_catalogue_item_message(product):
 
 ### Making an order:
 
-async def order_product_from_command(shop_name : str, product_name : str, payer_handle : str, delivery_id : str=None):
+async def order_product_from_command(user_id : str, shop_name : str, product_name : str):
+	player_id = players.get_player_id(user_id)
+	buyer_handle = handles.get_active_handle_id(player_id)
+	# TODO: also find the delivery ID of the current player (stored on a player basis, not a handle basis)
+	await order_product_for_buyer(shop_name, product_name, buyer_handle)
+
 	product = read_product(shop_name, product_name)
 	if product is None:
 		if product_name is None:
-			product_name = ''
-		if shop_name is None:
-			shop_name = ''
-		return f'Error: cannot find product {product_name} at shop {shop_name}.'
+			return f'Error: no product name given. Use \".order <product_name> <shop_name>\"'
+		elif shop_name is None:
+			return f'Error: no shop name given. Use \".order {product_name} <shop_name>\"'
 
-	if payer_handle is None:
+async def order_product_for_buyer(shop_name : str, product_name : str, buyer_handle_id : str, delivery_id : str=None):
+	if buyer_handle_id is None:
 		return 'Error: no payer ID supplied.'
-	payer_handle : Handle = handles.get_handle(payer_handle)
-	if not handles.is_active_handle_type(payer_handle.handle_type):
-		return f'Error: cannot find buyer handle {payer_handle.handle_id}.'
+	buyer_handle : Handle = handles.get_handle(buyer_handle_id)
+	if not handles.is_active_handle_type(buyer_handle.handle_type):
+		return f'Error: cannot find buyer handle {buyer_handle.handle_id}.'
 
 	if delivery_id is None:
-		delivery_id = payer_handle.handle_id
+		delivery_id = buyer_handle.handle_id
 
 	shop : Shop = read_shop(shop_name)
 	shop_id = shop.shop_id
 
-	result : ActionResult = await order_product(shop, product, payer_handle, delivery_id)
+	result : ActionResult = await order_product(shop, product, buyer_handle, delivery_id)
 	return result.report
 
 
-async def order_product(shop : Shop, product : Product, payer_handle : Handle, delivery_id : str):
+async def order_product(shop : Shop, product : Product, buyer_handle : Handle, delivery_id : str):
 	result = ActionResult()
 	if not product.in_stock:
 		return f'Sorry - {shop_name} is all out of {product_name}!'
 
 	# TODO: use "from_reaction" somehow to ensure not all transaction failures end up in cmd line?
 	transaction = Transaction(
-		payer=payer_handle.handle_id,
-		payer_actor=payer_handle.actor_id,
+		payer=buyer_handle.handle_id,
+		payer_actor=buyer_handle.actor_id,
 		recip=shop.shop_id,
 		recip_actor=shop.actor_id,
 		amount=product.price,
@@ -698,9 +791,9 @@ async def process_reaction_in_catalogue(message, user_id : str, emoji : str):
 		return result
 
 	player_id = players.get_player_id(user_id, expect_to_find=True)
-	payer_handle : Handle = handles.get_active_handle(player_id)
+	buyer_handle : Handle = handles.get_active_handle(player_id)
 
 	# TODO: find delivery ID for this player
 
-	result = await order_product(shop, product, payer_handle, delivery_id=payer_handle.handle_id)
+	result = await order_product(shop, product, buyer_handle, delivery_id=buyer_handle.handle_id)
 	return result
