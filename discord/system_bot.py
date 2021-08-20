@@ -28,6 +28,9 @@ from common import coin
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 guild_name = os.getenv('GUILD_NAME')
+# Note: for the .table command to work, you must manually set up
+# the in-game bar/restaurant as a shop, using .create_shop etc.
+main_shop = os.getenv('MAIN_SHOP_NAME')
 
 intents = discord.Intents.default()
 intents.members = True
@@ -516,6 +519,24 @@ async def order_other_command(ctx, product_name : str=None, shop_name : str=None
         await swallow(ctx.message);
         return
     report = await shops.order_product_for_buyer(shop_name, product_name, buyer)
+    if report is not None:
+        await ctx.send(report)
+
+@bot.command(name='set_delivery_id', help='Set you delivery option at a shop.')
+async def set_delivery_id_command(ctx, delivery_id : str=None, shop_name : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = shops.set_delivery_id_from_command(str(ctx.message.author.id), delivery_id, shop_name)
+    if report is not None:
+        await ctx.send(report)
+
+@bot.command(name='table', help=f'Tell {main_shop} where to bring your order Valid options are table numbers, \"bar\", and \"call\".')
+async def set_delivery_id_command(ctx, option : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = shops.set_delivery_table_from_command(str(ctx.message.author.id), option, main_shop)
     if report is not None:
         await ctx.send(report)
 

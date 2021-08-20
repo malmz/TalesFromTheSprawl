@@ -24,6 +24,7 @@ actors_input = ConfigObj('actors_input.conf')
 async def init(guild, clear_all=False):
 	if clear_all:
 		for actor_id in actors:
+			# TODO: clear out/archive chat participants from all chats? Not required unless we expect to create and destroy chats during game
 			del actors[actor_id]
 		await channels.delete_all_personal_channels()
 		await handles.clear_all_handles()
@@ -62,6 +63,7 @@ async def is_actor_role(name :str):
 
 def get_actor_role(guild, actor_id : str):
 	actor = read_actor(actor_id)
+	print(f'Looking for {actor.actor_index} in {guild.roles}')
 	if actor is not None:
 		return discord.utils.find(lambda role: role.name == actor.actor_index, guild.roles)
 

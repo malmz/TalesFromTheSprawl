@@ -3,6 +3,7 @@
 import discord
 import asyncio
 import simplejson
+import re
 
 from configobj import ConfigObj
 from typing import List
@@ -35,6 +36,8 @@ product_emojis = {
 	'food' : '🍽️'
 }
 
+max_table_number = 10
+
 # Order unchecked: 🟦
 # Order checked: ☑️
 
@@ -46,9 +49,9 @@ product_emojis = {
 #User reacted with 🍻
 #User reacted with 🍽️
 
-catalogues_dir = 'shops'
+shops_conf_dir = 'shops'
 
-shops = ConfigObj(f'shops.conf')
+shops = ConfigObj(f'{shops_conf_dir}/shops.conf')
 
 shop_data_index = '__shop_data'
 channel_mapping_index = '__channel_mapping'
@@ -171,13 +174,14 @@ class Order(object):
 
 async def init(guild, clear_all=False):
 	if clear_all:
-		for shop_name in get_all_shop_ids():
-			shop : Shop = read_shop(shop_name)
+		for shop_id in get_all_shop_ids():
+			shop : Shop = read_shop(shop_id)
 			for player_id in shop.employees:
 				players.remove_shop(player_id, shop.shop_id)
-			await actors.clear_actor(guild, shop_name)
-			clear_catalogue(shop_name)
-			del shops[shop_data_index][shop_name]
+			await actors.clear_actor(guild, shop_id)
+			clear_catalogue(shop_id)
+			clear_delivery_data(shop_id)
+			del shops[shop_data_index][shop_id]
 		for channel in shops[channel_mapping_index]:
 			del shops[channel_mapping_index][channel]
 		shops.write()
@@ -273,7 +277,7 @@ msg_mapping_index = '___storefront_msg_mappings'
 def get_catalogue(shop_name : str):
 	shop_id = shop_name.lower()
 	catalogue_file_name = f'{shop_id}{catalogue_suffix}'
-	return ConfigObj(f'{catalogues_dir}/{catalogue_file_name}')
+	return ConfigObj(f'{shops_conf_dir}/{catalogue_file_name}')
 
 def get_all_products(shop_name : str):
 	catalogue = get_catalogue(shop_name)
@@ -344,13 +348,60 @@ def clear_catalogue(shop_name : str):
 		catalogue.write()
 
 
+# TODO: allow players to set their delivery ID
+# TODO: remove delivery ID when a player is deleted
+# TODO: get delivery ID when ordering
+
+
+delivery_data_suffix = '_delivery_data.conf'
+delivery_ids_index = '___delivery_ids'
+
+def get_delivery_data(shop_name : str):
+	shop_id = shop_name.lower()
+	delivery_data_file_name = f'{shop_id}{delivery_data_suffix}'
+	return ConfigObj(f'{shops_conf_dir}/{delivery_data_file_name}')
+
+def player_has_delivery_id(shop_name : str, player_id : str):
+	return get_delivery_id(shop_name, player_id) is not None
+
+def store_delivery_id(shop_name : str, player_id : str, delivery_id : str):
+	if shop_exists(shop_name):
+		delivery_data = get_delivery_data(shop_name)
+		delivery_data[delivery_ids_index][player_id] = delivery_id
+		delivery_data.write()
+
+def delete_delivery_id(shop_name : str, player_id : str):
+	if shop_exists(shop_name):
+		delivery_data = get_delivery_data(shop_name)
+		if player_id in delivery_data[delivery_ids_index]:
+			del delivery_data[delivery_ids_index][player_id]
+			delivery_data.write()
+
+def get_delivery_id(shop_name : str, player_id : str):
+	if shop_exists(shop_name):
+		delivery_data = get_delivery_data(shop_name)
+		return read_delivery_id_from_del_data(delivery_data, player_id)
+
+def read_delivery_id_from_del_data(delivery_data, player_id : str):
+	if player_id in delivery_data[delivery_ids_index]:
+		return delivery_data[delivery_ids_index][player_id]
+
+def clear_delivery_data(shop_name : str):
+	if shop_exists(shop_name):
+		delivery_data = get_delivery_data(shop_name)
+		delivery_data[delivery_ids_index] = {}
+		delivery_data.write()
+
+
+
+
 ### Creating a new shop:
 
 async def create_shop(guild, shop_name : str, owner_player_id : str):
 	if shop_name is None:
-		return 'Error: must give a shop name'
+		return 'Error: must give a shop name.'
 	if owner_player_id is None:
-		return f'Error: must give a player id; use \".create_shop {shop_name} <player_id>\"'
+		return f'Error: must give a player id; use \".create_shop {shop_name} <player_id>\".'
 	member = await server.get_member_from_nick(owner_player_id)
 	if not players.player_exists(owner_player_id) or member is None:
 		return f'Error: player {owner_player_id} does not exist, or does not conform to the server nick scheme.'
@@ -377,12 +428,15 @@ async def create_shop(guild, shop_name : str, owner_player_id : str):
 	shop = Shop(shop_name, actor.actor_id, owner_player_id, storefront_channel_id, order_flow_channel_id)
 	store_shop(shop)
 	clear_catalogue(shop.shop_id)
+	clear_delivery_data(shop.shop_id)
 	report = f'Created shop {shop.name}, run by {owner_player_id}'
 
 	employment_report = await employ(guild, owner_player_id, shop)
 	if employment_report is not None:
 		report = report + '\n' + employment_report
 	return report
+
+
 
 def find_shop_for_command(user_id : str, shop_name : str, must_be_owner : bool=False):
 	if user_id is None:
@@ -455,8 +509,6 @@ async def process_employ_command(user_id : str, guild, new_employee_player_id : 
 		return f'Error: player {new_employee_player_id} does not exist.'
 
 	return await employ(guild, new_employee_player_id, shop)
-
-
 
 
 
@@ -679,6 +731,8 @@ def generate_catalogue_item_message(product):
 	return post
 
 
+
+
 ### Making an order:
 
 async def order_product_from_command(user_id : str, shop_name : str, product_name : str):
@@ -786,3 +840,64 @@ async def process_reaction_in_catalogue(message, user_id : str, emoji : str):
 
 	result = await order_product(shop, product, buyer_handle, delivery_id=buyer_handle.handle_id)
 	return result
+
+def check_delivery_id_input(delivery_id :str, shop_name : str):
+	if delivery_id is None:
+		return 'Error: must give a delivery ID.'
+	if shop_name is None:
+		return 'Error: must give a shop name.'
+	if not shop_exists(shop_name):
+		return f'Error: There is no shop called {shop_name}.'
+
+def set_delivery_id_from_command(user_id : str, delivery_id :str, shop_name : str):
+	report = check_delivery_id_input(delivery_id, shop_name)
+	if report is not None:
+		return report
+	player_id = players.get_player_id(user_id, expect_to_find=True)
+	store_delivery_id(shop_name, player_id, delivery_id)	
+	return f'Done. All orders made by {player_id} (using any handle!) at {shop_name} will be delivered to {delivery_id}.'
+
+# TODO: a message in the storefront, where you can react with these to set your table:
+# 🍸
+# 0️⃣
+# 1️⃣
+# 2️⃣
+# 3️⃣
+# 4️⃣
+# 5️⃣
+# 6️⃣
+# 7️⃣
+# 8️⃣
+# 9️⃣
+# 🔟
+# 📣
+
+# A special version of set_delivery_id 
+def set_delivery_table_from_command(user_id : str, option :str, shop_name : str):
+	report = check_delivery_id_input(option, shop_name)
+	if report is not None:
+		return report
+
+	player_id = players.get_player_id(user_id, expect_to_find=True)
+	if option == 'bar':
+		delivery_id = 'the bar'
+		delivery_str = f'served at the **bar**'
+	elif option == 'call':
+		# Call out the order for their current handle
+		handle_id = handles.get_active_handle_id(player_id)
+		if handle_id is None:
+			return f'Error: Tried to set delivery option to \"call out my name\", but could not determine your current handle!'
+		delivery_id = f'{handle_id} (call out)'
+		delivery_str = f'called out to **{handle_id}**'
+	else:
+		try:
+			table_number = int(option)
+			if table_number < 0 or table_number > max_table_number:
+				return f'Error: there is no table {option} at {shop_name}'
+			delivery_id = f'Table {table_number}'
+			delivery_str = f'delivered to **{delivery_id}**'
+		except ValueError:
+			return f'Error: \"{option}\" is not a valid table number (0–{max_table_number}) or delivery option.'
+
+	store_delivery_id(shop_name, player_id, delivery_id)
+	return f'Done. All orders made by {player_id} (using any handle!) at {shop_name} will be {delivery_str}.'
