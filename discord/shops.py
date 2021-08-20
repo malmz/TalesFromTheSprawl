@@ -129,23 +129,6 @@ class Product(object):
 	def to_string(self):
 		return simplejson.dumps(self.__dict__)
 
-# Used to store a mapping from a storefront msg ID to a product
-class CatalogueItemMapping(object):
-	def __init__(
-		self,
-		shop_id : str,
-		product_id : str):
-		self.shop_id = shop_id
-		self.product_id = product_id
-
-	@staticmethod
-	def from_string(string : str):
-		obj = CatalogueItemMapping(None, None)
-		obj.__dict__ = simplejson.loads(string)
-		return obj
-
-	def to_string(self):
-		return simplejson.dumps(self.__dict__)
 
 # Used to represent an order (one or more items bought/reserved) by a buyer (handle)
 class Order(object):
@@ -325,10 +308,10 @@ def read_product_from_cat(catalogue, product_name : str):
 		return Product.from_string(catalogue[product_entries_index][product_id])
 
 
-def store_catalogue_item_mapping(msg_id : str, mapping : CatalogueItemMapping):
-	if shop_exists(mapping.shop_id):
-		catalogue = get_catalogue(mapping.shop_id)
-		catalogue[msg_mapping_index][msg_id] = mapping.to_string()
+def store_catalogue_item_mapping(shop_name : str, msg_id : str, product_id : str):
+	if shop_exists(shop_name):
+		catalogue = get_catalogue(shop_name)
+		catalogue[msg_mapping_index][msg_id] = product_id
 		catalogue.write()
 
 def delete_catalogue_item_mapping(shop_name : str, msg_id : str):
@@ -342,7 +325,7 @@ def read_catalogue_item_mapping(shop_name : str, msg_id : str):
 	if shop_exists(shop_name):
 		catalogue = get_catalogue(shop_name)
 		if msg_id in catalogue[msg_mapping_index]:
-			return CatalogueItemMapping.from_string(catalogue[msg_mapping_index][msg_id])
+			return catalogue[msg_mapping_index][msg_id]
 
 
 def delete_catalogue_item_mappings_for_shop(shop_name : str):
@@ -612,8 +595,7 @@ async def post_catalogue(user_id : str, shop_name : str):
 				# Listing has been removed for non-available item, no issue here
 				pass
 		else:
-			mapping = CatalogueItemMapping(shop.shop_id, product.product_id)
-			store_catalogue_item_mapping(msg_id, mapping)
+			store_catalogue_item_mapping(shop.shop_id, msg_id, product.product_id)
 		product.storefront_msg_id = msg_id
 		store_product(shop.shop_id, product)
 	return 'Done.'
@@ -637,8 +619,7 @@ async def post_catalogue_item(user_id : str, product_name : str, shop_name : str
 			# Listing has been removed for non-available item, no issue here
 			pass
 	else:
-		mapping = CatalogueItemMapping(shop.shop_id, product.product_id)
-		store_catalogue_item_mapping(msg_id, mapping)
+		store_catalogue_item_mapping(shop.shop_id, msg_id, product.product_id)
 
 
 async def update_catalogue_item_message(shop : Shop, channel, product : Product):
@@ -704,16 +685,20 @@ async def order_product_from_command(user_id : str, shop_name : str, product_nam
 	player_id = players.get_player_id(user_id)
 	buyer_handle = handles.get_active_handle_id(player_id)
 	# TODO: also find the delivery ID of the current player (stored on a player basis, not a handle basis)
-	await order_product_for_buyer(shop_name, product_name, buyer_handle)
+	return await order_product_for_buyer(shop_name, product_name, buyer_handle)
 
+async def order_product_for_buyer(shop_name : str, product_name : str, buyer_handle_id : str, delivery_id : str=None):
 	product = read_product(shop_name, product_name)
 	if product is None:
+		print(f'Trying to order {product_name} from {shop_name}, found none')
 		if product_name is None:
 			return f'Error: no product name given. Use \".order <product_name> <shop_name>\"'
 		elif shop_name is None:
 			return f'Error: no shop name given. Use \".order {product_name} <shop_name>\"'
+	else:
+		print(f'Trying to order {product_name} from {shop_name}, found {product.to_string()}')
 
-async def order_product_for_buyer(shop_name : str, product_name : str, buyer_handle_id : str, delivery_id : str=None):
+	
 	if buyer_handle_id is None:
 		return 'Error: no payer ID supplied.'
 	buyer_handle : Handle = handles.get_handle(buyer_handle_id)
@@ -782,16 +767,13 @@ async def process_reaction_in_catalogue(message, user_id : str, emoji : str):
 	if shop is None:
 		result.report = f'Error: tried to order {emoji} from shop but could not find shop.'
 		return result
-	cat_mapping : CatalogueItemMapping = read_catalogue_item_mapping(shop.shop_id, str(message.id))
-	if cat_mapping is None:
+	product_id : str = read_catalogue_item_mapping(shop.shop_id, str(message.id))
+	if product_id is None:
 		result.report = f'Error: tried to order {emoji} from {shop.name} but could not map the message to a product.'
 		return result
-	if cat_mapping.shop_id != shop_id:
-		result.report = f'Error: corrupt database, shop ID mismatch {cat_mapping.shop_id}/{shop_id}.'
-		return result
-	product : Product = read_product(shop_id, cat_mapping.product_id)
+	product : Product = read_product(shop_id, product_id)
 	if product is None:
-		result.report = f'Error: cannot find product {cat_mapping.product_id} at shop {shop.name}.'
+		result.report = f'Error: cannot find product {product_id} at shop {shop.name}.'
 		return result
 	if product.emoji != emoji:
 		# Wrong reaction -- silently ignore it.
