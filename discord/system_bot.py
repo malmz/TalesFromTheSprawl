@@ -518,7 +518,9 @@ async def order_other_command(ctx, product_name : str=None, shop_name : str=None
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = await shops.order_product_for_buyer(shop_name, product_name, buyer)
+
+    buyer_handle : custom_types.Handle = handles.get_handle(buyer)
+    report = await shops.order_product_for_buyer(shop_name, product_name, buyer_handle)
     if report is not None:
         await ctx.send(report)
 

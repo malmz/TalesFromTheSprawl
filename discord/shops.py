@@ -18,7 +18,7 @@ import finances
 import server
 
 from common import coin, emoji_unavail, shop_role_start, highest_ever_index
-from custom_types import Transaction, TransTypes, ActionResult, Handle
+from custom_types import Transaction, TransTypes, ActionResult, Handle, HandleTypes
 
 
 emoji_shopping = '🛒'
@@ -348,7 +348,6 @@ def clear_catalogue(shop_name : str):
 		catalogue.write()
 
 
-# TODO: allow players to set their delivery ID
 # TODO: remove delivery ID when a player is deleted
 # TODO: get delivery ID when ordering
 
@@ -737,12 +736,12 @@ def generate_catalogue_item_message(product):
 
 async def order_product_from_command(user_id : str, shop_name : str, product_name : str):
 	player_id = players.get_player_id(user_id)
-	buyer_handle = handles.get_active_handle_id(player_id)
+	buyer_handle : Handle = handles.get_active_handle(player_id)
 	# TODO: also find the delivery ID of the current player (stored on a player basis, not a handle basis)
 	return await order_product_for_buyer(shop_name, product_name, buyer_handle)
 
-async def order_product_for_buyer(shop_name : str, product_name : str, buyer_handle_id : str, delivery_id : str=None):
-	product = read_product(shop_name, product_name)
+async def order_product_for_buyer(shop_name : str, product_name : str, buyer_handle : Handle):
+	product = read_product(shop_name, product_name) # This implicitly checks that shop exists
 	if product is None:
 		print(f'Trying to order {product_name} from {shop_name}, found none')
 		if product_name is None:
@@ -752,27 +751,28 @@ async def order_product_for_buyer(shop_name : str, product_name : str, buyer_han
 	else:
 		print(f'Trying to order {product_name} from {shop_name}, found {product.to_string()}')
 
-	
-	if buyer_handle_id is None:
+	if buyer_handle is None:
 		return 'Error: no payer ID supplied.'
-	buyer_handle : Handle = handles.get_handle(buyer_handle_id)
 	if not handles.is_active_handle_type(buyer_handle.handle_type):
 		return f'Error: cannot find buyer handle {buyer_handle.handle_id}.'
-
-	if delivery_id is None:
-		delivery_id = buyer_handle.handle_id
 
 	shop : Shop = read_shop(shop_name)
 	shop_id = shop.shop_id
 
-	result : ActionResult = await order_product(shop, product, buyer_handle, delivery_id)
+	result : ActionResult = await order_product(shop, product, buyer_handle)
 	return result.report
 
 
-async def order_product(shop : Shop, product : Product, buyer_handle : Handle, delivery_id : str):
+async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 	result = ActionResult()
 	if not product.in_stock:
 		return f'Sorry - {shop_name} is all out of {product_name}!'
+
+	delivery_id = get_delivery_id(shop.shop_id, buyer_handle.actor_id)
+	if delivery_id is None:
+		# No delivery ID set for this player
+		delivery_id = buyer_handle.handle_id
+
 
 	# TODO: use "from_reaction" somehow to ensure not all transaction failures end up in cmd line?
 	transaction = Transaction(
@@ -838,7 +838,7 @@ async def process_reaction_in_catalogue(message, user_id : str, emoji : str):
 
 	# TODO: find delivery ID for this player
 
-	result = await order_product(shop, product, buyer_handle, delivery_id=buyer_handle.handle_id)
+	result = await order_product(shop, product, buyer_handle)
 	return result
 
 def check_delivery_id_input(delivery_id :str, shop_name : str):
