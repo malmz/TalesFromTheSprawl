@@ -7,12 +7,12 @@ class ActionResult(object):
 		self.success = success
 		self.report = report
 
-class TransTypes(Enum):
-	Transfer = 1
-	Collect = 2
-	Burn = 3
-	ChatReact = 4
-	ShopOrder = 5
+class TransTypes(str, Enum):
+	Transfer = 't'
+	Collect = 'c'
+	Burn = 'b'
+	ChatReact = 'r'
+	ShopOrder = 'o'
 
 class Transaction(object):
 	def __init__(
@@ -27,6 +27,7 @@ class Transaction(object):
 		timestamp=None, # TODO
 		success : bool=False,
 		last_in_sequence : bool=True,
+		data : str=None,
 		emoji : str=None
 		):
 		self.payer = payer
@@ -39,7 +40,9 @@ class Transaction(object):
 		self.timestamp = timestamp
 		self.success = success
 		self.last_in_sequence = last_in_sequence
+		self.data = data
 		self.emoji = emoji
+	# TODO: also add msg_id for the finance channel messages for payer and recip
 
 class PostTimestamp(object):
 	def __init__(self, hour : int, minute : int):

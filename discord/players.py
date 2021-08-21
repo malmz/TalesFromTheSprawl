@@ -192,8 +192,6 @@ def get_cmd_line_channel(player_id : str):
 	if data is not None:
 		return channels.get_discord_channel(data.cmd_line_channel_id)
 
-
-
 def add_shop(player_id : str, shop_id : str):
 	player : PlayerData = read_player_data(player_id)
 	if shop_id not in player.shops:
@@ -202,7 +200,7 @@ def add_shop(player_id : str, shop_id : str):
 
 def remove_shop(player_id : str, shop_id : str):
 	player : PlayerData = read_player_data(player_id)
-	if shop_id in player.shops:
+	if player is not None and shop_id in player.shops:
 		player.shops = [s for s in player.shops if s != shop_id]
 		store_player_data(player)
 
@@ -212,6 +210,6 @@ def get_shops(player_id : str):
 
 def add_group(player_id : str, group_id : str):
 	player : PlayerData = read_player_data(player_id)
-	if group_id not in player.groups:
+	if player is not None and group_id not in player.groups:
 		player.groups.append(group_id)
 	store_player_data(player)

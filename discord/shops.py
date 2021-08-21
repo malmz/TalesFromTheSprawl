@@ -136,7 +136,7 @@ class Product(object):
 		return simplejson.dumps(self.__dict__)
 
 
-# Used to represent an order (one or more items bought/reserved) by a buyer (handle)
+# Used to represent an order: one or more items bought/reserved that will be delivered together
 class Order(object):
 	def __init__(
 		self,
@@ -170,15 +170,15 @@ class Order(object):
 		dict_to_save['time_updated'] = PostTimestamp.to_string(self.time_updated)
 		return simplejson.dumps(dict_to_save)
 
-	def add(self, product : Product, timestamp : PostTimestamp):
-		if product.name in self.items_ordered:
-			prev_number = int(self.items_ordered[product.name])
+	def add(self, product_name : str, product_price : str, timestamp : PostTimestamp):
+		if product_name in self.items_ordered:
+			prev_number = int(self.items_ordered[product_name])
 		else:
 			prev_number = 0
 		new_number = prev_number + 1
-		self.items_ordered[product.name] = new_number
+		self.items_ordered[product_name] = new_number
 		self.time_updated = timestamp
-		self.price_total += product.price
+		self.price_total += product_price
 		self.updated = True
 
 
@@ -619,6 +619,7 @@ async def employ(guild, player_id : str, shop : Shop):
 	store_shop(shop)
 	return (f'Added player {player_id} as an employee at {shop.name}. '
 		+ 'They now have access to the shop\'s finances, chat and order channels, and can edit the product catalogue.')
+	# TODO: ping the new employee?
 
 async def process_employ_command(user_id : str, guild, new_employee_player_id : str, shop_name : str):
 	result : FindShopResult = find_shop_for_command(user_id, shop_name)
@@ -664,6 +665,8 @@ def add_product(user_id : str, product_name : str, description : str, price : in
 		else:
 			return (f'Error: cannot create {product_name} at {shop.shop_id} because its internal ID '
 				+ f'({product_name.lower()}) clashes with {existing_product.name}.)')
+	if price < 0:
+		return f'Error: {product_name} cannot have a negative price.'
 	emoji = get_emoji_for_new_product(symbol)
 
 	product = Product(
@@ -697,7 +700,7 @@ async def remove_product(user_id : str, product_name : str, shop_name : str):
 	# Then, remove it completely from database:
 	delete_product(shop.shop_id, product.product_id)
 
-	return (f'Removed product {product_name} from {shop.shop_id}.')
+	return (f'Removed product {product.name} from {shop.shop_id}.')
 
 
 def edit_product_from_command(user_id : str, product_name : str, key : str, value : str, shop_name : str):
@@ -954,13 +957,17 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 		delivery_id = buyer_handle.handle_id
 
 	# TODO: use "from_reaction" somehow to ensure not all transaction failures end up in cmd line?
+	datetime_timestamp = datetime.datetime.today()
+	timestamp = PostTimestamp(datetime_timestamp.hour, datetime_timestamp.minute)
 	transaction = Transaction(
 		payer=buyer_handle.handle_id,
 		payer_actor=buyer_handle.actor_id,
 		recip=shop.shop_id,
 		recip_actor=shop.actor_id,
 		amount=product.price,
-		cause=TransTypes.ShopOrder)
+		cause=TransTypes.ShopOrder,
+		data=product.name,
+		timestamp=timestamp)
 	transaction.emoji = product.emoji
 	#transaction = finances.find_transaction_parties(transaction)
 	transaction = await finances.try_to_pay(transaction)
@@ -969,23 +976,21 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 		return result
 	# Otherwise, we move on to create the order
 
-	await place_order_in_flow(shop, product, delivery_id)
+	await place_order_in_flow(shop, transaction, delivery_id)
 
 	result.report = f'Successfully ordered {product.name} from {shop.name}'
 	result.success = True
 	return result
 
-async def place_order_in_flow(shop : Shop, product : Product, delivery_id : str):
-	datetime_timestamp = datetime.datetime.today()
-	timestamp = PostTimestamp(datetime_timestamp.hour, datetime_timestamp.minute)
+async def place_order_in_flow(shop : Shop, purchase : Transaction, delivery_id : str):
 
 	previous_order_updated = False
 	order = fetch_active_order(shop.shop_id, delivery_id)
 	if order is not None:
 		# The previous order will have been deleted from active_orders
-		time_diff = PostTimestamp.get_time_diff(order.time_created, timestamp)
+		time_diff = PostTimestamp.get_time_diff(order.time_created, purchase.timestamp)
 		if time_diff <= shop.order_collection_limit:
-			order = await add_to_active_order(shop, order, product, timestamp)
+			order = await add_to_active_order(shop, order, purchase)
 			previous_order_updated = True
 		else:
 			# Lock the previous order
@@ -995,15 +1000,14 @@ async def place_order_in_flow(shop : Shop, product : Product, delivery_id : str)
 	if not previous_order_updated:
 		order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
 		order_id = str(record_new_order(shop.shop_id))
-		order = Order(order_id, delivery_id, product.price, items_ordered={product.name: 1}, time_created = timestamp)
+		order = Order(order_id, delivery_id, purchase.amount, items_ordered={purchase.data: 1}, time_created = purchase.timestamp)
 		post = generate_order_message(order)
 		message = await order_flow_channel.send(post)
 		order.order_flow_msg_id = message.id
-
 	store_active_order(shop.shop_id, delivery_id, order)
 
-async def add_to_active_order(shop : Shop, order : Order, ordered_product : Product, timestamp : PostTimestamp):
-	order.add(ordered_product, timestamp)
+async def add_to_active_order(shop : Shop, order : Order, purchase : Transaction):
+	order.add(purchase.data, purchase.amount, purchase.timestamp)
 	order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
 	order_flow_message = await order_flow_channel.fetch_message(order.order_flow_msg_id)
 	content = generate_order_message(order)

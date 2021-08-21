@@ -242,6 +242,18 @@ async def try_to_pay(transaction : Transaction, from_reaction : bool=False):
             transaction.report = f'Error: cannot transfer funds from account {transaction.recip} to itself.'
         return transaction
 
+    if transaction.amount < 0:
+        print(f'Got a negative transaction!')
+        # Negative transaction: flip it around
+        recip = transaction.payer
+        transaction.payer = transaction.recip
+        transaction.recip = recip
+        recip_actor = transaction.payer_actor
+        transaction.payer_actor = transaction.recip_actor
+        transaction.recip_actor = recip_actor
+        transaction.amount = -transaction.amount
+
+
     transaction = transfer_funds_if_available(transaction)
     if not transaction.success:
         avail = get_current_balance_handle_id(transaction.payer)

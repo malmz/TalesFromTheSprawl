@@ -25,7 +25,7 @@ actors_input = ConfigObj('actors_input.conf')
 async def init(guild, clear_all=False):
 	if clear_all:
 		for actor_id in actors:
-			clear_actor(actor_id)
+			await clear_actor(guild, actor_id)
 		await channels.delete_all_personal_channels()
 		await handles.clear_all_handles()
 	else:
