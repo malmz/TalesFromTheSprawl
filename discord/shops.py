@@ -760,10 +760,12 @@ def edit_product(shop : Shop, product_name : str, key : str, value : str):
 ### The menu/catalogue: product information messages where players can order by pressing reactions
 
 async def post_catalogue(user_id : str, shop_name : str):
+	print(f'Trying to post catalogue')
 	result : FindShopResult = find_shop_for_command(user_id, shop_name)
 	if result.error_report is not None or result.shop is None:
 		return result.error_report
 	shop : Shop = result.shop
+	print(f'Trying to post catalogue for {shop.to_string()}')
 
 	channel = channels.get_discord_channel(shop.storefront_channel_id)
 
@@ -860,6 +862,55 @@ def generate_catalogue_item_message(product):
 	return post
 
 
+### Reactions:
+
+### Reaction in storefront: will order a product
+
+async def process_reaction_in_storefront(message, user_id : str, emoji : str):
+	result = ActionResult()
+	shop_id = read_storefront_channel_mapping(str(message.channel.id))
+	if shop_id is None:
+		result.report = f'Error: tried to order {emoji} from shop but could not map channel {message.channel.id} to any shop.'
+		return result		
+	shop : Shop = read_shop(shop_id)
+	if shop is None:
+		result.report = f'Error: tried to order {emoji} from shop but could not find shop.'
+		return result
+	product_id : str = read_catalogue_item_mapping(shop.shop_id, str(message.id))
+	if product_id is None:
+		result.report = f'Error: tried to order {emoji} from {shop.name} but could not map the message to a product.'
+		return result
+	product : Product = read_product(shop_id, product_id)
+	if product is None:
+		result.report = f'Error: cannot find product {product_id} at shop {shop.name}.'
+		return result
+	if product.emoji != emoji:
+		# Wrong reaction -- silently ignore it.
+		return result
+
+	player_id = players.get_player_id(user_id, expect_to_find=True)
+	buyer_handle : Handle = handles.get_active_handle(player_id)
+
+	result = await order_product(shop, product, buyer_handle)
+	return result
+
+# TODO: a message in the storefront, where you can react with these to set your table:
+# 🍸
+# 0️⃣
+# 1️⃣
+# 2️⃣
+# 3️⃣
+# 4️⃣
+# 5️⃣
+# 6️⃣
+# 7️⃣
+# 8️⃣
+# 9️⃣
+# 🔟
+# 📣
+
+
+
 
 
 ### Making an order:
@@ -925,38 +976,42 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 	return result
 
 async def place_order_in_flow(shop : Shop, product : Product, delivery_id : str):
-	timestamp = datetime.datetime.today()
-	trunc_timestamp = PostTimestamp(timestamp.hour, timestamp.minute)
+	datetime_timestamp = datetime.datetime.today()
+	timestamp = PostTimestamp(datetime_timestamp.hour, datetime_timestamp.minute)
 
-	previous_order = fetch_active_order(shop.shop_id, delivery_id)
-	new_order = None
-	if previous_order is not None:
+	previous_order_updated = False
+	order = fetch_active_order(shop.shop_id, delivery_id)
+	if order is not None:
 		# The previous order will have been deleted from active_orders
-		time_diff = PostTimestamp.get_time_diff(previous_order.time_created, trunc_timestamp)
-		print(f'timediff: {time_diff}')
+		time_diff = PostTimestamp.get_time_diff(order.time_created, timestamp)
 		if time_diff <= shop.order_collection_limit:
-			previous_order.add(product, trunc_timestamp)
-			new_order = previous_order
-			print(f'Got it in time!')
+			order = await add_to_active_order(shop, order, product, timestamp)
+			previous_order_updated = True
 		else:
-			print(f'Waited too long')
 			# Lock the previous order
 			# TODO: also update the order message + any mappings to it
-			store_locked_order(shop.shop_id, previous_order)
+			store_locked_order(shop.shop_id, order)
 
-	if new_order is None:
-		print(f'Creating a new order.')
+	if not previous_order_updated:
+		order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
 		order_id = str(record_new_order(shop.shop_id))
-		new_order = Order(order_id, delivery_id, product.price, items_ordered={product.name: 1}, time_created = trunc_timestamp)
-		#msg_id : str,
+		order = Order(order_id, delivery_id, product.price, items_ordered={product.name: 1}, time_created = timestamp)
+		post = generate_order_message(order)
+		message = await order_flow_channel.send(post)
+		order.order_flow_msg_id = message.id
 
+	store_active_order(shop.shop_id, delivery_id, order)
+
+async def add_to_active_order(shop : Shop, order : Order, ordered_product : Product, timestamp : PostTimestamp):
+	order.add(ordered_product, timestamp)
 	order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
-	post = generate_order_message(new_order)
-	message = await order_flow_channel.send(post)
-	new_order.order_flow_msg_id = message.id
+	order_flow_message = await order_flow_channel.fetch_message(order.order_flow_msg_id)
+	content = generate_order_message(order)
+	await order_flow_message.delete()
+	new_message = await order_flow_channel.send(content)
+	order.order_flow_msg_id = new_message.id
+	return order
 
-	print(f'Storing order: {new_order.to_string()}')
-	store_active_order(shop.shop_id, delivery_id, new_order)
 
 
 def generate_order_message(order : Order):
@@ -968,34 +1023,6 @@ def generate_order_message(order : Order):
 		content += f'> {amount} {item}\n'
 	content += f'> Total: {coin} {order.price_total} (paid)'
 	return content
-
-async def process_reaction_in_catalogue(message, user_id : str, emoji : str):
-	result = ActionResult()
-	shop_id = read_storefront_channel_mapping(str(message.channel.id))
-	if shop_id is None:
-		result.report = f'Error: tried to order {emoji} from shop but could not map channel {message.channel.id} to any shop.'
-		return result		
-	shop : Shop = read_shop(shop_id)
-	if shop is None:
-		result.report = f'Error: tried to order {emoji} from shop but could not find shop.'
-		return result
-	product_id : str = read_catalogue_item_mapping(shop.shop_id, str(message.id))
-	if product_id is None:
-		result.report = f'Error: tried to order {emoji} from {shop.name} but could not map the message to a product.'
-		return result
-	product : Product = read_product(shop_id, product_id)
-	if product is None:
-		result.report = f'Error: cannot find product {product_id} at shop {shop.name}.'
-		return result
-	if product.emoji != emoji:
-		# Wrong reaction -- silently ignore it.
-		return result
-
-	player_id = players.get_player_id(user_id, expect_to_find=True)
-	buyer_handle : Handle = handles.get_active_handle(player_id)
-
-	result = await order_product(shop, product, buyer_handle)
-	return result
 
 
 
@@ -1017,20 +1044,7 @@ def set_delivery_id_from_command(user_id : str, delivery_id :str, shop_name : st
 	store_delivery_id(shop_name, player_id, delivery_id)	
 	return f'Done. All orders made by {player_id} (using any handle!) at {shop_name} will be delivered to {delivery_id}.'
 
-# TODO: a message in the storefront, where you can react with these to set your table:
-# 🍸
-# 0️⃣
-# 1️⃣
-# 2️⃣
-# 3️⃣
-# 4️⃣
-# 5️⃣
-# 6️⃣
-# 7️⃣
-# 8️⃣
-# 9️⃣
-# 🔟
-# 📣
+
 
 # A special version of set_delivery_id 
 def set_delivery_table_from_command(user_id : str, option :str, shop_name : str):

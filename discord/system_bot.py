@@ -488,7 +488,7 @@ async def clear_orders_command(ctx, shop_name : str=None):
         await swallow(ctx.message);
         return
     await shops.reinitialize(str(ctx.message.author.id), shop_name)
-    await publish_menu_command(ctx, shop_name)
+    await publish_menu_command(ctx, shop_name=shop_name)
 
 
 @bot.command(name='publish_menu', help='Employee only: post a shop\'s catalogue/menu.')

@@ -79,11 +79,11 @@ async def process_reaction_in_chat_hub(message_id : int, user_id : int, channel,
 	message = await channel.fetch_message(message_id)
 	await chats.process_reaction_in_chat_hub(message, str(emoji))
 
-async def process_reaction_in_shop(message_id : int, user_id : int, channel, emoji):
+async def process_reaction_in_storefront(message_id : int, user_id : int, channel, emoji):
 	# Remove the reaction right away, regardless of what it is
 	message = await channel.fetch_message(message_id)
 	await remove_reaction(message, emoji, user_id)
-	result : ActionResult = await shops.process_reaction_in_catalogue(message, str(user_id), str(emoji))
+	result : ActionResult = await shops.process_reaction_in_storefront(message, str(user_id), str(emoji))
 	if not result.success and result.report != None:
 		player_id = players.get_player_id(str(user_id))
 		cmd_line_channel = players.get_cmd_line_channel(player_id)
@@ -107,7 +107,7 @@ async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
 	if channels.is_chat_hub(channel.name):
 		await process_reaction_in_chat_hub(message_id, user_id, channel, emoji)
 	elif channels.is_shop_channel(channel):
-		await process_reaction_in_shop(message_id, user_id, channel, emoji)
+		await process_reaction_in_storefront(message_id, user_id, channel, emoji)
 	else:
 		await process_reaction_for_tipping(message_id, user_id, channel, emoji)
 
