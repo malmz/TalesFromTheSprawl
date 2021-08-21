@@ -43,13 +43,15 @@ class Transaction(object):
 
 class PostTimestamp(object):
 	def __init__(self, hour : int, minute : int):
-		self.hour = hour
+		self.hour = hour % 24 # Sometimes we need to adjust for DST manually
 		self.minute = minute
 
 	def __eq__(self, other):
 		if isinstance(other, self.__class__):
+			print(f'Comparing dicts: {self.__dict__} to {other.__dict__}: result is {self.__dict__ == other.__dict__}')
 			return self.__dict__ == other.__dict__
 		else:
+			printf('Wrng types')
 			return False
 
 	@staticmethod
@@ -58,8 +60,29 @@ class PostTimestamp(object):
 		obj.__dict__ = simplejson.loads(string)
 		return obj
 
+	@staticmethod
+	def from_datetime(timestamp, dst_diff : int=0):
+		return PostTimestamp(timestamp.hour + dst_diff, timestamp.minute)
+
 	def to_string(self):
 		return simplejson.dumps(self.__dict__)
+
+	def pretty_print(self, second : int=-1):
+		# Manual DST fix
+		hour_str = str(self.hour)
+		if self.minute < 10:
+			minute_str = f'0{self.minute}'
+		else:
+			minute_str = str(self.minute)
+		result = f'{hour_str}:{minute_str}'
+		if second >= 0 and second < 60:
+			if second < 10:
+				second_str = f'0{second}'
+			else:
+				second_str = str(second)
+			result += f':{second_str}'
+		return result
+
 
 class ChannelIdentifier(object):
 	def __init__(self, discord_channel_id : str = None, chat_channel_name : str = None):

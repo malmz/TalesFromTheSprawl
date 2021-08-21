@@ -180,7 +180,7 @@ def get_public_anon_channel(guild):
 
 def init_pseudonymous_channel(channel_name : str):
     set_last_poster(channel_name, '')
-    timestamp = datetime.datetime.today()
+    timestamp : PostTimestamp = PostTimestamp.from_datetime(datetime.datetime.today())
     set_last_full_post(channel_name, timestamp)
     reset_post_counter(channel_name)
 
@@ -194,23 +194,22 @@ def get_last_poster(channel_name : str):
     else:
         return channel_states[channel_name][last_poster_index];
 
-def set_last_post_time(channel_name : str, post_timestamp):
-    channel_states[channel_name][last_full_post_index] = post_timestamp.to_string()
-
 def get_last_post_time(channel_name : str):
     return PostTimestamp.from_string(channel_states[channel_name][last_full_post_index])
 
-def set_last_full_post(channel_name : str, timestamp):
-    post_time = PostTimestamp(timestamp.hour, timestamp.minute)
-    set_last_post_time(channel_name, post_time)
+def set_last_full_post(channel_name : str, timestamp : PostTimestamp):
+    channel_states[channel_name][last_full_post_index] = timestamp.to_string()
     channel_states.write()
 
 def time_has_passed_since_last_full_post(channel_name : str, timestamp):
     post_time = PostTimestamp(timestamp.hour, timestamp.minute)
     old_time = get_last_post_time(channel_name)
+    print(f'Comparing timestamps {post_time.to_string()} / {old_time.to_string()} for channel {channel_name}')
     if post_time != old_time:
+        print(f'Checking if time has passed, found that times ARE NOT equal')
         return True
     else:
+        print(f'Checking if time has passed, found that times ARE equal')
         return False
 
 def increment_post_counter(channel_name : str):
@@ -226,10 +225,11 @@ def reset_post_counter(channel_name : str):
 
 # Returns True if the new post should be a full post (with sender and timestamp header)
 # Returns False if the new post should only include the content itself
-def record_new_post(channel_name : str, poster_id : str, timestamp):
+def record_new_post(channel_name : str, poster_id : str, timestamp : PostTimestamp):
     last_poster = get_last_poster(channel_name)
     time_has_passed = time_has_passed_since_last_full_post(channel_name, timestamp)
     counter_has_passed_limit = increment_post_counter(channel_name)
+    print(f'Determining if full post should be used: {last_poster}?={poster_id}, time: {time_has_passed}, counter: {counter_has_passed_limit}')
 
     if last_poster != poster_id or time_has_passed or counter_has_passed_limit:
         set_last_poster(channel_name, poster_id)

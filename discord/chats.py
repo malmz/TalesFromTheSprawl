@@ -11,7 +11,7 @@ import channels
 import server
 import posting
 from common import emoji_cancel, emoji_open, emoji_green, emoji_red, emoji_green_book, emoji_red_book, emoji_unread
-from custom_types import Handle, HandleTypes
+from custom_types import Handle, HandleTypes, PostTimestamp
 
 chats_dir = 'chats'
 chats = ConfigObj(f'chats.conf')
@@ -898,7 +898,9 @@ async def process_message(message):
 	poster_id = chat_channel_data.handle
 	chat_name = chat_channel_data.chat_name
 
-	full_post = channels.record_new_post(chat_channel_data.chat_name, poster_id, message.created_at)
+	# With timestamps from discord, we must apply the DST diff compared to the python env timestamps
+	post_time = PostTimestamp.from_datetime(message.created_at, dst_diff=2)
+	full_post = channels.record_new_post(chat_channel_data.chat_name, poster_id, post_time)
 	guild = server.get_guild()
 	tasks = create_reposting_tasks(guild, chat_name, message, poster_id, full_post)
 

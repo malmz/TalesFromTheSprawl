@@ -3,10 +3,11 @@
 import discord
 import asyncio
 import simplejson
-import re
+import datetime
 
 from configobj import ConfigObj
 from typing import List
+from copy import deepcopy
 
 # Custom imports
 import common
@@ -18,7 +19,7 @@ import finances
 import server
 
 from common import coin, emoji_unavail, shop_role_start, highest_ever_index
-from custom_types import Transaction, TransTypes, ActionResult, Handle, HandleTypes
+from custom_types import Transaction, TransTypes, ActionResult, Handle, HandleTypes, PostTimestamp
 
 
 emoji_shopping = '🛒'
@@ -54,7 +55,8 @@ shops_conf_dir = 'shops'
 shops = ConfigObj(f'{shops_conf_dir}/shops.conf')
 
 shop_data_index = '__shop_data'
-channel_mapping_index = '__channel_mapping'
+storefront_channel_map_index = '__storefront_channel_mapping'
+orders_channel_map_index = '__order_flow_channel_mapping'
 
 ### Module to allow one or more players to run a shop together.
 # Having a shop grants:
@@ -141,23 +143,27 @@ class Order(object):
 		delivery_id : str,
 		price_total : int,
 		msg_id : str=None,
-		time_created=None,
+		time_created : PostTimestamp=None,
 		items_ordered={}):
 		self.order_id = order_id
 		self.delivery_id = delivery_id
 		self.price_total = price_total
 		self.msg_id = msg_id
 		self.items_ordered = items_ordered
-		self.time_created = time_created
+		self.time_created  : PostTimestamp = time_created
 
 	@staticmethod
 	def from_string(string : str):
 		obj = Order(None, None, None)
-		obj.__dict__ = simplejson.loads(string)
+		loaded_dict = simplejson.loads(string)
+		obj.__dict__ = loaded_dict
+		obj.time_created : PostTimestamp = PostTimestamp.from_string(loaded_dict['time_created'])
 		return obj
 
 	def to_string(self):
-		return simplejson.dumps(self.__dict__)
+		dict_to_save = deepcopy(self.__dict__)
+		dict_to_save['time_created'] = PostTimestamp.to_string(self.time_created)
+		return simplejson.dumps(dict_to_save)
 
 
 # "Missing" class: ChannelMapping
@@ -182,8 +188,10 @@ async def init(guild, clear_all=False):
 			clear_catalogue(shop_id)
 			clear_delivery_data(shop_id)
 			del shops[shop_data_index][shop_id]
-		for channel in shops[channel_mapping_index]:
-			del shops[channel_mapping_index][channel]
+		for channel in shops[storefront_channel_map_index]:
+			del shops[storefront_channel_map_index][channel]
+		for channel in shops[orders_channel_map_index]:
+			del shops[orders_channel_map_index][channel]
 		shops.write()
 		await channels.delete_all_shops()
 
@@ -191,8 +199,10 @@ async def init(guild, clear_all=False):
 		shops[shop_data_index] = {}
 	if highest_ever_index not in shops[shop_data_index] or clear_all:
 		shops[shop_data_index][highest_ever_index] = str(shop_role_start)
-	if channel_mapping_index not in shops:
-		shops[channel_mapping_index] = {}
+	if storefront_channel_map_index not in shops:
+		shops[storefront_channel_map_index] = {}
+	if orders_channel_map_index not in shops:
+		shops[orders_channel_map_index] = {}
 	shops.write()
 
 	await delete_all_shop_roles(guild, spare_used=not clear_all)
@@ -263,11 +273,19 @@ def record_new_order(shop_name : str):
 
 def store_storefront_channel_mapping(channel_id : str, shop_name : str):
 	shop_id = shop_name.lower()
-	shops[channel_mapping_index][channel_id] = shop_id
+	shops[storefront_channel_map_index][channel_id] = shop_id
 
 def read_storefront_channel_mapping(channel_id : str):
-	if channel_id in shops[channel_mapping_index]:
-		return shops[channel_mapping_index][channel_id]
+	if channel_id in shops[storefront_channel_map_index]:
+		return shops[storefront_channel_map_index][channel_id]
+
+def store_order_flow_channel_mapping(channel_id : str, shop_name : str):
+	shop_id = shop_name.lower()
+	shops[orders_channel_map_index][channel_id] = shop_id
+
+def read_order_flow_channel_mapping(channel_id : str):
+	if channel_id in shops[orders_channel_map_index]:
+		return shops[orders_channel_map_index][channel_id]
 
 
 catalogue_suffix = '_catalogue.conf'
@@ -348,10 +366,6 @@ def clear_catalogue(shop_name : str):
 		catalogue.write()
 
 
-# TODO: remove delivery ID when a player is deleted
-# TODO: get delivery ID when ordering
-
-
 delivery_data_suffix = '_delivery_data.conf'
 delivery_ids_index = '___delivery_ids'
 
@@ -391,6 +405,9 @@ def clear_delivery_data(shop_name : str):
 		delivery_data[delivery_ids_index] = {}
 		delivery_data.write()
 
+def delete_delivery_ids_for_actor(actor_id : str):
+	for shop_id in get_all_shop_ids():
+		delete_delivery_id(shop_id, actor_id)
 
 
 
@@ -737,7 +754,6 @@ def generate_catalogue_item_message(product):
 async def order_product_from_command(user_id : str, shop_name : str, product_name : str):
 	player_id = players.get_player_id(user_id)
 	buyer_handle : Handle = handles.get_active_handle(player_id)
-	# TODO: also find the delivery ID of the current player (stored on a player basis, not a handle basis)
 	return await order_product_for_buyer(shop_name, product_name, buyer_handle)
 
 async def order_product_for_buyer(shop_name : str, product_name : str, buyer_handle : Handle):
@@ -773,6 +789,8 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 		# No delivery ID set for this player
 		delivery_id = buyer_handle.handle_id
 
+	timestamp = datetime.datetime.today()
+	trunc_timestamp = PostTimestamp(timestamp.hour, timestamp.minute)
 
 	# TODO: use "from_reaction" somehow to ensure not all transaction failures end up in cmd line?
 	transaction = Transaction(
@@ -790,11 +808,16 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 		return result
 	# Otherwise, we move on to create the order
 
-
 	order_id = str(record_new_order(shop.shop_id))
-	order = Order(order_id, delivery_id, product.price, items_ordered={product.name: 1})
+	print(f'Timestamp: {trunc_timestamp.to_string()}')
+	order = Order(order_id, delivery_id, product.price, items_ordered={product.name: 1}, time_created = trunc_timestamp)
 		#msg_id : str,
 		#time_created,
+
+	order_str = order.to_string()
+	order2 : Order = Order.from_string(order_str)
+
+	print(f'Dried and rehydrated order, now looks like {order2.to_string()}. ')
 
 	order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
 	post = generate_order_message(order)
@@ -803,9 +826,11 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 	result.success = True
 	return result
 
+#async def place_order_in_flow():
+
 
 def generate_order_message(order : Order):
-	content = f'**#{order.order_id}** for **{order.delivery_id}**\n'
+	content = f'**#{order.order_id}** for **{order.delivery_id}**    at {order.time_created.pretty_print()}\n'
 	for item, amount in order.items_ordered.items():
 		content += f'> {amount} {item}\n'
 	content += f'> Total: {coin} {order.price_total} (paid)'
@@ -835,8 +860,6 @@ async def process_reaction_in_catalogue(message, user_id : str, emoji : str):
 
 	player_id = players.get_player_id(user_id, expect_to_find=True)
 	buyer_handle : Handle = handles.get_active_handle(player_id)
-
-	# TODO: find delivery ID for this player
 
 	result = await order_product(shop, product, buyer_handle)
 	return result

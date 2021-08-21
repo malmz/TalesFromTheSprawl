@@ -1,6 +1,7 @@
 import channels
 import handles
 from common import forbidden_content
+from custom_types import PostTimestamp
 import players
 
 import re
@@ -42,18 +43,8 @@ def create_header(timestamp, sender : str, recip : str=None):
     else:
         sender_info = f'**{sender}** to {recip}'
     # Manual DST fix:
-    hour_str = str((timestamp.hour + 2) % 24)
-    minute = timestamp.minute
-    if minute < 10:
-        minute_str = '0' + str(minute)
-    else:
-        minute_str = str(minute)
-    second = timestamp.second
-    if second < 10:
-        second_str = '0' + str(second)
-    else:
-        second_str = str(second)
-    timestamp_str = '(' + hour_str + ':' + minute_str + ':' + second_str + ')'
+    post_timestamp = PostTimestamp(timestamp.hour+2, timestamp.minute)
+    timestamp_str = f'({post_timestamp.pretty_print(second=timestamp.second)})'
     return sender_info + double_hard_space + timestamp_str + ':\n'
 
 def create_post(message, sender : str, recip : str=None):
@@ -82,9 +73,10 @@ async def process_open_message(message, anonymous=False):
         current_poster_display_name = 'Anonymous'
     else:
         handle = handles.get_handle(player_id)
-        current_poster_id = handle
-        current_poster_display_name = handle
-    full_post = channels.record_new_post(current_channel, current_poster_id, message.created_at)
+        current_poster_id = handle.handle_id
+        current_poster_display_name = handle.handle_id
+    post_time = PostTimestamp.from_datetime(message.created_at, dst_diff=2)
+    full_post = channels.record_new_post(current_channel, current_poster_id, post_time)
     if full_post:
         task2 = asyncio.create_task(repost_message(message, current_poster_display_name))
     else:
