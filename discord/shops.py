@@ -145,6 +145,7 @@ class Order(object):
 		price_total : int,
 		order_flow_msg_id : str=None,
 		time_created : PostTimestamp=None,
+		msg_ids : List[str]=[],
 		items_ordered={}):
 		self.order_id = order_id
 		self.delivery_id = delivery_id
@@ -153,6 +154,7 @@ class Order(object):
 		self.items_ordered = items_ordered
 		self.time_created : PostTimestamp = time_created
 		self.time_updated : PostTimestamp = time_created
+		self.msg_ids = msg_ids
 		self.updated : bool = False
 
 	@staticmethod
@@ -249,6 +251,7 @@ async def reinitialize(user_id : str, shop_name : str):
 		in [order_flow_channel.purge(), storefront_channel.purge()]]
 		)
 	delete_catalogue_item_mappings_for_shop(shop.shop_id)
+	clear_order_data(shop.shop_id)
 	shop.highest_order = 1
 	store_shop(shop)
 	return 'Done.'
@@ -976,6 +979,8 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 		return result
 	# Otherwise, we move on to create the order
 
+	print(f'Final transaction: {transaction.to_string()}')
+
 	await place_order_in_flow(shop, transaction, delivery_id)
 
 	result.report = f'Successfully ordered {product.name} from {shop.name}'
@@ -1000,7 +1005,14 @@ async def place_order_in_flow(shop : Shop, purchase : Transaction, delivery_id :
 	if not previous_order_updated:
 		order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
 		order_id = str(record_new_order(shop.shop_id))
-		order = Order(order_id, delivery_id, purchase.amount, items_ordered={purchase.data: 1}, time_created = purchase.timestamp)
+		order = Order(
+			order_id,
+			delivery_id,
+			purchase.amount,
+			items_ordered={purchase.data: 1},
+			time_created = purchase.timestamp,
+			msg_ids = [m for m in [purchase.payer_msg_id, purchase.recip_msg_id] if m is not None]
+			)
 		post = generate_order_message(order)
 		message = await order_flow_channel.send(post)
 		order.order_flow_msg_id = message.id
@@ -1013,7 +1025,13 @@ async def add_to_active_order(shop : Shop, order : Order, purchase : Transaction
 	content = generate_order_message(order)
 	await order_flow_message.delete()
 	new_message = await order_flow_channel.send(content)
+	# The mapping to the order message itself, for when we need to update it:
 	order.order_flow_msg_id = new_message.id
+	# The mapping to the messages in each player's respective finance channel, which
+	# we need to find when we lock or complete the order, to take away the "undo" possibility
+	for msg_id in [purchase.payer_msg_id, purchase.recip_msg_id]:
+		if msg_id is not None:
+			order.msg_ids.append(msg_id)
 	return order
 
 

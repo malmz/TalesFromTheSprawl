@@ -36,7 +36,7 @@ async def deinit_finances_for_handle(handle : Handle, actor_id : str, record : b
         del finances[handle.handle_id]
         finances.write()
     if record:
-        await actors.write_financial_record(content=None, actor_id=actor_id, last_in_sequence=True)
+        await actors.refresh_financial_statement(actor_id)
 
 def get_current_balance(handle : Handle):
     return get_current_balance_handle_id(handle.handle_id)
@@ -62,7 +62,7 @@ async def overwrite_balance(handle : Handle, balance : int):
         amount=old_balance,
         cause = TransTypes.Transfer,
         success=True)
-    transaction = find_transaction_parties(transaction)
+    find_transaction_parties(transaction)
     await record_transaction(transaction)
 
     transaction = Transaction(
@@ -73,7 +73,7 @@ async def overwrite_balance(handle : Handle, balance : int):
         amount=balance,
         cause = TransTypes.Transfer,
         success=True)
-    transaction = find_transaction_parties(transaction)
+    find_transaction_parties(transaction)
     await record_transaction(transaction)
 
 def can_have_finances(handle_type : HandleTypes):
@@ -120,7 +120,7 @@ def transfer_funds_if_available(transaction : Transaction):
         transaction.success = True
     else:
         transaction.success = False
-    return transaction
+    #return transaction
 
 async def transfer_from_burner(burner : Handle, new_active : Handle, amount : int):
     transaction = Transaction(
@@ -130,7 +130,7 @@ async def transfer_from_burner(burner : Handle, new_active : Handle, amount : in
         recip_actor=None,
         cause = TransTypes.Burn,
         amount=amount)
-    transaction = find_transaction_parties(transaction)
+    find_transaction_parties(transaction)
     transfer_funds_if_available(transaction)
     await record_transaction(transaction)
 
@@ -142,7 +142,7 @@ async def add_funds(handle : Handle, amount : int):
     finances[handle.handle_id][balance_index] = str(new_balance)
     finances.write()
     transaction = Transaction(payer=system_fake_handle, payer_actor=None, recip=handle.handle_id, recip_actor=None, amount=amount)
-    transaction = find_transaction_parties(transaction)
+    find_transaction_parties(transaction)
     await record_transaction(transaction)
 
 async def collect_all_funds(actor_id : str):
@@ -193,7 +193,7 @@ async def try_to_pay_from_actor(actor_id : str, recip_handle_id : str, amount : 
         amount=amount)
     # TODO: right now a reaction on e.g. a burnt burner WILL cause error printout every time;
     # "from_reaction" only protects against printout on self-reacts
-    transaction = find_transaction_parties(transaction)
+    find_transaction_parties(transaction)
     if transaction.report is not None:
         return transaction
     else:
@@ -231,7 +231,6 @@ def find_transaction_parties(transaction : Transaction):
                 transaction.report = f'Error: attempted transaction to handle {transaction.recip} which does not exist.'
             else:
                 transaction.recip_actor = recip_handle.actor_id
-    return transaction
 
 async def try_to_pay(transaction : Transaction, from_reaction : bool=False):
     if transaction.payer == transaction.recip:
@@ -254,7 +253,7 @@ async def try_to_pay(transaction : Transaction, from_reaction : bool=False):
         transaction.amount = -transaction.amount
 
 
-    transaction = transfer_funds_if_available(transaction)
+    transfer_funds_if_available(transaction)
     if not transaction.success:
         avail = get_current_balance_handle_id(transaction.payer)
         if from_reaction:
@@ -272,6 +271,7 @@ async def try_to_pay(transaction : Transaction, from_reaction : bool=False):
         await record_transaction(transaction)
     return transaction
 
+
 # Record for transactions:
 
 async def record_transaction(transaction : Transaction):
@@ -279,20 +279,8 @@ async def record_transaction(transaction : Transaction):
         # No need to write anything for 0-transactions, should they occur
         return
     record_payer = generate_record_for_payer(transaction)
-    if record_payer is not None:
-        await actors.write_financial_record(
-            transaction.payer_actor,
-            record_payer,
-            transaction.last_in_sequence
-        )
     record_recip = generate_record_for_recip(transaction)
-    if record_recip is not None:
-        record_recip = generate_record_for_recip(transaction)
-        await actors.write_financial_record(
-            transaction.recip_actor,
-            record_recip,
-            transaction.last_in_sequence
-        )
+    await actors.write_financial_record(transaction, record_payer, record_recip)
 
 def generate_record_for_payer(transaction : Transaction):
     if transaction.payer_actor is None:

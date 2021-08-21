@@ -10,14 +10,15 @@ import common
 import server
 import shops
 
-from custom_types import Transaction, Actor
+from custom_types import Transaction, Actor, TransTypes
+from common import emoji_cancel
 
 import discord
 import asyncio
 from configobj import ConfigObj
 import re
 
-
+actors_conf_dir = 'actors'
 actors = ConfigObj('actors.conf')
 actors_input = ConfigObj('actors_input.conf')
 
@@ -40,6 +41,7 @@ async def clear_actor(guild, actor_id : str):
 		actor = read_actor(actor_id)
 		del actors[actor_id]
 		actors.write()
+		clear_trans_memory(actor_id)
 		await channels.delete_all_personal_channels(channel_suffix=actor.actor_id)
 		await handles.clear_all_handles_for_actor(actor_id)
 		shops.delete_delivery_ids_for_actor(actor_id)
@@ -84,6 +86,52 @@ def read_actor(actor_id : str):
 		return Actor.from_string(actors[actor_id])
 
 
+
+recent_transactions_suffix = '_recent_trans.conf'
+
+def get_trans_mem(actor_id : str):
+	trans_mem_file_name = f'{actor_id}{recent_transactions_suffix}'
+	return ConfigObj(f'{actors_conf_dir}/{trans_mem_file_name}')
+
+def get_all_recent_trans(actor_id : str):
+	if actor_exists(actor_id):
+		trans_mem = get_trans_mem(actor_id)
+		for msg_id in trans_mem:
+			yield read_transaction_from_memory(trans_mem, msg_id)
+
+def store_transaction(actor_id : str, msg_id : str, transaction : Transaction):
+	if actor_exists(actor_id):
+		trans_mem = get_trans_mem(actor_id)
+		trans_mem[msg_id] = transaction.to_string()
+		trans_mem.write()
+
+def delete_transaction(actor_id : str, msg_id : str):
+	if actor_exists(actor_id):
+		trans_mem = get_trans_mem(actor_id)
+		if msg_id in trans_mem:
+			del trans_mem[msg_id]
+			trans_mem.write()
+
+def read_transaction(actor_id : str, msg_id : str):
+	if actor_exists(actor_id):
+		trans_mem = get_trans_mem(actor_id)
+		return read_transaction_from_memory(trans_mem, product_name)
+
+def read_transaction_from_memory(msg_id : str):
+	if msg_id in trans_mem:
+		return Transaction.from_string(trans_mem[msg_id])
+
+def clear_trans_memory(actor_id : str):
+	if actor_exists(actor_id):
+		trans_mem = get_trans_mem(actor_id)
+		for entry in trans_mem:
+			del trans_mem[entry]
+		trans_mem.write()
+
+
+
+
+
 async def give_actor_access(guild, channel, actor_id : str):
 	role = get_actor_role(guild, actor_id)
 	await server.give_role_access(channel, role)
@@ -123,6 +171,7 @@ async def create_new_actor(guild, actor_index : str, actor_id : str):
 		finance_stmt_msg_id=0,
 		chat_channel_id=chat_hub_channel.id)
 	store_actor(actor)
+	clear_trans_memory(actor_id)
 	return actor
 
 async def send_startup_message_finance(channel, actor_id : str):
@@ -155,16 +204,49 @@ async def update_financial_statement(channel, actor : Actor):
 	actor.finance_stmt_msg_id = new_message.id
 	store_actor(actor)
 
-
-async def write_financial_record(actor_id : str, content : str, last_in_sequence : bool):
+async def refresh_financial_statement(actor_id : str):
 	actor = read_actor(actor_id)
 	if actor is None:
 		raise RuntimeError(f'Trying to write financial record but could not find which actor it belongs to.')
 	channel = channels.get_discord_channel(actor.finance_channel_id)
-	if content is not None:
-		await channel.send(content)
-	if last_in_sequence:
-		await update_financial_statement(channel, actor)
+	await update_financial_statement(channel, actor)
+
+async def write_financial_record(transaction : Transaction, payer_record : str=None, recip_record : str=None):
+	def send_record_task(actor_id : str, record : str):
+		return asyncio.create_task(send_financial_record_for_actor(actor_id, record, transaction.last_in_sequence))
+
+	task_list = (
+		send_record_task(a, r)
+		for (a, r)
+		in [(transaction.payer_actor, payer_record), (transaction.recip_actor, recip_record)]
+	)
+	[payer_message, sender_message] = await asyncio.gather(*task_list)
+	print(f'{payer_message}, {sender_message}')
+
+	if transaction.cause == TransTypes.ShopOrder:
+		if payer_message is not None:
+			await payer_message.add_reaction(emoji_cancel)
+			msg_id = str(payer_message.id)
+			transaction.payer_msg_id = msg_id
+			store_transaction(transaction.payer_actor, msg_id, transaction)
+		if sender_message is not None:
+			await sender_message.add_reaction(emoji_cancel)
+			msg_id = str(sender_message.id)
+			transaction.recip_msg_id = msg_id
+			store_transaction(transaction.recip_actor, msg_id, transaction)
+	print(f'Transaction at the end of write_financial_record: {transaction.to_string()}')
+
+async def send_financial_record_for_actor(actor_id : str, record : str, last_in_sequence):
+	print(f'{actor_id}, {record}')
+	if record is not None:
+		actor = read_actor(actor_id)
+		if actor is None:
+			raise RuntimeError(f'Trying to write financial record but could not find which actor it belongs to.')
+		channel = channels.get_discord_channel(actor.finance_channel_id)
+		message = await channel.send(record)
+		if last_in_sequence:
+			await update_financial_statement(channel, actor)
+		return message
 
 def get_actor_for_handle(handle_id : str):
 	handle : handles.Handle = handles.get_handle(handle_id)

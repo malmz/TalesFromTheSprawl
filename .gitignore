@@ -1,6 +1,7 @@
 # Runtime conf files
 discord/*.conf
 discord/chats/*.conf
+discord/actors/*.conf
 discord/shops/*.conf
 
 # Byte-compiled / optimized / DLL files

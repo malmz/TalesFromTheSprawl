@@ -1,48 +1,12 @@
 import simplejson
 from enum import Enum
 from typing import List, Set
+from copy import deepcopy
 
 class ActionResult(object):
 	def __init__(self, success : bool=False, report : str = None):
 		self.success = success
 		self.report = report
-
-class TransTypes(str, Enum):
-	Transfer = 't'
-	Collect = 'c'
-	Burn = 'b'
-	ChatReact = 'r'
-	ShopOrder = 'o'
-
-class Transaction(object):
-	def __init__(
-		self,
-		payer : str,
-		recip : str,
-		payer_actor : str,
-		recip_actor : str,
-		amount : int,
-		cause : TransTypes=TransTypes.Transfer,
-		report : str=None,
-		timestamp=None, # TODO
-		success : bool=False,
-		last_in_sequence : bool=True,
-		data : str=None,
-		emoji : str=None
-		):
-		self.payer = payer
-		self.recip = recip
-		self.payer_actor = payer_actor
-		self.recip_actor = recip_actor
-		self.amount = amount
-		self.cause = cause
-		self.report = report
-		self.timestamp = timestamp
-		self.success = success
-		self.last_in_sequence = last_in_sequence
-		self.data = data
-		self.emoji = emoji
-	# TODO: also add msg_id for the finance channel messages for payer and recip
 
 class PostTimestamp(object):
 	def __init__(self, hour : int, minute : int):
@@ -93,6 +57,59 @@ class PostTimestamp(object):
 			# (we don't support LARPs that run for more than one day)
 			new_total += 24 * 60
 		return new_total - old_total
+
+class TransTypes(str, Enum):
+	Transfer = 't'
+	Collect = 'c'
+	Burn = 'b'
+	ChatReact = 'r'
+	ShopOrder = 'o'
+
+class Transaction(object):
+	def __init__(
+		self,
+		payer : str,
+		recip : str,
+		payer_actor : str,
+		recip_actor : str,
+		amount : int,
+		cause : TransTypes=TransTypes.Transfer,
+		report : str=None,
+		timestamp : PostTimestamp=None, # TODO: add timestamp for regular payments 
+		success : bool=False,
+		last_in_sequence : bool=True,
+		payer_msg_id : str=None,
+		recip_msg_id : str=None,
+		data : str=None,
+		emoji : str=None
+		):
+		self.payer = payer
+		self.recip = recip
+		self.payer_actor = payer_actor
+		self.recip_actor = recip_actor
+		self.amount = amount
+		self.cause = cause
+		self.report = report
+		self.timestamp = timestamp
+		self.success = success
+		self.last_in_sequence = last_in_sequence
+		self.data = data
+		self.emoji = emoji
+		self.payer_msg_id = payer_msg_id
+		self.recip_msg_id = recip_msg_id
+
+	@staticmethod
+	def from_string(string : str):
+		obj = Transaction(None, None, None, None, 0)
+		loaded_dict = simplejson.loads(string)
+		obj.__dict__ = loaded_dict
+		obj.timestamp : PostTimestamp = PostTimestamp.from_string(loaded_dict['timestamp'])
+		return obj
+
+	def to_string(self):
+		dict_to_save = deepcopy(self.__dict__)
+		dict_to_save['timestamp'] = PostTimestamp.to_string(self.timestamp)
+		return simplejson.dumps(dict_to_save)
 
 
 class ChannelIdentifier(object):
