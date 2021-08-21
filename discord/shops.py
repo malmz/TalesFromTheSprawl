@@ -388,6 +388,8 @@ def clear_catalogue(shop_name : str):
 		catalogue.write()
 
 
+# The delivery ID of each player/actor is stored in a simple database
+
 delivery_data_suffix = '_delivery_data.conf'
 delivery_ids_index = '___delivery_ids'
 
@@ -432,12 +434,13 @@ def delete_delivery_ids_for_actor(actor_id : str):
 		delete_delivery_id(shop_id, actor_id)
 
 
+# The active orders are stored indexed on delivery ID, since there can only be
+# one active order for each
+
 order_data_suffix = '_order_data.conf'
 active_orders_index = '___active_orders'
 locked_orders_index = '___locked_orders'
 
-# The active orders are stored indexed on delivery ID, since there can only be
-# one active order for each
 def get_order_data(shop_name : str):
 	shop_id = shop_name.lower()
 	order_data_file_name = f'{shop_id}{order_data_suffix}'
@@ -447,6 +450,8 @@ def store_active_order(shop_name : str, order : Order):
 	if shop_exists(shop_name):
 		order_data = get_order_data(shop_name)
 		order_data[active_orders_index][order.delivery_id] = order.to_string()
+		# TODO: also store the mapping from order_flow_msg_id to this order
+		# (needed to process reactions on the orders themselves, to mark as locked or completed)
 		order_data.write()
 
 def delete_active_order(shop_name : str, delivery_id : str):
@@ -1102,13 +1107,23 @@ async def attempt_refund(transaction : Transaction, initiator_id : str):
 	if delivery_id is None:
 		delivery_id = handles.get_active_handle_id(buyer_player_id)
 		if delivery_id is None:
-			transaction.report = (f'Error: could not find order to refund. If you have switched your delivery option '
+			if initiated_by_shop:
+				transaction.report = (f'Error: could not find order to refund. If the buyer has switched their delivery option '
+				+'(e.g. table, address, handle), they need to switch back in order to map the transaction to the order.')
+			else:
+				transaction.report = (f'Error: could not find order to refund. If you have switched your delivery option '
 				+'(e.g. table, address, handle), try switching back to the one you had when you ordered.')
 			return
 
 	order = fetch_active_order(shop_id, delivery_id)
 	if order is None:
-		transaction.report = f'Error: could not refund. Order has been delivered, aborted, or is in preparation.'
+		if initiated_by_shop:
+			transaction.report = (f'Error: could not find order to refund. Perhaps it has already been locked in or delivered. '
+				+ 'Otherwise, if the buyer has switched their delivery option (e.g. table, address, handle), '
+				'they need to switch back in order to map the transaction to the order.')
+		else:
+			transaction.report = (f'Error: could not find order to refund. If you have switched your delivery option '
+				+'(e.g. table, address, handle), try switching back to the one you had when you ordered.')
 		return
 
 	product_name = transaction.data
@@ -1129,34 +1144,68 @@ async def attempt_refund(transaction : Transaction, initiator_id : str):
 
 	if not transaction.success:
 		# try_to_pay will have put in a good-enough error message
-		transaction.report = 'Error: could not refund. ' + transaction.report
+		transaction.report = 'Error: could not refund.\n' + transaction.report
 		return
 
-	# Since it was a success, we should remove the previous financial record entries
-	undo_hook_message_ids_to_remove = [transaction.payer_msg_id, transaction.recip_msg_id]
+	await execute_refund_in_order_flow(shop, transaction, order)
+
+
+async def execute_refund_in_order_flow(shop : Shop, refund : Transaction, order : Order):
+	# Remove the item from the order:
+	product_name = refund.data
+	new_number = int(order.items_ordered[product_name]) - 1
+	if new_number > 0:
+		order.items_ordered[product_name] = new_number
+	else:
+		del order.items_ordered[product_name]
+
+	order_empty = len(order.items_ordered) == 0
+
+	# Remove the financial record entries for the refunded transaction
+	# (also prevents the other party from trying to refund the same purchase a second time)
+	undo_hook_message_ids_to_remove = [refund.payer_msg_id, refund.recip_msg_id]
 	remaining_undo_hooks = []
 	for (actor_id, msg_id) in order.undo_hooks:
 		if msg_id in undo_hook_message_ids_to_remove:
 			await actors.remove_tentative_transaction(actor_id, msg_id)
+		elif order_empty:
+			# If the order is empty, we don't expect any other undo hooks,
+			# but we may as well remove the "undo" option if any are lingering
+			await actors.lock_tentative_transaction(actor_id, msg_id)
 		else:
 			remaining_undo_hooks.append((actor_id, msg_id))
 	order.undo_hooks = remaining_undo_hooks
 
-	new_number = number_of_product_in_order - 1
-	order.price_total -= transaction.amount # remember, try_to_pay flipped it to a positive number again
-	if new_number > 0:
-		print('1')
-		order.items_ordered[product_name] = new_number
+	try:
+		order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
+	except discord.errors.NotFound:
+		refund.success = False
+		refund.report = f'Error: refund performed but {shop.name} database is corrupt -- order status may be shown wrong.'
+		return
+		# Either the channel or the message is missing. 
+	try:
+		order_flow_message = await order_flow_channel.fetch_message(order.order_flow_msg_id)
+	except discord.errors.NotFound:
+		if not order_empty:
+			refund.success = False
+			refund.report = f'Error: refund performed but {shop.name} database is corrupt -- order status may be shown wrong.'
+			# Post a new message -- there may be an old one that we have lost track of, but this is better than nothing
+			content = generate_order_message(order)
+			message = await order_flow_channel.send(content)
+			order.order_flow_msg_id = message.id
+			store_active_order(shop.shop_id, order)
+
+	if order_empty:
+		# There is nothing left, so we shall remove the order
+		await order_flow_message.delete()
+		alert = (f'Order #{order.order_id} for {order.delivery_id} has been cancelled. '
+			+ f'The last item that was refunded was 1 {refund.data} {refund.emoji}.')
+		await order_flow_channel.send(alert, delete_after=10)
 	else:
-		print('2')
-		del order.items_ordered[product_name]
-		if len(order.items_ordered) == 0:
-			print('3')
-			# TODO: remove the order completely
-			return
-
-	store_active_order(shop_id, order)
-
+		order.price_total -= refund.amount
+		content = generate_order_message(order)
+		await order_flow_message.edit(content=content)
+		store_active_order(shop.shop_id, order)
 
 
 
