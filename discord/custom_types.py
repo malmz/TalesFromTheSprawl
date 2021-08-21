@@ -64,6 +64,7 @@ class TransTypes(str, Enum):
 	Burn = 'b'
 	ChatReact = 'r'
 	ShopOrder = 'o'
+	ShopRefund = 'sr'
 
 class Transaction(object):
 	def __init__(
@@ -81,7 +82,8 @@ class Transaction(object):
 		payer_msg_id : str=None,
 		recip_msg_id : str=None,
 		data : str=None,
-		emoji : str=None
+		emoji : str=None,
+		shop_id : str=None
 		):
 		self.payer = payer
 		self.recip = recip
@@ -97,6 +99,7 @@ class Transaction(object):
 		self.emoji = emoji
 		self.payer_msg_id = payer_msg_id
 		self.recip_msg_id = recip_msg_id
+		self.shop_id = shop_id
 
 	@staticmethod
 	def from_string(string : str):
@@ -110,6 +113,17 @@ class Transaction(object):
 		dict_to_save = deepcopy(self.__dict__)
 		dict_to_save['timestamp'] = PostTimestamp.to_string(self.timestamp)
 		return simplejson.dumps(dict_to_save)
+
+	def get_undo_hooks_list(self):
+		return (
+			[(a, m)
+			for (a, m)
+			in (
+				[(self.payer_actor, self.payer_msg_id),
+				(self.recip_actor, self.recip_msg_id)]
+				)
+			if a is not None and m is not None]
+			)
 
 
 class ChannelIdentifier(object):

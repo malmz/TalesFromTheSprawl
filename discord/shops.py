@@ -6,7 +6,7 @@ import simplejson
 import datetime
 
 from configobj import ConfigObj
-from typing import List
+from typing import List, Tuple
 from copy import deepcopy
 
 # Custom imports
@@ -145,7 +145,7 @@ class Order(object):
 		price_total : int,
 		order_flow_msg_id : str=None,
 		time_created : PostTimestamp=None,
-		msg_ids : List[str]=[],
+		undo_hooks : List[Tuple[str, str]]=[],
 		items_ordered={}):
 		self.order_id = order_id
 		self.delivery_id = delivery_id
@@ -154,7 +154,7 @@ class Order(object):
 		self.items_ordered = items_ordered
 		self.time_created : PostTimestamp = time_created
 		self.time_updated : PostTimestamp = time_created
-		self.msg_ids = msg_ids
+		self.undo_hooks = undo_hooks
 		self.updated : bool = False
 
 	@staticmethod
@@ -251,7 +251,7 @@ async def reinitialize(user_id : str, shop_name : str):
 		in [order_flow_channel.purge(), storefront_channel.purge()]]
 		)
 	delete_catalogue_item_mappings_for_shop(shop.shop_id)
-	clear_order_data(shop.shop_id)
+	await clear_order_data(shop.shop_id)
 	shop.highest_order = 1
 	store_shop(shop)
 	return 'Done.'
@@ -459,6 +459,15 @@ def get_active_order(shop_name : str, delivery_id : str):
 		order_data = get_order_data(shop_name)
 		return read_active_order_from_order_data(order_data, delivery_id)
 
+def fetch_all_active_orders(shop_name : str):
+	if shop_exists(shop_name):
+		order_data = get_order_data(shop_name)
+		for delivery_id in order_data[active_orders_index]:
+			order = read_active_order_from_order_data(order_data, delivery_id)
+			del order_data[active_orders_index][delivery_id]
+			order_data.write()
+			yield order
+
 def fetch_active_order(shop_name : str, delivery_id : str):
 	if shop_exists(shop_name):
 		order_data = get_order_data(shop_name)
@@ -510,9 +519,11 @@ def fetch_locked_order_from_order_data(order_data, order_id : str):
 		return order
 
 
-def clear_order_data(shop_name : str):
+async def clear_order_data(shop_name : str):
 	if shop_exists(shop_name):
 		order_data = get_order_data(shop_name)
+		for order in fetch_all_active_orders(shop_name):
+			await remove_undo_hooks(order)
 		order_data[active_orders_index] = {}
 		order_data[locked_orders_index] = {}
 		order_data.write()
@@ -554,7 +565,7 @@ async def create_shop(guild, shop_name : str, owner_player_id : str):
 	store_shop(shop)
 	clear_catalogue(shop.shop_id)
 	clear_delivery_data(shop.shop_id)
-	clear_order_data(shop.shop_id)
+	await clear_order_data(shop.shop_id)
 	report = f'Created shop {shop.name}, run by {owner_player_id}'
 
 	employment_report = await employ(guild, owner_player_id, shop)
@@ -921,6 +932,18 @@ async def process_reaction_in_storefront(message, user_id : str, emoji : str):
 
 ### Making an order:
 
+# TODO: make this a class function
+def generate_order_message(order : Order):
+	if order.updated:
+		content = f'**#{order.order_id}** for **{order.delivery_id}**    {emoji_alert} updated at {order.time_updated.pretty_print()}\n'
+	else:
+		content = f'**#{order.order_id}** for **{order.delivery_id}**    created at {order.time_created.pretty_print()}\n'
+	for item, amount in order.items_ordered.items():
+		content += f'> {amount} {item}\n'
+	content += f'> Total: {coin} {order.price_total} (paid)'
+	return content
+
+
 async def order_product_from_command(user_id : str, shop_name : str, product_name : str):
 	player_id = players.get_player_id(user_id)
 	buyer_handle : Handle = handles.get_active_handle(player_id)
@@ -970,7 +993,8 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 		amount=product.price,
 		cause=TransTypes.ShopOrder,
 		data=product.name,
-		timestamp=timestamp)
+		timestamp=timestamp,
+		shop_id=shop.shop_id)
 	transaction.emoji = product.emoji
 	#transaction = finances.find_transaction_parties(transaction)
 	transaction = await finances.try_to_pay(transaction)
@@ -999,6 +1023,7 @@ async def place_order_in_flow(shop : Shop, purchase : Transaction, delivery_id :
 			previous_order_updated = True
 		else:
 			# Lock the previous order
+			await lock_active_order(shop, order, purchase)
 			# TODO: also update the order message + any mappings to it
 			store_locked_order(shop.shop_id, order)
 
@@ -1011,12 +1036,23 @@ async def place_order_in_flow(shop : Shop, purchase : Transaction, delivery_id :
 			purchase.amount,
 			items_ordered={purchase.data: 1},
 			time_created = purchase.timestamp,
-			msg_ids = [m for m in [purchase.payer_msg_id, purchase.recip_msg_id] if m is not None]
+			undo_hooks = purchase.get_undo_hooks_list()
 			)
 		post = generate_order_message(order)
 		message = await order_flow_channel.send(post)
 		order.order_flow_msg_id = message.id
 	store_active_order(shop.shop_id, delivery_id, order)
+
+async def lock_active_order(shop : Shop, order : Order, purchase : Transaction):
+	await remove_undo_hooks(order)
+	order.undo_hooks = []
+	store_locked_order(shop.shop_id, order)
+
+# TODO: make this into an Order class function?
+async def remove_undo_hooks(order : Order):
+	for (actor_id, msg_id) in order.undo_hooks:
+		# These are IDs for messages that could until now be used to undo the transaction
+		await actors.lock_tentative_transaction(actor_id, msg_id)
 
 async def add_to_active_order(shop : Shop, order : Order, purchase : Transaction):
 	order.add(purchase.data, purchase.amount, purchase.timestamp)
@@ -1029,22 +1065,14 @@ async def add_to_active_order(shop : Shop, order : Order, purchase : Transaction
 	order.order_flow_msg_id = new_message.id
 	# The mapping to the messages in each player's respective finance channel, which
 	# we need to find when we lock or complete the order, to take away the "undo" possibility
-	for msg_id in [purchase.payer_msg_id, purchase.recip_msg_id]:
-		if msg_id is not None:
-			order.msg_ids.append(msg_id)
+	for t in purchase.get_undo_hooks_list():
+		order.undo_hooks.append(t)
 	return order
 
 
-
-def generate_order_message(order : Order):
-	if order.updated:
-		content = f'**#{order.order_id}** for **{order.delivery_id}**    {emoji_alert} updated at {order.time_updated.pretty_print()}\n'
-	else:
-		content = f'**#{order.order_id}** for **{order.delivery_id}**    created at {order.time_created.pretty_print()}\n'
-	for item, amount in order.items_ordered.items():
-		content += f'> {amount} {item}\n'
-	content += f'> Total: {coin} {order.price_total} (paid)'
-	return content
+async def attempt_refund(transaction : Transaction):
+	transaction.success = False
+	transaction.cause = TransTypes.ShopRefund
 
 
 

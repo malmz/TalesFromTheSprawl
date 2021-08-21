@@ -278,11 +278,11 @@ async def record_transaction(transaction : Transaction):
     if int(transaction.amount) == 0:
         # No need to write anything for 0-transactions, should they occur
         return
-    record_payer = generate_record_for_payer(transaction)
-    record_recip = generate_record_for_recip(transaction)
+    record_payer = await generate_record_for_payer(transaction)
+    record_recip = await generate_record_for_recip(transaction)
     await actors.write_financial_record(transaction, record_payer, record_recip)
 
-def generate_record_for_payer(transaction : Transaction):
+async def generate_record_for_payer(transaction : Transaction):
     if transaction.payer_actor is None:
         return None
     if transaction.payer_actor == transaction.recip_actor:
@@ -300,9 +300,12 @@ def generate_record_for_payer(transaction : Transaction):
         return generate_record_collected(transaction)
     if transaction.cause == TransTypes.ShopOrder:
         return generate_record_buyer(transaction)
+    if transaction.cause == TransTypes.ShopRefund:
+        # Will not be recorded -- the original transaction will just vanish instead
+        await actors.refresh_financial_statement(transaction.payer_actor)
 
 
-def generate_record_for_recip(transaction : Transaction):
+async def generate_record_for_recip(transaction : Transaction):
     if transaction.recip_actor is None:
         return None
     if transaction.payer_actor == transaction.recip_actor:
@@ -320,6 +323,9 @@ def generate_record_for_recip(transaction : Transaction):
         return generate_record_collector(transaction)
     if transaction.cause == TransTypes.ShopOrder:
         return generate_record_recip_shop(transaction)
+    if transaction.cause == TransTypes.ShopRefund:
+        # Will not be recorded -- the original transaction will just vanish instead
+        await actors.refresh_financial_statement(transaction.recip_actor)
 
 # TODO: timestamp for transactions
 def generate_record_self_transfer(transaction : Transaction):

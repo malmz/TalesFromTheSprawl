@@ -3,6 +3,7 @@ import posting
 import channels
 import finances
 import players
+import actors
 import custom_types
 import chats
 import shops
@@ -90,16 +91,22 @@ async def process_reaction_in_storefront(message_id : int, user_id : int, channe
 		if cmd_line_channel is not None:
 			await cmd_line_channel.send(result.report)
 
+async def process_reaction_in_finance_channel(message_id : int, user_id : int, channel, emoji):
+	# Remove the reaction right away, regardless of what it is
+	message = await channel.fetch_message(message_id)
+	await remove_reaction(message, emoji, user_id)
+
+	await actors.process_reaction_in_finance_channel(str(channel.id), str(message_id), str(emoji))
+
 
 async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
+	# TODO: a reaction cooldown for each channel? Just, don't process reactions in a channel too quickly in a row?
 	print(f'User reacted with {emoji}')
 	if channels.is_anonymous_channel(channel):
 		# Reactions are allowed in anonymous channels, but trigger no effects
 		return
-	if (channels.is_cmd_line(channel.name)
-		or channels.is_finance(channel.name)
-		):
-		# Reactions in cmd_line and finance channels will be silently swallowed
+	if channels.is_cmd_line(channel.name):
+		# Reactions in cmd_line are silently swallowed
 		message = await channel.fetch_message(message_id)
 		await remove_reaction(message, emoji, user_id)
 		return
@@ -108,6 +115,8 @@ async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
 		await process_reaction_in_chat_hub(message_id, user_id, channel, emoji)
 	elif channels.is_shop_channel(channel):
 		await process_reaction_in_storefront(message_id, user_id, channel, emoji)
+	elif channels.is_finance(channel.name):
+		await process_reaction_in_finance_channel(message_id, user_id, channel, emoji)
 	else:
 		await process_reaction_for_tipping(message_id, user_id, channel, emoji)
 
