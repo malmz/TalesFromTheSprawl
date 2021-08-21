@@ -18,7 +18,7 @@ import actors
 import finances
 import server
 
-from common import coin, emoji_unavail, shop_role_start, highest_ever_index
+from common import coin, emoji_unavail, shop_role_start, highest_ever_index, emoji_alert
 from custom_types import Transaction, TransTypes, ActionResult, Handle, HandleTypes, PostTimestamp
 
 
@@ -86,6 +86,7 @@ class Shop(object):
 		self.order_flow_channel_id = order_flow_channel_id
 		self.highest_order = 0
 		self.employees = [] if employees == [] else employees
+		self.order_collection_limit = 2
 
 	@staticmethod
 	def from_string(string : str):
@@ -142,15 +143,17 @@ class Order(object):
 		order_id : str,
 		delivery_id : str,
 		price_total : int,
-		msg_id : str=None,
+		order_flow_msg_id : str=None,
 		time_created : PostTimestamp=None,
 		items_ordered={}):
 		self.order_id = order_id
 		self.delivery_id = delivery_id
 		self.price_total = price_total
-		self.msg_id = msg_id
+		self.order_flow_msg_id = order_flow_msg_id
 		self.items_ordered = items_ordered
-		self.time_created  : PostTimestamp = time_created
+		self.time_created : PostTimestamp = time_created
+		self.time_updated : PostTimestamp = time_created
+		self.updated : bool = False
 
 	@staticmethod
 	def from_string(string : str):
@@ -158,12 +161,26 @@ class Order(object):
 		loaded_dict = simplejson.loads(string)
 		obj.__dict__ = loaded_dict
 		obj.time_created : PostTimestamp = PostTimestamp.from_string(loaded_dict['time_created'])
+		obj.time_updated : PostTimestamp = PostTimestamp.from_string(loaded_dict['time_updated'])
 		return obj
 
 	def to_string(self):
 		dict_to_save = deepcopy(self.__dict__)
 		dict_to_save['time_created'] = PostTimestamp.to_string(self.time_created)
+		dict_to_save['time_updated'] = PostTimestamp.to_string(self.time_updated)
 		return simplejson.dumps(dict_to_save)
+
+	def add(self, product : Product, timestamp : PostTimestamp):
+		if product.name in self.items_ordered:
+			prev_number = int(self.items_ordered[product.name])
+		else:
+			prev_number = 0
+		new_number = prev_number + 1
+		self.items_ordered[product.name] = new_number
+		self.time_updated = timestamp
+		self.price_total += product.price
+		self.updated = True
+
 
 
 # "Missing" class: ChannelMapping
@@ -414,6 +431,8 @@ order_data_suffix = '_order_data.conf'
 active_orders_index = '___active_orders'
 locked_orders_index = '___locked_orders'
 
+# The active orders are stored indexed on delivery ID, since there can only be
+# one active order for each
 def get_order_data(shop_name : str):
 	shop_id = shop_name.lower()
 	order_data_file_name = f'{shop_id}{order_data_suffix}'
@@ -443,47 +462,48 @@ def fetch_active_order(shop_name : str, delivery_id : str):
 		return fetch_active_order_from_order_data(order_data, delivery_id)
 
 def read_active_order_from_order_data(order_data, delivery_id : str):
-	if delivery_id in delivery_data[active_orders_index]:
+	if delivery_id in order_data[active_orders_index]:
 		return Order.from_string(order_data[active_orders_index][delivery_id])
 
 def fetch_active_order_from_order_data(order_data, delivery_id : str):
-	if delivery_id in delivery_data[active_orders_index]:
+	if delivery_id in order_data[active_orders_index]:
 		order = Order.from_string(order_data[active_orders_index][delivery_id])
 		del order_data[active_orders_index][delivery_id]
 		return order
 
 
-def store_locked_order(shop_name : str, delivery_id : str, order : Order):
+# The locked orders are stored indexed on order number
+def store_locked_order(shop_name : str, order : Order):
 	if shop_exists(shop_name):
 		order_data = get_order_data(shop_name)
-		order_data[locked_orders_index][delivery_id] = order.to_string()
+		order_data[locked_orders_index][order.order_id] = order.to_string()
 		order_data.write()
 
-def delete_locked_order(shop_name : str, delivery_id : str):
+def delete_locked_order(shop_name : str, order_id : str):
 	if shop_exists(shop_name):
 		order_data = get_order_data(shop_name)
-		if delivery_id in order_data[locked_orders_index]:
-			del order_data[locked_orders_index][delivery_id]
+		if order_id in order_data[locked_orders_index]:
+			del order_data[locked_orders_index][order_id]
 			order_data.write()
 
-def get_locked_order(shop_name : str, delivery_id : str):
+def get_locked_order(shop_name : str, order_id : str):
 	if shop_exists(shop_name):
 		order_data = get_order_data(shop_name)
-		return read_locked_order_from_order_data(order_data, delivery_id)
+		return read_locked_order_from_order_data(order_data, order_id)
 
-def fetch_locked_order(shop_name : str, delivery_id : str):
+def fetch_locked_order(shop_name : str, order_id : str):
 	if shop_exists(shop_name):
 		order_data = get_order_data(shop_name)
-		return fetch_locked_order_from_order_data(order_data, delivery_id)
+		return fetch_locked_order_from_order_data(order_data, order_id)
 
-def read_locked_order_from_order_data(order_data, delivery_id : str):
+def read_locked_order_from_order_data(order_data, order_id : str):
 	if delivery_id in delivery_data[locked_orders_index]:
-		return Order.from_string(order_data[locked_orders_index][delivery_id])
+		return Order.from_string(order_data[locked_orders_index][order_id])
 
-def fetch_locked_order_from_order_data(order_data, delivery_id : str):
+def fetch_locked_order_from_order_data(order_data, order_id : str):
 	if delivery_id in delivery_data[locked_orders_index]:
-		order = Order.from_string(order_data[locked_orders_index][delivery_id])
-		del order_data[locked_orders_index][delivery_id]
+		order = Order.from_string(order_data[locked_orders_index][order_id])
+		del order_data[locked_orders_index][order_id]
 		return order
 
 
@@ -685,7 +705,7 @@ def edit_product_from_command(user_id : str, product_name : str, key : str, valu
 	if result.error_report is not None or result.shop is None:
 		return result.error_report
 	shop : Shop = result.shop
-	edit_product(shop, product_name, key, value)
+	return edit_product(shop, product_name, key, value)
 
 
 def edit_product(shop : Shop, product_name : str, key : str, value : str):
@@ -725,9 +745,15 @@ def edit_product(shop : Shop, product_name : str, key : str, value : str):
 			edited = True
 		except ValueError:
 			return f'Error: cannot set price to \"{value}\"; must be a number.'
+	elif key in ['type', 'symbol', 'emoji']:
+		emoji = get_emoji_for_new_product(value)
+		edited = emoji != product.emoji
+		product.emoji = emoji
 	if edited:
 		store_product(shop.shop_id, product)
 		return 'Done.'
+	else:
+		return 'Your command resulted in no change.'
 
 
 
@@ -876,9 +902,6 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 		# No delivery ID set for this player
 		delivery_id = buyer_handle.handle_id
 
-	timestamp = datetime.datetime.today()
-	trunc_timestamp = PostTimestamp(timestamp.hour, timestamp.minute)
-
 	# TODO: use "from_reaction" somehow to ensure not all transaction failures end up in cmd line?
 	transaction = Transaction(
 		payer=buyer_handle.handle_id,
@@ -895,24 +918,52 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 		return result
 	# Otherwise, we move on to create the order
 
-	order_id = str(record_new_order(shop.shop_id))
-	order = Order(order_id, delivery_id, product.price, items_ordered={product.name: 1}, time_created = trunc_timestamp)
-		#msg_id : str,
+	await place_order_in_flow(shop, product, delivery_id)
 
-	store_active_order(shop.shop_id, delivery_id, order)
-
-	order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
-	post = generate_order_message(order)
-	await order_flow_channel.send(post)
 	result.report = f'Successfully ordered {product.name} from {shop.name}'
 	result.success = True
 	return result
 
-#async def place_order_in_flow():
+async def place_order_in_flow(shop : Shop, product : Product, delivery_id : str):
+	timestamp = datetime.datetime.today()
+	trunc_timestamp = PostTimestamp(timestamp.hour, timestamp.minute)
+
+	previous_order = fetch_active_order(shop.shop_id, delivery_id)
+	new_order = None
+	if previous_order is not None:
+		# The previous order will have been deleted from active_orders
+		time_diff = PostTimestamp.get_time_diff(previous_order.time_created, trunc_timestamp)
+		print(f'timediff: {time_diff}')
+		if time_diff <= shop.order_collection_limit:
+			previous_order.add(product, trunc_timestamp)
+			new_order = previous_order
+			print(f'Got it in time!')
+		else:
+			print(f'Waited too long')
+			# Lock the previous order
+			# TODO: also update the order message + any mappings to it
+			store_locked_order(shop.shop_id, previous_order)
+
+	if new_order is None:
+		print(f'Creating a new order.')
+		order_id = str(record_new_order(shop.shop_id))
+		new_order = Order(order_id, delivery_id, product.price, items_ordered={product.name: 1}, time_created = trunc_timestamp)
+		#msg_id : str,
+
+	order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
+	post = generate_order_message(new_order)
+	message = await order_flow_channel.send(post)
+	new_order.order_flow_msg_id = message.id
+
+	print(f'Storing order: {new_order.to_string()}')
+	store_active_order(shop.shop_id, delivery_id, new_order)
 
 
 def generate_order_message(order : Order):
-	content = f'**#{order.order_id}** for **{order.delivery_id}**    at {order.time_created.pretty_print()}\n'
+	if order.updated:
+		content = f'**#{order.order_id}** for **{order.delivery_id}**    {emoji_alert} updated at {order.time_updated.pretty_print()}\n'
+	else:
+		content = f'**#{order.order_id}** for **{order.delivery_id}**    created at {order.time_created.pretty_print()}\n'
 	for item, amount in order.items_ordered.items():
 		content += f'> {amount} {item}\n'
 	content += f'> Total: {coin} {order.price_total} (paid)'
@@ -945,6 +996,10 @@ async def process_reaction_in_catalogue(message, user_id : str, emoji : str):
 
 	result = await order_product(shop, product, buyer_handle)
 	return result
+
+
+
+### Delivery IDs -- where a player's order is to be delivered e.g. a table number
 
 def check_delivery_id_input(delivery_id :str, shop_name : str):
 	if delivery_id is None:

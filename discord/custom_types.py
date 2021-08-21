@@ -48,10 +48,8 @@ class PostTimestamp(object):
 
 	def __eq__(self, other):
 		if isinstance(other, self.__class__):
-			print(f'Comparing dicts: {self.__dict__} to {other.__dict__}: result is {self.__dict__ == other.__dict__}')
 			return self.__dict__ == other.__dict__
 		else:
-			printf('Wrng types')
 			return False
 
 	@staticmethod
@@ -82,6 +80,16 @@ class PostTimestamp(object):
 				second_str = str(second)
 			result += f':{second_str}'
 		return result
+
+	@staticmethod
+	def get_time_diff(older, newer):
+		old_total = older.hour * 60 + older.minute
+		new_total = newer.hour * 60 + newer.minute
+		if old_total > new_total:
+			# The new timestamp must be after a midnight wraparound
+			# (we don't support LARPs that run for more than one day)
+			new_total += 24 * 60
+		return new_total - old_total
 
 
 class ChannelIdentifier(object):
