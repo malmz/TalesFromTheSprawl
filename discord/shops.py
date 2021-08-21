@@ -410,6 +410,91 @@ def delete_delivery_ids_for_actor(actor_id : str):
 		delete_delivery_id(shop_id, actor_id)
 
 
+order_data_suffix = '_order_data.conf'
+active_orders_index = '___active_orders'
+locked_orders_index = '___locked_orders'
+
+def get_order_data(shop_name : str):
+	shop_id = shop_name.lower()
+	order_data_file_name = f'{shop_id}{order_data_suffix}'
+	return ConfigObj(f'{shops_conf_dir}/{order_data_file_name}')
+
+def store_active_order(shop_name : str, delivery_id : str, order : Order):
+	if shop_exists(shop_name):
+		order_data = get_order_data(shop_name)
+		order_data[active_orders_index][delivery_id] = order.to_string()
+		order_data.write()
+
+def delete_active_order(shop_name : str, delivery_id : str):
+	if shop_exists(shop_name):
+		order_data = get_order_data(shop_name)
+		if delivery_id in order_data[active_orders_index]:
+			del order_data[active_orders_index][delivery_id]
+			order_data.write()
+
+def get_active_order(shop_name : str, delivery_id : str):
+	if shop_exists(shop_name):
+		order_data = get_order_data(shop_name)
+		return read_active_order_from_order_data(order_data, delivery_id)
+
+def fetch_active_order(shop_name : str, delivery_id : str):
+	if shop_exists(shop_name):
+		order_data = get_order_data(shop_name)
+		return fetch_active_order_from_order_data(order_data, delivery_id)
+
+def read_active_order_from_order_data(order_data, delivery_id : str):
+	if delivery_id in delivery_data[active_orders_index]:
+		return Order.from_string(order_data[active_orders_index][delivery_id])
+
+def fetch_active_order_from_order_data(order_data, delivery_id : str):
+	if delivery_id in delivery_data[active_orders_index]:
+		order = Order.from_string(order_data[active_orders_index][delivery_id])
+		del order_data[active_orders_index][delivery_id]
+		return order
+
+
+def store_locked_order(shop_name : str, delivery_id : str, order : Order):
+	if shop_exists(shop_name):
+		order_data = get_order_data(shop_name)
+		order_data[locked_orders_index][delivery_id] = order.to_string()
+		order_data.write()
+
+def delete_locked_order(shop_name : str, delivery_id : str):
+	if shop_exists(shop_name):
+		order_data = get_order_data(shop_name)
+		if delivery_id in order_data[locked_orders_index]:
+			del order_data[locked_orders_index][delivery_id]
+			order_data.write()
+
+def get_locked_order(shop_name : str, delivery_id : str):
+	if shop_exists(shop_name):
+		order_data = get_order_data(shop_name)
+		return read_locked_order_from_order_data(order_data, delivery_id)
+
+def fetch_locked_order(shop_name : str, delivery_id : str):
+	if shop_exists(shop_name):
+		order_data = get_order_data(shop_name)
+		return fetch_locked_order_from_order_data(order_data, delivery_id)
+
+def read_locked_order_from_order_data(order_data, delivery_id : str):
+	if delivery_id in delivery_data[locked_orders_index]:
+		return Order.from_string(order_data[locked_orders_index][delivery_id])
+
+def fetch_locked_order_from_order_data(order_data, delivery_id : str):
+	if delivery_id in delivery_data[locked_orders_index]:
+		order = Order.from_string(order_data[locked_orders_index][delivery_id])
+		del order_data[locked_orders_index][delivery_id]
+		return order
+
+
+def clear_order_data(shop_name : str):
+	if shop_exists(shop_name):
+		order_data = get_order_data(shop_name)
+		order_data[active_orders_index] = {}
+		order_data[locked_orders_index] = {}
+		order_data.write()
+
+
 
 ### Creating a new shop:
 
@@ -439,12 +524,14 @@ async def create_shop(guild, shop_name : str, owner_player_id : str):
 	role = actors.get_actor_role(guild, actor.actor_id)
 	order_flow_channel = await channels.create_order_flow_channel(guild, role, shop_name)
 	order_flow_channel_id = str(order_flow_channel.id)
+	store_order_flow_channel_mapping(order_flow_channel_id, shop_name)
 
 	# TODO: send welcome message in order_flow_channel
 	shop = Shop(shop_name, actor.actor_id, owner_player_id, storefront_channel_id, order_flow_channel_id)
 	store_shop(shop)
 	clear_catalogue(shop.shop_id)
 	clear_delivery_data(shop.shop_id)
+	clear_order_data(shop.shop_id)
 	report = f'Created shop {shop.name}, run by {owner_player_id}'
 
 	employment_report = await employ(guild, owner_player_id, shop)
@@ -809,15 +896,10 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 	# Otherwise, we move on to create the order
 
 	order_id = str(record_new_order(shop.shop_id))
-	print(f'Timestamp: {trunc_timestamp.to_string()}')
 	order = Order(order_id, delivery_id, product.price, items_ordered={product.name: 1}, time_created = trunc_timestamp)
 		#msg_id : str,
-		#time_created,
 
-	order_str = order.to_string()
-	order2 : Order = Order.from_string(order_str)
-
-	print(f'Dried and rehydrated order, now looks like {order2.to_string()}. ')
+	store_active_order(shop.shop_id, delivery_id, order)
 
 	order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
 	post = generate_order_message(order)
