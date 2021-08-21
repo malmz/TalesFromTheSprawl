@@ -69,6 +69,8 @@ orders_channel_map_index = '__order_flow_channel_mapping'
 
 ### Classes, init and utilities:
 
+# TODO: actor_id and shop_id are always the same; we should remove actor_id from this struct
+# (similar to how player_id is also an actor_id)
 class Shop(object):
 	def __init__(
 		self,
@@ -441,10 +443,10 @@ def get_order_data(shop_name : str):
 	order_data_file_name = f'{shop_id}{order_data_suffix}'
 	return ConfigObj(f'{shops_conf_dir}/{order_data_file_name}')
 
-def store_active_order(shop_name : str, delivery_id : str, order : Order):
+def store_active_order(shop_name : str, order : Order):
 	if shop_exists(shop_name):
 		order_data = get_order_data(shop_name)
-		order_data[active_orders_index][delivery_id] = order.to_string()
+		order_data[active_orders_index][order.delivery_id] = order.to_string()
 		order_data.write()
 
 def delete_active_order(shop_name : str, delivery_id : str):
@@ -481,6 +483,7 @@ def fetch_active_order_from_order_data(order_data, delivery_id : str):
 	if delivery_id in order_data[active_orders_index]:
 		order = Order.from_string(order_data[active_orders_index][delivery_id])
 		del order_data[active_orders_index][delivery_id]
+		order_data.write()
 		return order
 
 
@@ -993,8 +996,7 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 		amount=product.price,
 		cause=TransTypes.ShopOrder,
 		data=product.name,
-		timestamp=timestamp,
-		shop_id=shop.shop_id)
+		timestamp=timestamp)
 	transaction.emoji = product.emoji
 	#transaction = finances.find_transaction_parties(transaction)
 	transaction = await finances.try_to_pay(transaction)
@@ -1041,7 +1043,7 @@ async def place_order_in_flow(shop : Shop, purchase : Transaction, delivery_id :
 		post = generate_order_message(order)
 		message = await order_flow_channel.send(post)
 		order.order_flow_msg_id = message.id
-	store_active_order(shop.shop_id, delivery_id, order)
+	store_active_order(shop.shop_id, order)
 
 async def lock_active_order(shop : Shop, order : Order, purchase : Transaction):
 	await remove_undo_hooks(order)
@@ -1070,9 +1072,93 @@ async def add_to_active_order(shop : Shop, order : Order, purchase : Transaction
 	return order
 
 
-async def attempt_refund(transaction : Transaction):
+async def attempt_refund(transaction : Transaction, initiator_id : str):
 	transaction.success = False
 	transaction.cause = TransTypes.ShopRefund
+	shop_id = transaction.recip_actor
+	shop : Shop = read_shop(shop_id)
+	if shop is None:
+		transaction.report = f'Error: could not refund purchase becase shop no longer exists.'
+		# Unsuccessful -- shop no longer exists!
+		return
+
+	datetime_timestamp = datetime.datetime.today()
+	timestamp = PostTimestamp(datetime_timestamp.hour, datetime_timestamp.minute)
+	time_diff = PostTimestamp.get_time_diff(transaction.timestamp, timestamp)
+	# Update timestamp now that we got the info we needed from the old one
+	transaction.timestamp=timestamp
+
+	initiated_by_shop = initiator_id == shop_id
+
+	if time_diff > shop.order_collection_limit and not initiated_by_shop:
+		# Do not lock in the order automatically -- if the shop wants to refund, they can still do so
+		# This means the player can go to the staff and ask for their help, even after trying for themselves first
+		transaction.report = (f'Error: could not refund purchase becase too long time has passed (limit: {shop.order_collection_limit} minutes). '
+			+ f'If it has not yet been delivered, you can still ask {shop_id} staff to refund it for you.')
+		return
+
+	buyer_player_id = transaction.payer_actor
+	delivery_id = get_delivery_id(shop_id, buyer_player_id)
+	if delivery_id is None:
+		delivery_id = handles.get_active_handle_id(buyer_player_id)
+		if delivery_id is None:
+			transaction.report = (f'Error: could not find order to refund. If you have switched your delivery option '
+				+'(e.g. table, address, handle), try switching back to the one you had when you ordered.')
+			return
+
+	order = fetch_active_order(shop_id, delivery_id)
+	if order is None:
+		transaction.report = f'Error: could not refund. Order has been delivered, aborted, or is in preparation.'
+		return
+
+	product_name = transaction.data
+	number_of_product_in_order = 0
+	if product_name in order.items_ordered:
+		number_of_product_in_order = int(order.items_ordered[product_name])
+	if number_of_product_in_order <= 0:
+		# This typically means the refund is too late -- perhaps it was clicked right at the same time when staff
+		# marked the order as "locked" or "delivered". Both those options should remove the undo option from the
+		# buyer's side, though.
+		transaction.report = f'Error: could not refund. Order has been delivered, is in preparation, or this item has already been refunded.'
+		return
+
+	# attempt to transfer back money
+	transaction.amount = -transaction.amount
+	# Note: try_to_pay will turn any negative transaction into a positive one first, flipping payer and recip
+	await finances.try_to_pay(transaction)
+
+	if not transaction.success:
+		# try_to_pay will have put in a good-enough error message
+		transaction.report = 'Error: could not refund. ' + transaction.report
+		return
+
+	# Since it was a success, we should remove the previous financial record entries
+	undo_hook_message_ids_to_remove = [transaction.payer_msg_id, transaction.recip_msg_id]
+	remaining_undo_hooks = []
+	for (actor_id, msg_id) in order.undo_hooks:
+		if msg_id in undo_hook_message_ids_to_remove:
+			await actors.remove_tentative_transaction(actor_id, msg_id)
+		else:
+			remaining_undo_hooks.append((actor_id, msg_id))
+	order.undo_hooks = remaining_undo_hooks
+
+	new_number = number_of_product_in_order - 1
+	order.price_total -= transaction.amount # remember, try_to_pay flipped it to a positive number again
+	if new_number > 0:
+		print('1')
+		order.items_ordered[product_name] = new_number
+	else:
+		print('2')
+		del order.items_ordered[product_name]
+		if len(order.items_ordered) == 0:
+			print('3')
+			# TODO: remove the order completely
+			return
+
+	store_active_order(shop_id, order)
+
+
+
 
 
 

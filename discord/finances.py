@@ -194,10 +194,9 @@ async def try_to_pay_from_actor(actor_id : str, recip_handle_id : str, amount : 
     # TODO: right now a reaction on e.g. a burnt burner WILL cause error printout every time;
     # "from_reaction" only protects against printout on self-reacts
     find_transaction_parties(transaction)
-    if transaction.report is not None:
-        return transaction
-    else:
-        return await try_to_pay(transaction, from_reaction)
+    if transaction.report is None:
+        await try_to_pay(transaction, from_reaction)
+    return transaction
 
 
 # TODO: on second thought, move this into try_to_pay again? We always want to abort and return if this does not succeed

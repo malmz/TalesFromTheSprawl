@@ -82,8 +82,7 @@ class Transaction(object):
 		payer_msg_id : str=None,
 		recip_msg_id : str=None,
 		data : str=None,
-		emoji : str=None,
-		shop_id : str=None
+		emoji : str=None
 		):
 		self.payer = payer
 		self.recip = recip
@@ -99,7 +98,6 @@ class Transaction(object):
 		self.emoji = emoji
 		self.payer_msg_id = payer_msg_id
 		self.recip_msg_id = recip_msg_id
-		self.shop_id = shop_id
 
 	@staticmethod
 	def from_string(string : str):

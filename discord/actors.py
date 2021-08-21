@@ -271,14 +271,16 @@ async def write_financial_record(transaction : Transaction, payer_record : str=N
 	if transaction.cause == TransTypes.ShopOrder:
 		if payer_message is not None:
 			await payer_message.add_reaction(emoji_cancel)
-			msg_id = str(payer_message.id)
-			transaction.payer_msg_id = msg_id
-			store_transaction(transaction.payer_actor, msg_id, transaction)
+			transaction.payer_msg_id = str(payer_message.id)
 		if sender_message is not None:
 			await sender_message.add_reaction(emoji_cancel)
-			msg_id = str(sender_message.id)
-			transaction.recip_msg_id = msg_id
-			store_transaction(transaction.recip_actor, msg_id, transaction)
+			transaction.recip_msg_id = str(sender_message.id)
+		# After completing both, the transaction object is complete and can be stored
+		if payer_message is not None:
+			store_transaction(transaction.payer_actor, transaction.payer_msg_id, transaction)
+		if sender_message is not None:
+			store_transaction(transaction.recip_actor, transaction.recip_msg_id, transaction)
+
 
 async def send_financial_record_for_actor(actor_id : str, record : str, last_in_sequence):
 	if record is not None:
@@ -302,6 +304,19 @@ async def lock_tentative_transaction(actor_id : str, msg_id : str):
 		return
 	await message.clear_reactions()
 
+async def remove_tentative_transaction(actor_id : str, msg_id : str):
+	delete_transaction(actor_id, msg_id)
+	channel = get_finance_channel(actor_id)
+	if channel is None:
+		raise RuntimeError(f'Trying to edit financial record but could not find the channel for {actor_id}.')
+	message = await channel.fetch_message(int(msg_id))
+	if message is None:
+		print(f'Tried to remove transaction record with msg_id {msg_id} for {actor_id}, but message has already been removed.')
+		return
+	await message.delete()
+
+
+
 
 ## Reactions:
 
@@ -313,8 +328,8 @@ async def process_reaction_in_finance_channel(channel_id : str, msg_id : str, em
 		# Either this message cannot trigger any actions based on emoji, or the wrong emoji was used
 		return
 
-	await shops.attempt_refund(transaction)
+	await shops.attempt_refund(transaction, actor_id)
 	if transaction is not None:
-		print(f'Hooray!')
+		print(f'Attempted refund, success: {transaction.success}, report: {transaction.report}')
 
 
