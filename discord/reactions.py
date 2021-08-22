@@ -98,6 +98,15 @@ async def process_reaction_in_finance_channel(message_id : int, user_id : int, c
 
 	await actors.process_reaction_in_finance_channel(str(channel.id), str(message_id), str(emoji))
 
+async def process_reaction_in_order_flow(message_id : int, user_id : int, channel, emoji):
+	# Remove the reaction right away, regardless of what it is
+	message = await channel.fetch_message(message_id)
+	await remove_reaction(message, emoji, user_id)
+
+	result : ActionResult = await shops.process_reaction_in_order_flow(str(channel.id), str(message_id), str(emoji))
+	if not result.success and result.report is not None:
+		await channel.send(content=result.report, delete_after=5)
+
 
 async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
 	# TODO: a reaction cooldown for each channel? Just, don't process reactions in a channel too quickly in a row?
@@ -117,6 +126,8 @@ async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
 		await process_reaction_in_storefront(message_id, user_id, channel, emoji)
 	elif channels.is_finance(channel.name):
 		await process_reaction_in_finance_channel(message_id, user_id, channel, emoji)
+	elif channels.is_order_flow(channel.name):
+		await process_reaction_in_order_flow(message_id, user_id, channel, emoji)
 	else:
 		await process_reaction_for_tipping(message_id, user_id, channel, emoji)
 

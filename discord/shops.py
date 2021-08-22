@@ -19,7 +19,7 @@ import actors
 import finances
 import server
 
-from common import coin, emoji_unavail, shop_role_start, highest_ever_index, emoji_alert
+from common import coin, emoji_unavail, shop_role_start, highest_ever_index, emoji_alert, emoji_accept
 from custom_types import Transaction, TransTypes, ActionResult, Handle, HandleTypes, PostTimestamp
 
 
@@ -38,6 +38,10 @@ product_emojis = {
 	'food' : '🍽️'
 }
 
+emoji_unchecked = '🟦'
+emoji_checked = '☑️'
+emoji_unlocked = '🔓'
+emoji_locked = '🔒'
 max_table_number = 10
 
 # Order unchecked: 🟦
@@ -141,6 +145,7 @@ class Product(object):
 class OrderStatus(str, Enum):
 	Active = 'a'
 	Locked = 'l'
+	Delivered = 'd'
 
 
 # Used to represent an order: one or more items bought/reserved that will be delivered together
@@ -196,9 +201,9 @@ class Order(object):
 class MsgOrderMapping(object):
 	def __init__(
 		self,
-		delivery_id : str,
+		identifier : str, # For active orders: delivery_id. For inactive orders: order_id
 		status : OrderStatus):
-		self.delivery_id = delivery_id
+		self.identifier = identifier
 		self.status = status
 
 	@staticmethod
@@ -531,7 +536,7 @@ def store_locked_order(shop_name : str, order : Order):
 	if shop_exists(shop_name):
 		order_data = get_order_data(shop_name)
 		msg_id = str(order.order_flow_msg_id)
-		msg_mapping = MsgOrderMapping(order.delivery_id, OrderStatus.Locked)
+		msg_mapping = MsgOrderMapping(order.order_id, OrderStatus.Locked)
 		order_data[msg_to_order_mapping_index][msg_id] = msg_mapping.to_string()
 		order_data[locked_orders_index][order.order_id] = order.to_string()
 		order_data.write()
@@ -554,16 +559,17 @@ def fetch_locked_order(shop_name : str, order_id : str):
 		return fetch_locked_order_from_order_data(order_data, order_id)
 
 def read_locked_order_from_order_data(order_data, order_id : str):
-	if delivery_id in delivery_data[locked_orders_index]:
+	if order_id in order_data[locked_orders_index]:
 		return Order.from_string(order_data[locked_orders_index][order_id])
 
 def fetch_locked_order_from_order_data(order_data, order_id : str):
-	if delivery_id in delivery_data[locked_orders_index]:
+	if order_id in order_data[locked_orders_index]:
 		order = Order.from_string(order_data[locked_orders_index][order_id])
 		del order_data[locked_orders_index][order_id]
 		msg_id = str(order.order_flow_msg_id)
 		if msg_id in order_data[msg_to_order_mapping_index]:
 			del order_data[msg_to_order_mapping_index][msg_id]
+		order_data.write()
 		return order
 
 def get_order_mapping_from_msg(shop_name : str, msg_id : str):
@@ -992,22 +998,82 @@ async def process_reaction_in_storefront(message, user_id : str, emoji : str):
 # 📣
 
 
+### Reaction in order_flow: will update orders
+
+def get_actionable_emojis(status : OrderStatus):
+	if status == OrderStatus.Active:
+		return [emoji_accept, emoji_locked]
+	elif status == OrderStatus.Locked:
+		return [emoji_accept]
+	else:
+		return []
+
+async def process_reaction_in_order_flow(channel_id : str, msg_id : str, emoji : str):
+	result = ActionResult()
+	shop_id = read_order_flow_channel_mapping(channel_id)
+	if shop_id is None:
+		result.report = f'Error: tried to edit order but could not map channel {channel_id} to any shop.'
+		return result		
+	shop : Shop = read_shop(shop_id)
+	if shop is None:
+		result.report = f'Error: tried to edit order, but could not find {shop_id} in database.'
+		return result
+	mapping : MsgOrderMapping = get_order_mapping_from_msg(shop.shop_id, msg_id)
+	if mapping is None:
+		result.report = f'Error: tried to edit order, but could not map the message to a recent order; it has been delivered or aborted.'
+		return result
+
+	if emoji not in get_actionable_emojis(mapping.status):
+		# No action, but no report required either.
+		return result
+
+	order = None
+	if mapping.status == OrderStatus.Active:
+		order = fetch_active_order(shop.shop_id, mapping.identifier)
+	elif mapping.status == OrderStatus.Locked:
+		order = fetch_locked_order(shop.shop_id, mapping.identifier)
+	if order is None:
+		result.report = f'Error: tried to fetch order for {mapping.delivery_id} but could not find it. DB corrupt.'
+		return result
+
+	datetime_timestamp = datetime.datetime.today()
+	timestamp = PostTimestamp(datetime_timestamp.hour, datetime_timestamp.minute)
+	order.time_updated = timestamp
+
+	if mapping.status == OrderStatus.Active and emoji == emoji_locked:
+		result.report = await lock_active_order(shop, order)
+	elif emoji == emoji_accept:
+		result.report = await deliver_order(shop, order, mapping.status)
+	
+	# The above functions will only return something in the error case
+	result.success = result.report is None
+	return result
 
 
 
 ### Making an order:
 
 # TODO: make this a class function
-# TODO: add the emoji for each product, as many times as the order, e.g. "4 Beer 🍺 🍺 🍺 🍺"
-def generate_order_message(order : Order):
-	if order.updated:
-		content = f'**#{order.order_id}** for **{order.delivery_id}**    {emoji_alert} updated at {order.time_updated.pretty_print()}\n'
-	else:
-		content = f'**#{order.order_id}** for **{order.delivery_id}**    created at {order.time_created.pretty_print()}\n'
+def generate_order_message(order : Order, status : OrderStatus):
+	if status == OrderStatus.Active:
+		if order.updated:
+			content = f'**#{order.order_id}** for **{order.delivery_id}** {emoji_alert}{emoji_unlocked} updated at {order.time_updated.pretty_print()}\n'
+		else:
+			content = f'**#{order.order_id}** for **{order.delivery_id}**   {emoji_unlocked} created at {order.time_created.pretty_print()}\n'
+	elif status == OrderStatus.Locked:
+		content = f'**#{order.order_id}** for **{order.delivery_id}**    {emoji_locked} locked at {order.time_updated.pretty_print()}\n'
+	elif status == OrderStatus.Delivered:
+		content = f'**#{order.order_id}** for **{order.delivery_id}**    {emoji_accept} delivered at {order.time_updated.pretty_print()}\n'		
 	for item, amount in order.items_ordered.items():
+		# TODO: add the emoji for each product, as many times as the order, e.g. "4 Beer 🍺 🍺 🍺 🍺"
 		content += f'> {amount} {item}\n'
 	content += f'> Total: {coin} {order.price_total} (paid)'
 	return content
+
+async def add_gui_reactions_to_order(message, status : OrderStatus):
+	await message.clear_reactions()
+	for emoji in get_actionable_emojis(status):
+		await message.add_reaction(emoji)
 
 
 async def order_product_from_command(user_id : str, shop_name : str, product_name : str):
@@ -1088,9 +1154,8 @@ async def place_order_in_flow(shop : Shop, purchase : Transaction, delivery_id :
 			previous_order_updated = True
 		else:
 			# Lock the previous order
-			await lock_active_order(shop, order, purchase)
-			# TODO: also update the order message + any mappings to it
-			store_locked_order(shop.shop_id, order)
+			order.time_updated = purchase.timestamp
+			await lock_active_order(shop, order)
 
 	if not previous_order_updated:
 		order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
@@ -1103,29 +1168,29 @@ async def place_order_in_flow(shop : Shop, purchase : Transaction, delivery_id :
 			time_created = purchase.timestamp,
 			undo_hooks = purchase.get_undo_hooks_list()
 			)
-		post = generate_order_message(order)
+		post = generate_order_message(order, OrderStatus.Active)
 		message = await order_flow_channel.send(post)
+		await add_gui_reactions_to_order(message, OrderStatus.Active)
 		order.order_flow_msg_id = message.id
 	store_active_order(shop.shop_id, order)
 
-async def lock_active_order(shop : Shop, order : Order, purchase : Transaction):
-	await remove_undo_hooks(order)
-	order.undo_hooks = []
-	store_locked_order(shop.shop_id, order)
 
 # TODO: make this into an Order class function?
 async def remove_undo_hooks(order : Order):
 	for (actor_id, msg_id) in order.undo_hooks:
 		# These are IDs for messages that could until now be used to undo the transaction
 		await actors.lock_tentative_transaction(actor_id, msg_id)
+	order.undo_hooks = []
+
 
 async def add_to_active_order(shop : Shop, order : Order, purchase : Transaction):
 	order.add(purchase.data, purchase.amount, purchase.timestamp)
 	order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
 	order_flow_message = await order_flow_channel.fetch_message(order.order_flow_msg_id)
-	content = generate_order_message(order)
+	content = generate_order_message(order, OrderStatus.Active)
 	await order_flow_message.delete()
 	new_message = await order_flow_channel.send(content)
+	await add_gui_reactions_to_order(new_message, OrderStatus.Active)
 	# The mapping to the order message itself, for when we need to update it:
 	order.order_flow_msg_id = new_message.id
 	# The mapping to the messages in each player's respective finance channel, which
@@ -1134,6 +1199,50 @@ async def add_to_active_order(shop : Shop, order : Order, purchase : Transaction
 		order.undo_hooks.append(t)
 	return order
 
+
+# TODO: add GUI reactions to all order flow messages -- after editing, after creation, after delete-creation
+async def lock_active_order(shop : Shop, order : Order):
+	await remove_undo_hooks(order)
+	content = generate_order_message(order, OrderStatus.Locked)
+
+	try:
+		order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
+	except discord.errors.NotFound:
+		return f'Error: could not edit order, {shop.name} database is corrupt.'
+	try:
+		order_flow_message = await order_flow_channel.fetch_message(order.order_flow_msg_id)
+		await order_flow_message.edit(content=content)
+		await add_gui_reactions_to_order(order_flow_message, OrderStatus.Locked)
+	except discord.errors.NotFound:
+		# Post a new message -- there may be an old one that we have lost track of, but this is better than nothing
+		message = await order_flow_channel.send(content)
+		await add_gui_reactions_to_order(message, OrderStatus.Locked)
+		order.order_flow_msg_id = message.id
+	
+	store_locked_order(shop.shop_id, order)
+
+
+async def deliver_order(shop : Shop, order : Order, status : OrderStatus):
+	if status == OrderStatus.Active:
+		await remove_undo_hooks(order)
+
+	try:
+		order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
+	except discord.errors.NotFound:
+		return f'Error: could not edit order, {shop.name} database is corrupt.'
+	try:
+		order_flow_message = await order_flow_channel.fetch_message(order.order_flow_msg_id)
+	except discord.errors.NotFound:
+		return f'Error: tried to mark order as delivered but the message in {order_flow_channel.name} could not be found.'
+	
+	content = generate_order_message(order, OrderStatus.Delivered)
+	await order_flow_message.edit(content=content)
+	await add_gui_reactions_to_order(order_flow_message, OrderStatus.Delivered)
+	# No need to store the order now -- we hereby lose track of it in the backend
+	# (The last message is left in the discord channel, but will disappear on the next clear_orders)
+
+
+### Refunds
 
 async def attempt_refund(transaction : Transaction, initiator_id : str):
 	transaction.success = False
@@ -1250,7 +1359,7 @@ async def execute_refund_in_order_flow(shop : Shop, refund : Transaction, order 
 			refund.success = False
 			refund.report = f'Error: refund performed but {shop.name} database is corrupt -- order status may be shown wrong.'
 			# Post a new message -- there may be an old one that we have lost track of, but this is better than nothing
-			content = generate_order_message(order)
+			content = generate_order_message(order, OrderStatus.Active)
 			message = await order_flow_channel.send(content)
 			order.order_flow_msg_id = message.id
 			store_active_order(shop.shop_id, order)
@@ -1263,7 +1372,7 @@ async def execute_refund_in_order_flow(shop : Shop, refund : Transaction, order 
 		await order_flow_channel.send(alert, delete_after=10)
 	else:
 		order.price_total -= refund.amount
-		content = generate_order_message(order)
+		content = generate_order_message(order, OrderStatus.Active)
 		await order_flow_message.edit(content=content)
 		store_active_order(shop.shop_id, order)
 

@@ -331,5 +331,9 @@ async def process_reaction_in_finance_channel(channel_id : str, msg_id : str, em
 	await shops.attempt_refund(transaction, actor_id)
 	if transaction is not None:
 		print(f'Attempted refund, success: {transaction.success}, report: {transaction.report}')
+		if not transaction.success and transaction.report is not None:
+			channel = channels.get_discord_channel(channel_id)
+			await channel.send(content=transaction.report, delete_after=10)
+		
 
 
