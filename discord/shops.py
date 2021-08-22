@@ -8,6 +8,7 @@ import datetime
 from configobj import ConfigObj
 from typing import List, Tuple
 from copy import deepcopy
+from enum import Enum
 
 # Custom imports
 import common
@@ -137,6 +138,10 @@ class Product(object):
 	def to_string(self):
 		return simplejson.dumps(self.__dict__)
 
+class OrderStatus(str, Enum):
+	Active = 'a'
+	Locked = 'l'
+
 
 # Used to represent an order: one or more items bought/reserved that will be delivered together
 class Order(object):
@@ -184,6 +189,26 @@ class Order(object):
 		self.time_updated = timestamp
 		self.price_total += product_price
 		self.updated = True
+
+
+
+# Used to represent an order: one or more items bought/reserved that will be delivered together
+class MsgOrderMapping(object):
+	def __init__(
+		self,
+		delivery_id : str,
+		status : OrderStatus):
+		self.delivery_id = delivery_id
+		self.status = status
+
+	@staticmethod
+	def from_string(string : str):
+		obj = MsgOrderMapping(None, OrderStatus.Active)
+		obj.__dict__ = simplejson.loads(string)
+		return obj
+
+	def to_string(self):
+		return simplejson.dumps(self.__dict__)
 
 
 
@@ -437,9 +462,14 @@ def delete_delivery_ids_for_actor(actor_id : str):
 # The active orders are stored indexed on delivery ID, since there can only be
 # one active order for each
 
+# Each active order also stores a counter-mapping: msg_id -> delivery ID
+# These are linked -- mapping must be added when order is stored
+# Mapping must be removed when order is deleted (fetched)
+
 order_data_suffix = '_order_data.conf'
 active_orders_index = '___active_orders'
 locked_orders_index = '___locked_orders'
+msg_to_order_mapping_index = '___msg_to_order_mapping'
 
 def get_order_data(shop_name : str):
 	shop_id = shop_name.lower()
@@ -449,6 +479,9 @@ def get_order_data(shop_name : str):
 def store_active_order(shop_name : str, order : Order):
 	if shop_exists(shop_name):
 		order_data = get_order_data(shop_name)
+		msg_id = str(order.order_flow_msg_id)
+		msg_mapping = MsgOrderMapping(order.delivery_id, OrderStatus.Active)
+		order_data[msg_to_order_mapping_index][msg_id] = msg_mapping.to_string()
 		order_data[active_orders_index][order.delivery_id] = order.to_string()
 		# TODO: also store the mapping from order_flow_msg_id to this order
 		# (needed to process reactions on the orders themselves, to mark as locked or completed)
@@ -461,6 +494,7 @@ def delete_active_order(shop_name : str, delivery_id : str):
 			del order_data[active_orders_index][delivery_id]
 			order_data.write()
 
+# Treat all output from this as read-only! If you need to edit the order, use fetch_order instead!
 def get_active_order(shop_name : str, delivery_id : str):
 	if shop_exists(shop_name):
 		order_data = get_order_data(shop_name)
@@ -470,10 +504,7 @@ def fetch_all_active_orders(shop_name : str):
 	if shop_exists(shop_name):
 		order_data = get_order_data(shop_name)
 		for delivery_id in order_data[active_orders_index]:
-			order = read_active_order_from_order_data(order_data, delivery_id)
-			del order_data[active_orders_index][delivery_id]
-			order_data.write()
-			yield order
+			yield fetch_active_order_from_order_data(order_data, delivery_id)
 
 def fetch_active_order(shop_name : str, delivery_id : str):
 	if shop_exists(shop_name):
@@ -488,6 +519,9 @@ def fetch_active_order_from_order_data(order_data, delivery_id : str):
 	if delivery_id in order_data[active_orders_index]:
 		order = Order.from_string(order_data[active_orders_index][delivery_id])
 		del order_data[active_orders_index][delivery_id]
+		msg_id = str(order.order_flow_msg_id)
+		if msg_id in order_data[msg_to_order_mapping_index]:
+			del order_data[msg_to_order_mapping_index][msg_id]
 		order_data.write()
 		return order
 
@@ -496,6 +530,9 @@ def fetch_active_order_from_order_data(order_data, delivery_id : str):
 def store_locked_order(shop_name : str, order : Order):
 	if shop_exists(shop_name):
 		order_data = get_order_data(shop_name)
+		msg_id = str(order.order_flow_msg_id)
+		msg_mapping = MsgOrderMapping(order.delivery_id, OrderStatus.Locked)
+		order_data[msg_to_order_mapping_index][msg_id] = msg_mapping.to_string()
 		order_data[locked_orders_index][order.order_id] = order.to_string()
 		order_data.write()
 
@@ -524,16 +561,34 @@ def fetch_locked_order_from_order_data(order_data, order_id : str):
 	if delivery_id in delivery_data[locked_orders_index]:
 		order = Order.from_string(order_data[locked_orders_index][order_id])
 		del order_data[locked_orders_index][order_id]
+		msg_id = str(order.order_flow_msg_id)
+		if msg_id in order_data[msg_to_order_mapping_index]:
+			del order_data[msg_to_order_mapping_index][msg_id]
 		return order
+
+def get_order_mapping_from_msg(shop_name : str, msg_id : str):
+	if shop_exists(shop_name):
+		order_data = get_order_data(shop_name)
+		if msg_id in order_data[msg_to_order_mapping_index]:
+			return MsgOrderMapping.from_string(order_data[msg_to_order_mapping_index][msg_id])
 
 
 async def clear_order_data(shop_name : str):
 	if shop_exists(shop_name):
 		order_data = get_order_data(shop_name)
+		if active_orders_index not in order_data:
+			order_data[active_orders_index] = {}
+		if locked_orders_index not in order_data:
+			order_data[locked_orders_index] = {}
+		if msg_to_order_mapping_index not in order_data:
+			order_data[msg_to_order_mapping_index] = {}
+		order_data.write()
+
 		for order in fetch_all_active_orders(shop_name):
 			await remove_undo_hooks(order)
 		order_data[active_orders_index] = {}
 		order_data[locked_orders_index] = {}
+		order_data[msg_to_order_mapping_index] = {}
 		order_data.write()
 
 
@@ -736,6 +791,9 @@ def edit_product_from_command(user_id : str, product_name : str, key : str, valu
 def edit_product(shop : Shop, product_name : str, key : str, value : str):
 	if product_name is None:
 		return f'Error: must give a product name; use \".add_product {shop.shop_id} <product_name>. (Optional: add description, price, and type/symbol)\"'
+	product = read_product(shop.shop_id, product_name)
+	if product is None:
+		return f'Error: no product called \"{product_name}\" at {shop.name}.'
 	if key is None:
 		return f'Error: must give the property to edit. usage: \".edit_product {shop.shop_id} {product_name} <property> <value>\"'
 
@@ -745,7 +803,6 @@ def edit_product(shop : Shop, product_name : str, key : str, value : str):
 	if value is None:
 		return f'Error: must set the new value of property \"{key}\"'
 
-	product = read_product(shop.shop_id, product_name)
 	edited = False
 
 	if key == 'description':
@@ -941,6 +998,7 @@ async def process_reaction_in_storefront(message, user_id : str, emoji : str):
 ### Making an order:
 
 # TODO: make this a class function
+# TODO: add the emoji for each product, as many times as the order, e.g. "4 Beer 🍺 🍺 🍺 🍺"
 def generate_order_message(order : Order):
 	if order.updated:
 		content = f'**#{order.order_id}** for **{order.delivery_id}**    {emoji_alert} updated at {order.time_updated.pretty_print()}\n'
@@ -1112,8 +1170,10 @@ async def attempt_refund(transaction : Transaction, initiator_id : str):
 				+'(e.g. table, address, handle), they need to switch back in order to map the transaction to the order.')
 			else:
 				transaction.report = (f'Error: could not find order to refund. If you have switched your delivery option '
-				+'(e.g. table, address, handle), try switching back to the one you had when you ordered.')
+				+'(e.g. table, address, handle), try switching back to the one you had when you ordered. 1')
 			return
+
+	print(f'Trying to fetch ')
 
 	order = fetch_active_order(shop_id, delivery_id)
 	if order is None:
@@ -1123,7 +1183,7 @@ async def attempt_refund(transaction : Transaction, initiator_id : str):
 				'they need to switch back in order to map the transaction to the order.')
 		else:
 			transaction.report = (f'Error: could not find order to refund. If you have switched your delivery option '
-				+'(e.g. table, address, handle), try switching back to the one you had when you ordered.')
+				+'(e.g. table, address, handle), try switching back to the one you had when you ordered. 2')
 		return
 
 	product_name = transaction.data
@@ -1182,7 +1242,7 @@ async def execute_refund_in_order_flow(shop : Shop, refund : Transaction, order 
 		refund.success = False
 		refund.report = f'Error: refund performed but {shop.name} database is corrupt -- order status may be shown wrong.'
 		return
-		# Either the channel or the message is missing. 
+		# Either the channel or the message is missing.
 	try:
 		order_flow_message = await order_flow_channel.fetch_message(order.order_flow_msg_id)
 	except discord.errors.NotFound:
