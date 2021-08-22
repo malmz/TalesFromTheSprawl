@@ -21,6 +21,7 @@ import custom_types
 import chats
 import server
 import shops
+import groups
 import player_setup
 from common import coin
 
@@ -63,6 +64,7 @@ async def on_ready():
     finances.init_finances()
     await chats.init(clear_all=clear_all)
     await shops.init(guild, clear_all=clear_all)
+    await groups.init(guild, clear_all=clear_all)
     print('Initialization complete.')
     ready = True
 
@@ -552,6 +554,43 @@ async def clear_shops_command(ctx):
         return
     await shops.init(guild, clear_all=True)
     await ctx.send('Done.')
+
+
+
+
+
+
+@bot.command(name='create_group', help='Admin-only: create a group, with the current player as initial member')
+@commands.has_role('gm')
+async def create_group_command(ctx, group_name : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = await groups.create_group_from_command(ctx, group_name)
+    if report is not None:
+        await ctx.send(report)
+
+
+@bot.command(name='clear_all_groups', help='Admin-only: delete all groups.')
+@commands.has_role('gm')
+async def clear_all_groups_command(ctx):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    await groups.init(guild, clear_all=True)
+    await ctx.send('Done.')
+
+@bot.command(name='add_member', help='Admin-only: add a member to a group.')
+@commands.has_role('gm')
+async def add_member_command(ctx, handle_id : str=None, group_id : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = await groups.add_member(guild, handle_id, group_id)
+    if report is not None:
+        await ctx.send(report)
+
+
 
 
 

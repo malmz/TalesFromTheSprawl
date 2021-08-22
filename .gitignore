@@ -1,6 +1,7 @@
 # Runtime conf files
 discord/*.conf
 discord/chats/*.conf
+discord/groups/*.conf
 discord/actors/*.conf
 discord/shops/*.conf
 

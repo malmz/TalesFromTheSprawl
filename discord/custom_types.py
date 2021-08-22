@@ -211,3 +211,25 @@ class Handle(object):
 
 	def to_string(self):
 		return simplejson.dumps(self.__dict__)
+
+class Group(object):
+	def __init__(
+		self,
+		group_index : str,
+		group_id : str,
+		main_channel_id : str,
+		members : List[str] = [] # actor_ids
+		):
+		self.group_index = group_index
+		self.group_id = group_id
+		self.members = members
+
+	@staticmethod
+	def from_string(string : str):
+		obj = Group(None, None, None)
+		obj.__dict__ = simplejson.loads(string)
+		return obj
+
+	def to_string(self):
+		return simplejson.dumps(self.__dict__)
+

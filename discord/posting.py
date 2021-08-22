@@ -68,19 +68,26 @@ async def process_open_message(message, anonymous=False):
     task1 = asyncio.create_task(message.delete())
     current_channel = str(message.channel.name)
     player_id = players.get_player_id(str(message.author.id))
+    if player_id is None:
+        # If someone is for some reason not a player (probably an admin or GM not properly initiated):
+        # Let the message through, but as "Anonymous"
+        anonymous = True
     if anonymous:
         current_poster_id = player_id
         current_poster_display_name = 'Anonymous'
     else:
-        handle = handles.get_handle(player_id)
-        current_poster_id = handle.handle_id
-        current_poster_display_name = handle.handle_id
+        handle = handles.get_active_handle(player_id)
+        if handle is not None:
+            current_poster_id = handle.handle_id
+            current_poster_display_name = handle.handle_id
+        else:
+            current_poster_id = player_id
+            current_poster_display_name = player_id
     post_time = PostTimestamp.from_datetime(message.created_at, dst_diff=2)
     full_post = channels.record_new_post(current_channel, current_poster_id, post_time)
     if full_post:
         task2 = asyncio.create_task(repost_message(message, current_poster_display_name))
     else:
         task2 = asyncio.create_task(repost_message(message, None))
-    await task1
-    await task2
+    await asyncio.gather(task1, task2)
 

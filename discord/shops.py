@@ -693,9 +693,7 @@ async def employ(guild, player_id : str, shop : Shop):
 		return f'Error: player {player_id} already works at {shop.shop_id}.'
 
 	role = actors.get_actor_role(guild, shop.actor_id)
-	new_roles = member.roles
-	new_roles.append(role)
-	await member.edit(roles=new_roles)
+	await server.give_member_role(member, role)
 
 	players.add_shop(player_id, shop.actor_id)
 	shop.employees.append(player_id)

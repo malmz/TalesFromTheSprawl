@@ -20,7 +20,6 @@ import re
 
 actors_conf_dir = 'actors'
 actors = ConfigObj('actors.conf')
-actors_input = ConfigObj('actors_input.conf')
 
 finance_channel_mapping_index = '___finance_channels'
 

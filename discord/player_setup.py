@@ -68,7 +68,7 @@ async def player_setup_for_new_handle(handle : Handle):
 		report += f'Initial balance of **{handle.handle_id}**: {coin} **{info.starting_money}**\n\n'
 
 	report += await setup_alternate_handles(handle, info.other_handles, HandleTypes.Regular)
-	report += await setup_alternate_handles(handle, info.burner, HandleTypes.Burners)
+	report += await setup_alternate_handles(handle, info.burners, HandleTypes.Burner)
 	report += await setup_alternate_handles(handle, info.npc_handles, HandleTypes.NPC)
 
 	report += f'All data loaded. Welcome, **{handle.handle_id}**.'

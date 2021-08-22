@@ -16,6 +16,7 @@ chats_category_name = 'chats'
 off_category_name = 'offline'
 public_open_category_name = 'public_network'
 shadowlands_category_name = 'shadowlands'
+groups_category_name = 'private_networks'
 
 public_anon_channel_name = 'anon'
 
@@ -55,14 +56,23 @@ def is_chat_channel(discord_channel):
         return discord_channel.category.name == chats_category_name
 
 def is_personal_channel(discord_channel, channel_suffix : str=None):
+    return is_category_channel(discord_channel, personal_category_name, channel_suffix)
+
+def is_group_channel(discord_channel, channel_suffix : str=None):
+    return is_category_channel(discord_channel, groups_category_name, channel_suffix)
+
+def is_category_channel(discord_channel, category_name : str, channel_suffix : str=None):
     if discord_channel.category == None:
         return False
     else:
-        if discord_channel.category.name == personal_category_name:
+        if discord_channel.category.name == category_name:
             if channel_suffix is None:
                 return True
             else:
                 return discord_channel.name.endswith(channel_suffix)
+
+
+
 
 def is_shop_channel(discord_channel):
     if discord_channel.category == None:
@@ -74,7 +84,7 @@ def is_pseudonymous_channel(discord_channel):
     if discord_channel.category == None:
         return False
     else:
-        return discord_channel.category.name == public_open_category_name or discord_channel.category.name == shadowlands_category_name
+        return discord_channel.category.name in [public_open_category_name, shadowlands_category_name, groups_category_name]
 
 def is_anonymous_channel(discord_channel):
     return discord_channel.name == public_anon_channel_name
@@ -122,6 +132,8 @@ async def init_discord_channel(discord_channel):
             await init_public_open_channel(discord_channel)
         elif discord_channel.category.name == shops_category_name:
             await init_public_read_only_channel(discord_channel)
+        elif discord_channel.category.name == groups_category_name:
+            await init_group_channel(discord_channel)
 
     else:
         print(f'Will not create channel state for channel {discord_channel.name} which has no category')
@@ -166,6 +178,11 @@ async def init_personal_channel(discord_channel):
     await set_base_permissions(discord_channel, private=True, read_only=read_only)
     await init_channel_state(discord_channel)
 
+async def init_group_channel(discord_channel):
+    await set_base_permissions(discord_channel, private=True, read_only=False)
+    await init_channel_state(discord_channel)
+    init_pseudonymous_channel(discord_channel.name)
+
 async def make_read_only(channel_id : str):
     channel = get_discord_channel(channel_id)
     await set_base_permissions(channel, private=True, read_only=True)
@@ -204,12 +221,9 @@ def set_last_full_post(channel_name : str, timestamp : PostTimestamp):
 def time_has_passed_since_last_full_post(channel_name : str, timestamp):
     post_time = PostTimestamp(timestamp.hour, timestamp.minute)
     old_time = get_last_post_time(channel_name)
-    print(f'Comparing timestamps {post_time.to_string()} / {old_time.to_string()} for channel {channel_name}')
     if post_time != old_time:
-        print(f'Checking if time has passed, found that times ARE NOT equal')
         return True
     else:
-        print(f'Checking if time has passed, found that times ARE equal')
         return False
 
 def increment_post_counter(channel_name : str):
@@ -229,7 +243,6 @@ def record_new_post(channel_name : str, poster_id : str, timestamp : PostTimesta
     last_poster = get_last_poster(channel_name)
     time_has_passed = time_has_passed_since_last_full_post(channel_name, timestamp)
     counter_has_passed_limit = increment_post_counter(channel_name)
-    print(f'Determining if full post should be used: {last_poster}?={poster_id}, time: {time_has_passed}, counter: {counter_has_passed_limit}')
 
     if last_poster != poster_id or time_has_passed or counter_has_passed_limit:
         set_last_poster(channel_name, poster_id)
@@ -283,6 +296,11 @@ async def create_personal_channel(guild, role, channel_name : str, read_only : b
     overwrites = server.generate_overwrites_own_new_private_channel(role, read_only)
     return await create_discord_channel(guild, overwrites, channel_name, personal_category_name)
 
+async def create_group_channel(guild, role, channel_name : str, read_only : bool=False):
+    overwrites = server.generate_overwrites_own_new_private_channel(role, read_only)
+    channel = await create_discord_channel(guild, overwrites, channel_name, groups_category_name)
+    await init_group_channel(channel)
+    return channel
 
 async def create_order_flow_channel(guild, role, shop_name : str):
     discord_channel_name = get_order_flow_name(shop_name)
@@ -320,6 +338,19 @@ def is_order_flow(channel_name : str):
 # Currently, the only read-only private channels are the finance channels
 def is_read_only_private_channel(channel_name : str):
     return is_finance(channel_name) or is_order_flow(channel_name)
+
+
+
+### Group channels:
+
+async def delete_all_group_channels(channel_suffix : str=None):
+    channels_list = await get_all_groups_channels(channel_suffix)
+    task_list = (asyncio.create_task(c.delete()) for c in channels_list)
+    await asyncio.gather(*task_list)
+
+async def get_all_groups_channels(channel_suffix : str=None):
+    channel_list = await server.get_all_channels()
+    return [c for c in channel_list if is_group_channel(c, channel_suffix)]
 
 
 

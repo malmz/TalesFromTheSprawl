@@ -53,6 +53,11 @@ def get_guild():
 async def give_role_access(channel, role):
 	await channel.set_permissions(role, overwrite=normal_access)
 
+async def give_member_role(member, role):
+	new_roles = member.roles
+	new_roles.append(role)
+	await member.edit(roles=new_roles)
+
 def get_all_players_role():
 	return all_players_role
 
