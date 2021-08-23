@@ -195,6 +195,12 @@ class Order(object):
 		self.price_total += product_price
 		self.updated = True
 
+	async def remove_undo_hooks(self):
+		for (actor_id, msg_id) in self.undo_hooks:
+			# These are IDs for messages that could until now be used to undo the transaction
+			await actors.lock_tentative_transaction(actor_id, msg_id)
+		self.undo_hooks = []
+
 
 
 # Used to represent an order: one or more items bought/reserved that will be delivered together
@@ -591,7 +597,7 @@ async def clear_order_data(shop_name : str):
 		order_data.write()
 
 		for order in fetch_all_active_orders(shop_name):
-			await remove_undo_hooks(order)
+			await order.remove_undo_hooks()
 		order_data[active_orders_index] = {}
 		order_data[locked_orders_index] = {}
 		order_data[msg_to_order_mapping_index] = {}
@@ -1173,13 +1179,6 @@ async def place_order_in_flow(shop : Shop, purchase : Transaction, delivery_id :
 	store_active_order(shop.shop_id, order)
 
 
-# TODO: make this into an Order class function?
-async def remove_undo_hooks(order : Order):
-	for (actor_id, msg_id) in order.undo_hooks:
-		# These are IDs for messages that could until now be used to undo the transaction
-		await actors.lock_tentative_transaction(actor_id, msg_id)
-	order.undo_hooks = []
-
 
 async def add_to_active_order(shop : Shop, order : Order, purchase : Transaction):
 	order.add(purchase.data, purchase.amount, purchase.timestamp)
@@ -1200,7 +1199,7 @@ async def add_to_active_order(shop : Shop, order : Order, purchase : Transaction
 
 # TODO: add GUI reactions to all order flow messages -- after editing, after creation, after delete-creation
 async def lock_active_order(shop : Shop, order : Order):
-	await remove_undo_hooks(order)
+	await order.remove_undo_hooks()
 	content = generate_order_message(order, OrderStatus.Locked)
 
 	try:
@@ -1222,7 +1221,7 @@ async def lock_active_order(shop : Shop, order : Order):
 
 async def deliver_order(shop : Shop, order : Order, status : OrderStatus):
 	if status == OrderStatus.Active:
-		await remove_undo_hooks(order)
+		await order.remove_undo_hooks()
 
 	try:
 		order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
