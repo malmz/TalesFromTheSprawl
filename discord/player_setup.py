@@ -11,7 +11,10 @@ import channels
 import server
 import finances
 import groups
-from custom_types import Handle, HandleTypes
+import shops
+import actors
+from shops import Shop
+from custom_types import Handle, HandleTypes, Actor, ActionResult
 from common import coin
 
 
@@ -69,11 +72,14 @@ async def player_setup_for_new_handle(handle : Handle):
 		await finances.add_funds(handle, int(info.starting_money))
 		report += f'Initial balance of **{handle.handle_id}**: {coin} **{info.starting_money}**\n\n'
 
-	report += await setup_alternate_handles(handle, info.other_handles, HandleTypes.Regular)
-	report += await setup_alternate_handles(handle, info.burners, HandleTypes.Burner)
-	report += await setup_alternate_handles(handle, info.npc_handles, HandleTypes.NPC)
+#	report += await setup_alternate_handles(handle, info.other_handles, HandleTypes.Regular)
+#	report += await setup_alternate_handles(handle, info.burners, HandleTypes.Burner)
+#	report += await setup_alternate_handles(handle, info.npc_handles, HandleTypes.NPC)
 
 	report += await setup_groups(handle, info.groups)
+
+	report += await setup_owned_shops(handle, info.shops_owner)
+	report += await setup_employed_shops(handle, info.shops_employee)
 
 	report += f'All data loaded. Welcome, **{handle.handle_id}**.'
 	return report
@@ -129,3 +135,73 @@ async def setup_group_for_new_member(guild, group_name : str, actor_id : str):
 		await groups.add_member_from_player_id(guild, group_name, actor_id)
 	else:
 		await groups.create_new_group(guild, group_name, [actor_id])
+
+
+
+
+async def setup_owned_shops(handle : Handle, shop_names : List[str]):
+	report = ''
+	any_found = False
+	guild = server.get_guild()
+	for shop_name in shop_names:
+		if double_underscore not in shop_name:
+			shop : Shop = await setup_new_shop_for_owner(guild, shop_name, handle)
+			if shop is None:
+				report += f'- Failed to connect to shop **{shop_name}**. Most likely the player data entry for {handle.actor_id} is corrupt.\n\n'
+			elif shop.owner_id != handle.actor_id:
+				report += f'- Connected to shop **{shop_name}**. Failed to set {handle.actor_id} as owner because the shop already existed.\n\n'
+			else:
+				any_found = True
+				report += f'- Connected to shop **{shop.name}** owned by {handle.actor_id}.\n'
+				report += f'  Public storefront: {channels.clickable_channel_id_ref(shop.storefront_channel_id)}.\n'
+				report += f'  Order status: {channels.clickable_channel_id_ref(shop.order_flow_channel_id)}.\n'
+				shop_actor : Actor = actors.read_actor(shop.shop_id)
+				report += f'  Financial status: {channels.clickable_channel_id_ref(shop_actor.finance_channel_id)}.\n'
+				report += f'  Business chat hub: {channels.clickable_channel_id_ref(shop_actor.chat_channel_id)}.\n'
+	if any_found:
+		report += ('  As owner of a shop, you may need to grant your employees access:\n'
+			+ '> .employ <handle>\n\n')
+	return report
+
+
+async def setup_new_shop_for_owner(guild, shop_name : str, handle : Handle):
+	if shops.shop_exists(shop_name):
+		shop : Shop = shops.read_shop(shop_name)
+		await shops.employ(guild, handle, shop)
+		return shop
+	else:
+		result : ActionResult = await shops.create_shop(guild, shop_name, handle.actor_id)
+		if result.success:
+			return shops.read_shop(shop_name)
+		else:
+			return None
+
+async def setup_employed_shops(handle : Handle, shop_names : List[str]):
+	report = ''
+	any_found = False
+	guild = server.get_guild()
+	for shop_name in shop_names:
+		if double_underscore not in shop_name:
+			any_found = True
+			shop : Shop = await setup_shop_for_new_member(guild, shop_name, handle)
+			if shop is None:
+				report += f'- Failed to connect to shop **{shop_name}**. Please ask shop owner for assistance once they have finished their setup.'
+			else:
+				report += f'- Connected to shop **{shop.name}** as an employee.\n'
+				report += f'  Public storefront: {channels.clickable_channel_id_ref(shop.storefront_channel_id)}.\n'
+				report += f'  Order status: {channels.clickable_channel_id_ref(shop.order_flow_channel_id)}.\n'
+				shop_actor : Actor = actors.read_actor(shop.shop_id)
+				report += f'  Financial status: {channels.clickable_channel_id_ref(shop_actor.finance_channel_id)}.\n'
+				report += f'  Business chat hub: {channels.clickable_channel_id_ref(shop_actor.chat_channel_id)}.\n'
+	if any_found:
+		report += '  Keep in mind that you can access your shops using all your handles.\n\n'
+	return report
+
+
+async def setup_shop_for_new_member(guild, shop_name : str, handle : Handle):
+	if shops.shop_exists(shop_name):
+		shop : Shop = shops.read_shop(shop_name)
+		await shops.employ(guild, handle, shop)
+		return shop
+
+

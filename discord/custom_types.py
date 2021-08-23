@@ -169,11 +169,13 @@ class PlayerData(object):
 		self,
 		player_id : str,
 		cmd_line_channel_id : int,
-		shops : List[str] = [],
+		shops_owner : List[str] = [],
+		shops_employee : List[str] = [],
 		groups : List[str] = []):
 		self.player_id = player_id
 		self.cmd_line_channel_id = cmd_line_channel_id
-		self.shops = shops
+		self.shops_owner = shops_owner
+		self.shops_employee = shops_employee
 		self.groups = groups
 
 	@staticmethod

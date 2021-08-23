@@ -419,18 +419,28 @@ async def create_shop_command(ctx, shop_name : str=None, player_id : str=None):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = await shops.create_shop(ctx.guild, shop_name, player_id)
-    if report is not None:
-        await ctx.send(report)
+    result = ActionResult = await shops.create_shop(ctx.guild, shop_name, player_id)
+    if result.report is not None:
+        await ctx.send(result.report)
 
 @bot.command(name='employ', help='Employee only: add a new player to a shop')
-async def employ_command(ctx, player_id : str=None, shop_name : str=None):
+async def employ_command(ctx, handle_id : str=None, shop_name : str=None):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = await shops.process_employ_command(str(ctx.message.author.id), ctx.guild, player_id, shop_name)
+    report = await shops.process_employ_command(str(ctx.message.author.id), ctx.guild, handle_id, shop_name)
     if report is not None:
         await ctx.send(report)
+
+@bot.command(name='fire', help='Shop owner only: remove an employee from a shop')
+async def employ_command(ctx, handle_id : str=None, shop_name : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = await shops.process_fire_command(str(ctx.message.author.id), ctx.guild, handle_id, shop_name)
+    if report is not None:
+        await ctx.send(report)
+
 
 
 @bot.command(name='add_product', help='Employee only: add a new product to a shop.')

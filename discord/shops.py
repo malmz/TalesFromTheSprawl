@@ -606,21 +606,33 @@ async def clear_order_data(shop_name : str):
 
 ### Creating a new shop:
 
-async def create_shop(guild, shop_name : str, owner_player_id : str):
+async def create_shop(guild, shop_name : str, owner_handle_id : str):
+	result = ActionResult()
 	if shop_name is None:
-		return 'Error: must give a shop name.'
-	if owner_player_id is None:
-		return f'Error: must give a player id; use \".create_shop {shop_name} <player_id>\".'
+		result.report = 'Error: must give a shop name.'
+		return result
+	if owner_handle_id is None:
+		result.report = f'Error: must give the handle or player_id of owner; use \".create_shop {shop_name} <owner>\".'
+		return result
+
+	handle : Handle = handles.get_handle(owner_handle_id)
+	if handle.handle_type == HandleTypes.Unused:
+		result.report = f'Error: handle {owner_handle_id} does not exist.'
+		return result
+	owner_player_id = handle.actor_id
+
 	member = await server.get_member_from_nick(owner_player_id)
 	if not players.player_exists(owner_player_id) or member is None:
-		return f'Error: player {owner_player_id} does not exist, or does not conform to the server nick scheme.'
+		result.report = f'Error: handle {owner_handle_id} is not owned by a player, or the player does not conform to the server nick scheme.'
+		return result
 	if shop_exists(shop_name):
 		existing_shop = read_shop(shop_name)
 		if existing_shop.name == shop_name:
-			return f'Error: the shop {shop_name} already exists.'
+			result.report = f'Error: the shop {shop_name} already exists.'
 		else:
-			return (f'Error: cannot create {shop_name} because its internal ID '
-				+ f'({shop_name.lower()}) clashes with {existing_shop.name}.)')
+			result.report = (f'Error: cannot create **{shop_name}** because its internal ID '
+				+ f'({shop_name.lower()}) clashes with existing shop **{existing_shop.name}**.)')
+		return result
 
 	shop_actor_index = get_next_shop_actor_index()
 	actor : actors.Actor = await actors.create_new_actor(guild, actor_index=shop_actor_index, actor_id=shop_name.lower())
@@ -640,13 +652,12 @@ async def create_shop(guild, shop_name : str, owner_player_id : str):
 	clear_catalogue(shop.shop_id)
 	clear_delivery_data(shop.shop_id)
 	await clear_order_data(shop.shop_id)
-	report = f'Created shop {shop.name}, run by {owner_player_id}'
+	report = f'Created shop **{shop.name}**, run by {handle.handle_id} (player ID {handle.actor_id})'
 
-	employment_report = await employ(guild, owner_player_id, shop)
-	if employment_report is not None:
-		report = report + '\n' + employment_report
-	return report
-
+	result = await employ(guild, handle, shop)
+	if result.success:
+		result.report = report + '\n' + result.report
+	return result
 
 
 def find_shop_for_command(user_id : str, shop_name : str, must_be_owner : bool=False):
@@ -689,13 +700,18 @@ def find_shop_for_command(user_id : str, shop_name : str, must_be_owner : bool=F
 
 # Employees:
 
-async def employ(guild, player_id : str, shop : Shop):
+async def employ(guild, handle : Handle, shop : Shop):
+	result = ActionResult()
+	player_id = handle.actor_id
+
 	member = await server.get_member_from_nick(player_id)
 	if not players.player_exists(player_id) or member is None:
-		return f'Error: player {player_id} does not exist, or does not conform to the server nick scheme.'
+		result.report = f'Error: handle {handle.handle_id} is not owned by a person, or they don\'t conform to the server nick scheme.'
+		return result
 
 	if player_id in shop.employees:
-		return f'Error: player {player_id} already works at {shop.shop_id}.'
+		result.report = f'Error: {handle.handle_id} is controlled by {player_id} who already works at {shop.shop_id}.'
+		return result
 
 	role = actors.get_actor_role(guild, shop.shop_id)
 	await server.give_member_role(member, role)
@@ -703,22 +719,79 @@ async def employ(guild, player_id : str, shop : Shop):
 	players.add_shop(player_id, shop.shop_id)
 	shop.employees.append(player_id)
 	store_shop(shop)
-	return (f'Added player {player_id} as an employee at {shop.name}. '
+	result.report = (f'Added {handle.handle_id} as an employee at {shop.name}. '
 		+ 'They now have access to the shop\'s finances, chat and order channels, and can edit the product catalogue.')
-	# TODO: ping the new employee?
+	result.success = True
+	return result
 
-async def process_employ_command(user_id : str, guild, new_employee_player_id : str, shop_name : str):
+async def process_employ_command(user_id : str, guild, handle_id : str, shop_name : str):
 	result : FindShopResult = find_shop_for_command(user_id, shop_name)
 	if result.error_report is not None or result.shop is None:
 		return result.error_report
 	shop : Shop = result.shop
 
-	if new_employee_player_id is None:
-		return 'Error: must give a player ID'
-	if not players.player_exists(new_employee_player_id):
-		return f'Error: player {new_employee_player_id} does not exist.'
+	if handle_id is None:
+		return 'Error: must give a a handle'
+	handle : Handle = handles.get_handle(handle_id)
+	if handle.handle_type == HandleTypes.Unused:
+		return f'Error: handle {handle_id} does not exist.'
 
-	return await employ(guild, new_employee_player_id, shop)
+	result : ActionResult = await employ(guild, handle, shop)
+	if result.success:
+		channel = players.get_cmd_line_channel(handle.actor_id)
+		if channel is None:
+			return result.report + '\nError: employee was added, but could not be notified; cmd_line channel not found.'
+		else:
+			await channel.send(
+				f'Congratulations **{handle.handle_id}**—you have been added as an employee at **{shop.name}**! You now have access to its finances, chat, and order channels.\n'
+				+ f'You can add products to the menu/catalogue:\n'
+				+ f'> .add_product Beer "A description of the beer!" 10 :beer:\n'
+				+ f'  (\"10\" is the cost in {coin})\n'
+				+ f'You can edit products,:\n'
+				+ f'> .edit_product Beer price 5\n'
+				+ f'  The following fields can be edited: description, price, symbol, available, in_stock.\n'
+				+ f'  \"available\" and \"in_stock\" can be set to \"0\" or \"1\". Available means the product is shown in the storefront channel; in_stock means it can be ordered.\n'
+				+ f'To make your added/edited products appear in the public storefront channel:\n'
+				+ f'> .publish_menu')
+	return result.report
+
+async def remove_employee(guild, handle : Handle, shop : Shop):
+	player_id = handle.actor_id
+	member = await server.get_member_from_nick(player_id)
+	if not players.player_exists(player_id) or member is None:
+		return f'Error: handle {handle.handle_id} is not owned by a person, or they don\'t conform to the server nick scheme.'
+
+	if player_id not in shop.employees:
+		return f'Error: {handle.handle_id} does not work at {shop.name}.'
+	if player_id == shop.owner_id:
+		return f'Error: {handle.handle_id} is controlled by {player_id} who is the owner of {shop.name} and cannot be removed.'
+
+	# Revoke the discord role:
+	role = actors.get_actor_role(guild, shop.shop_id)
+	await server.remove_role_from_member(member, role)
+	# Update the shop's record:
+	players.remove_shop(player_id, shop.shop_id)
+	# Update the player's record:
+	shop.employees = [e for e in shop.employees if e != player_id]
+
+	store_shop(shop)
+
+	return (f'Removed employee {player_id} (controlling handle {handle.handle_id}) from {shop.name}. '
+		+ 'They no longer have access to the shop\'s finances, chat or order channels, and can no longer edit the product catalogue.')
+
+async def process_fire_command(user_id : str, guild, handle_id : str, shop_name : str):
+	result : FindShopResult = find_shop_for_command(user_id, shop_name, must_be_owner=True)
+	if result.error_report is not None or result.shop is None:
+		return result.error_report
+	shop : Shop = result.shop
+
+	if handle_id is None:
+		return 'Error: must give a a handle'
+	handle : Handle = handles.get_handle(handle_id)
+	if handle.handle_type == HandleTypes.Unused:
+		return f'Error: handle {handle_id} does not exist.'
+
+	return await remove_employee(guild, handle, shop)
 
 
 
@@ -956,6 +1029,8 @@ def generate_catalogue_item_message(product):
 ### Reactions:
 
 ### Reaction in storefront: will order a product
+
+# TODO: add a reaction an employee can use to mark an item as out of stock
 
 async def process_reaction_in_storefront(message, user_id : str, emoji : str):
 	result = ActionResult()

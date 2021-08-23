@@ -35,7 +35,10 @@ channel_states = ConfigObj('channel_states.conf')
 ### Utilities:
 
 def clickable_channel_ref(discord_channel):
-    return f'<#{discord_channel.id}>'
+    return clickable_channel_id_ref(discord_channel.id)
+
+def clickable_channel_id_ref(channel_id : str):
+    return f'<#{channel_id}>'
 
 def is_offline_channel(discord_channel):
     if discord_channel.category == None:
