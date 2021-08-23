@@ -586,7 +586,7 @@ async def add_member_command(ctx, handle_id : str=None, group_id : str=None):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = await groups.add_member(guild, handle_id, group_id)
+    report = await groups.add_member_from_handle(guild, handle_id, group_id)
     if report is not None:
         await ctx.send(report)
 

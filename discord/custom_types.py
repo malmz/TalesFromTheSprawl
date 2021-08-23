@@ -223,6 +223,7 @@ class Group(object):
 		self.group_index = group_index
 		self.group_id = group_id
 		self.members = members
+		self.main_channel_id = main_channel_id
 
 	@staticmethod
 	def from_string(string : str):

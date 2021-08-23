@@ -18,7 +18,10 @@ balance_index = '___balance'
 system_fake_handle = '[system]'
 
 
-# 'finances' holds the money associated with each 
+# TODO: move each handle's finances into its own file, with read-write just at the time of transaction
+# TODO: write each transaction to a log file (separate from the record in finance_ channel), to have it
+# available for hacking on a per-handle basis
+# 'finances' holds the money associated with each handle
 finances = ConfigObj('finances.conf')
 
 def init_finances():

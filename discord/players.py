@@ -43,7 +43,6 @@ async def delete_all_player_roles(guild, spare_used : bool):
 async def delete_if_player_role(role, spare_used : bool):
 	if common.is_player_role(role.name):
 		if not spare_used or len(role.members) == 0:
-			print(f'Deleting unused role with name {role.name}')
 			await role.delete()
 
 

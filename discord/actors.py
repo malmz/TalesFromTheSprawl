@@ -64,7 +64,6 @@ async def delete_all_actor_roles(guild, spare_used : bool):
 async def delete_if_actor_role(role, spare_used : bool):
 	if await is_actor_role(role.name):
 		if not spare_used or len(role.members) == 0:
-			print(f'Deleting unused role with name {role.name}')
 			await role.delete()
 
 async def is_actor_role(name :str):

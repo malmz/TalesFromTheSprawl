@@ -3,12 +3,14 @@ import asyncio
 import simplejson
 from configobj import ConfigObj
 from enum import Enum
+from typing import List
 
 import players
 import handles
 import channels
 import server
 import finances
+import groups
 from custom_types import Handle, HandleTypes
 from common import coin
 
@@ -26,7 +28,7 @@ class PlayerSetupInfo(object):
 		self.npc_handles = [('__example_npc1', 0), ('__example_npc1', 0)]
 		self.burners = [('__example_burner1', 0), ('__example_burner1', 0)]
 		self.groups = ['__example_group1', '__example_group2']
-		self.shops = []
+		self.shops = ['__example_shop1']
 		self.starting_money = 10
 
 	@staticmethod
@@ -38,7 +40,7 @@ class PlayerSetupInfo(object):
 	def to_string(self):
 		return simplejson.dumps(self.__dict__)
 
-
+double_underscore = '__'
 
 def add_known_handle(handle_id : str):
 	if handle_id not in known_handles:
@@ -71,6 +73,8 @@ async def player_setup_for_new_handle(handle : Handle):
 	report += await setup_alternate_handles(handle, info.burners, HandleTypes.Burner)
 	report += await setup_alternate_handles(handle, info.npc_handles, HandleTypes.NPC)
 
+	report += await setup_groups(handle, info.groups)
+
 	report += f'All data loaded. Welcome, **{handle.handle_id}**.'
 	return report
 
@@ -81,20 +85,21 @@ async def setup_alternate_handles(main_handle, aliases, alias_type : HandleTypes
 	for (other_handle_id, amount) in aliases:
 		other_handle = await handles.create_handle(main_handle.actor_id, other_handle_id, alias_type)
 		if other_handle.handle_type != HandleTypes.Unused:
-			report += get_connected_alias_report(other_handle_id, alias_type)
+			report += get_connected_alias_report(other_handle_id, alias_type, int(amount))
 			await finances.add_funds(other_handle, int(amount))
 			any_found = True
 	if any_found:
 		report += get_all_connected_aliases_of_type_report(alias_type)
 	return report
 
-def get_connected_alias_report(handle_id : str, handle_type : HandleTypes):
+def get_connected_alias_report(handle_id : str, handle_type : HandleTypes, amount : int):
+	ending = '' if amount == 0 else f' with {coin} **{amount}**'
 	if handle_type == HandleTypes.Regular:
-		return f'- Connected alias: regular handle **{handle_id}**\n'
+		return f'- Connected alias: regular handle **{handle_id}**{ending}\n'
 	elif handle_type == HandleTypes.Burner:
-		return f'- Connected alias: burner handle **{handle_id}**\n'
+		return f'- Connected alias: burner handle **{handle_id}**{ending}\n'
 	elif handle_type == HandleTypes.NPC:
-		return f'  [OFF: added **{handle_id}** as an NPC handle.]\n'
+		return f'  [OFF: added **{handle_id}** as an NPC handle{ending}.]\n'
 
 def get_all_connected_aliases_of_type_report(handle_type : HandleTypes):
 	if handle_type == HandleTypes.Regular:
@@ -103,3 +108,24 @@ def get_all_connected_aliases_of_type_report(handle_type : HandleTypes):
 		return '  (Use \".burn <burner_name>\" to destroy a burner and erase its tracks)\n\n'
 	elif handle_type == HandleTypes.NPC:
 		return '  [OFF: NPC handles let you act as someone else, and cannot be traced to your other handles.]\n\n'
+
+
+async def setup_groups(handle : Handle, group_names : List[str]):
+	report = ''
+	any_found = False
+	guild = server.get_guild()
+	for group_name in group_names:
+		if double_underscore not in group_name:
+			any_found = True
+			await setup_group_for_new_member(guild, group_name, handle.actor_id)
+			channel = groups.get_main_channel(group_name)
+			report += f'- Confirmed group membership: {channels.clickable_channel_ref(channel)}\n'
+	if any_found:
+		report += '  Keep in mind that you can access your groups using all your handles.\n\n'
+	return report
+
+async def setup_group_for_new_member(guild, group_name : str, actor_id : str):
+	if groups.group_exists(group_name):
+		await groups.add_member_from_player_id(guild, group_name, actor_id)
+	else:
+		await groups.create_new_group(guild, group_name, [actor_id])
