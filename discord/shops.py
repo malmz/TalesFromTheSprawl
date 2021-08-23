@@ -4,6 +4,7 @@ import discord
 import asyncio
 import simplejson
 import datetime
+import random
 
 from configobj import ConfigObj
 from typing import List, Tuple
@@ -74,8 +75,6 @@ orders_channel_map_index = '__order_flow_channel_mapping'
 
 ### Classes, init and utilities:
 
-# TODO: actor_id and shop_id are always the same; we should remove actor_id from this struct
-# (similar to how player_id is also an actor_id)
 class Shop(object):
 	def __init__(
 		self,
@@ -86,9 +85,8 @@ class Shop(object):
 		order_flow_channel_id : str,
 		employees : List[str] = []):
 		self.name = name
-		self.actor_id = actor_id
 		self.owner_id = owner_id
-		self.shop_id = name.lower() if name is not None else None
+		self.shop_id = actor_id
 		self.storefront_channel_id = storefront_channel_id
 		self.order_flow_channel_id = order_flow_channel_id
 		self.highest_order = 0
@@ -292,6 +290,7 @@ async def reinitialize(user_id : str, shop_name : str):
 	await clear_order_data(shop.shop_id)
 	shop.highest_order = 1
 	store_shop(shop)
+	clear_order_semaphores_for_shop(shop.shop_id)
 	return 'Done.'
 
 
@@ -698,10 +697,10 @@ async def employ(guild, player_id : str, shop : Shop):
 	if player_id in shop.employees:
 		return f'Error: player {player_id} already works at {shop.shop_id}.'
 
-	role = actors.get_actor_role(guild, shop.actor_id)
+	role = actors.get_actor_role(guild, shop.shop_id)
 	await server.give_member_role(member, role)
 
-	players.add_shop(player_id, shop.actor_id)
+	players.add_shop(player_id, shop.shop_id)
 	shop.employees.append(player_id)
 	store_shop(shop)
 	return (f'Added player {player_id} as an employee at {shop.name}. '
@@ -1032,12 +1031,15 @@ async def process_reaction_in_order_flow(channel_id : str, msg_id : str, emoji :
 		return result
 
 	order = None
+	await get_order_semaphore(shop.shop_id, mapping.identifier)
+	print(f'Trying to mark order {mapping.identifier}, {mapping.status} as {emoji}')
 	if mapping.status == OrderStatus.Active:
 		order = fetch_active_order(shop.shop_id, mapping.identifier)
 	elif mapping.status == OrderStatus.Locked:
 		order = fetch_locked_order(shop.shop_id, mapping.identifier)
 	if order is None:
-		result.report = f'Error: tried to fetch order for {mapping.delivery_id} but could not find it. DB corrupt.'
+		return_order_semaphore(shop.shop_id, mapping.identifier)
+		result.report = f'Error: tried to fetch order for {mapping.identifier} but could not find it. DB corrupt.'
 		return result
 
 	datetime_timestamp = datetime.datetime.today()
@@ -1048,7 +1050,8 @@ async def process_reaction_in_order_flow(channel_id : str, msg_id : str, emoji :
 		result.report = await lock_active_order(shop, order)
 	elif emoji == emoji_accept:
 		result.report = await deliver_order(shop, order, mapping.status)
-	
+	return_order_semaphore(shop.shop_id, mapping.identifier)
+
 	# The above functions will only return something in the error case
 	result.success = result.report is None
 	return result
@@ -1107,6 +1110,44 @@ async def order_product_for_buyer(shop_name : str, product_name : str, buyer_han
 	result : ActionResult = await order_product(shop, product, buyer_handle)
 	return result.report
 
+# Semaphores for order, for when someone tries to add to order, lock/deliver order, and/or refund order at the same time
+
+delivery_ids_semaphores = {}
+
+async def get_order_semaphore(shop_id : str, delivery_id : str):
+	global delivery_ids_semaphores
+	sem_id = shop_id + delivery_id
+	sem_value = random.randrange(10000)
+	while True:
+		if delivery_id not in delivery_ids_semaphores:
+			print(f'Trying to claim semaphore for {delivery_id} for process {sem_value}')
+			delivery_ids_semaphores[delivery_id] = sem_value
+			await asyncio.sleep(1)
+			if delivery_ids_semaphores[delivery_id] == sem_value:
+				print(f'Succeeded in claiming semaphore for {delivery_id} for process {sem_value}')
+				break
+			else:
+				print(f'Failed to claim semaphore for {delivery_id} for process {sem_value}')
+		else:
+			print(f'Semaphore busy for {delivery_id} for process {sem_value}, waiting 1s')
+		await asyncio.sleep(1)
+
+
+def return_order_semaphore(shop_id : str, delivery_id :str):
+	global delivery_ids_semaphores
+	sem_id = shop_id + delivery_id
+	if delivery_id in delivery_ids_semaphores:
+		print(f'Returned semaphore for {delivery_id} for process {delivery_ids_semaphores[delivery_id]}')
+		del delivery_ids_semaphores[delivery_id]
+	else:
+		print(f'Semaphore error: tried to return semaphore for {sem_id} but it was already free!')
+
+def clear_order_semaphores_for_shop(shop_id : str):
+	global delivery_ids_semaphores
+	for sem_id in delivery_ids_semaphores:
+		if sem_id.startswith(shop_id):
+			del delivery_ids_semaphores[sem_id]
+
 
 async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 	result = ActionResult()
@@ -1118,6 +1159,8 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 		# No delivery ID set for this player
 		delivery_id = buyer_handle.handle_id
 
+	await get_order_semaphore(shop.shop_id, delivery_id)
+
 	# TODO: use "from_reaction" somehow to ensure not all transaction failures end up in cmd line?
 	datetime_timestamp = datetime.datetime.today()
 	timestamp = PostTimestamp(datetime_timestamp.hour, datetime_timestamp.minute)
@@ -1125,7 +1168,7 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 		payer=buyer_handle.handle_id,
 		payer_actor=buyer_handle.actor_id,
 		recip=shop.shop_id,
-		recip_actor=shop.actor_id,
+		recip_actor=shop.shop_id,
 		amount=product.price,
 		cause=TransTypes.ShopOrder,
 		data=product.name,
@@ -1133,17 +1176,18 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 	transaction.emoji = product.emoji
 	#transaction = finances.find_transaction_parties(transaction)
 	transaction = await finances.try_to_pay(transaction)
+	print(f'Transaction: {transaction.to_string()}')
 	if not transaction.success:
 		result.report = transaction.report
-		return result
-	# Otherwise, we move on to create the order
+	else:
+		# Otherwise, we move on to create the order
+		print(f'Final transaction: {transaction.to_string()}')
 
-	print(f'Final transaction: {transaction.to_string()}')
+		await place_order_in_flow(shop, transaction, delivery_id)
 
-	await place_order_in_flow(shop, transaction, delivery_id)
-
-	result.report = f'Successfully ordered {product.name} from {shop.name}'
-	result.success = True
+		result.report = f'Successfully ordered {product.name} from {shop.name}'
+		result.success = True
+	return_order_semaphore(shop.shop_id, delivery_id)
 	return result
 
 async def place_order_in_flow(shop : Shop, purchase : Transaction, delivery_id : str):
@@ -1197,7 +1241,6 @@ async def add_to_active_order(shop : Shop, order : Order, purchase : Transaction
 	return order
 
 
-# TODO: add GUI reactions to all order flow messages -- after editing, after creation, after delete-creation
 async def lock_active_order(shop : Shop, order : Order):
 	await order.remove_undo_hooks()
 	content = generate_order_message(order, OrderStatus.Locked)
@@ -1279,7 +1322,7 @@ async def attempt_refund(transaction : Transaction, initiator_id : str):
 				+'(e.g. table, address, handle), try switching back to the one you had when you ordered. 1')
 			return
 
-	print(f'Trying to fetch ')
+	await get_order_semaphore(shop.shop_id, delivery_id)
 
 	order = fetch_active_order(shop_id, delivery_id)
 	if order is None:
@@ -1314,6 +1357,7 @@ async def attempt_refund(transaction : Transaction, initiator_id : str):
 		return
 
 	await execute_refund_in_order_flow(shop, transaction, order)
+	return_order_semaphore(shop.shop_id, delivery_id)
 
 
 async def execute_refund_in_order_flow(shop : Shop, refund : Transaction, order : Order):
