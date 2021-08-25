@@ -19,18 +19,35 @@ import finances
 import groups
 import shops
 import actors
+import game
 from shops import Shop
 from custom_types import Handle, HandleTypes, Actor, ActionResult
 
 
+
 class EventType(str, Enum):
-	Disconnect = 'disconnect'
+	NetworkOutage = 'outage'
 	MessageHandles = 'msg_handles'
 	MessageAllPlayersExceptHandles = 'msg_except_handles'
 	MessageGroup = 'msg_groups'
 	MessageExceptGroups = 'msg_except_groups'
 	Unknown = 'u'
 
+class NetworkOutageEvent(object):
+	def __init__(
+		self,
+		time_in_seconds : int = 60
+		):
+		self.time_in_seconds = time_in_seconds
+
+	@staticmethod
+	def from_string(string : str):
+		obj = NetworkOutageEvent()
+		obj.__dict__ = simplejson.loads(string)
+		return obj
+
+	def to_string(self):
+		return simplejson.dumps(self.__dict__)	
 
 
 class Event(object):
@@ -54,6 +71,21 @@ class Event(object):
 
 	def to_string(self):
 		return simplejson.dumps(self.__dict__)
+
+	async def execute(self):
+		for i in range(self.repetitions):
+			if self.event_type == EventType.NetworkOutage:
+				event = NetworkOutageEvent.from_string(self.data)
+				game.set_network_down()
+				print(f'Network out.')
+				await asyncio.sleep(event.time_in_seconds)
+				game.set_network_restored()
+				print(f'Network restored.')
+			else:
+				print(f'Scenario event type {self.event_type} not implemented yet.')
+			print(f'Executed repetition {i} out of {self.repetitions}')
+			await asyncio.sleep(self.spacing)
+
 
 
 class Scenario(object):
@@ -79,10 +111,14 @@ class Scenario(object):
 		dict_to_save['steps'] = list_of_strings
 		return simplejson.dumps(dict_to_save)
 
+	async def execute():
+		for step in self.steps:
+			await step.execute()
+
+
+
 async def test_scenarios():
 	scenario = Scenario('deus_crash')
-	scenario.steps.append(Event(EventType.Disconnect, 'test_data', repetitions=2))
-	print(f'Event: {scenario.steps[0].to_string()}')
-	print(f'Scenario: {scenario.to_string()}')
-	scenario_str = scenario.to_string()
-	print(f'Event from rehydrated scenario: {Scenario.from_string(scenario_str).steps[0].to_string()}')
+	step_1 = NetworkOutageEvent(time_in_seconds=60)
+	scenario.steps.append(Event(EventType.NetworkOutage, step_1.to_string(), repetitions=2))
+	await scenario.execute()

@@ -24,6 +24,7 @@ import shops
 import groups
 import player_setup
 import scenarios
+import game
 from common import coin
 
 
@@ -48,13 +49,11 @@ bot = commands.Bot(
 )
 
 guild = None
-ready = False
 
 @bot.event
 async def on_ready():
     global guild
     global guild_name
-    global ready
     clear_all = False
     guild = discord.utils.find(lambda g: g.name == guild_name, bot.guilds)
     await server.init(bot, guild)
@@ -67,7 +66,7 @@ async def on_ready():
     await shops.init(guild, clear_all=clear_all)
     await groups.init(guild, clear_all=clear_all)
     print('Initialization complete.')
-    ready = True
+    report = game.start_game()
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -93,15 +92,16 @@ async def swallow(message, alert=True):
 
 @bot.event
 async def on_message(message):
-    if not ready:
-        await swallow(message, alert=False)
-        return
     if message.author == bot.user:
         # Never react to bot's own message to avoid loops
         return
 
     if channels.is_offline_channel(message.channel):
         # No bot shenanigans in the off channel
+        return
+
+    if not game.can_process_messages():
+        await swallow(message, alert=False)
         return
 
     if (channels.is_cmd_line(message.channel.name)

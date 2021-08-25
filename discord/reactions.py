@@ -7,6 +7,7 @@ import actors
 import custom_types
 import chats
 import shops
+import game
 
 from custom_types import ActionResult
 
@@ -109,6 +110,11 @@ async def process_reaction_in_order_flow(message_id : int, user_id : int, channe
 
 
 async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
+	if not game.can_process_reactions():
+		# Remove the reaction
+		message = await channel.fetch_message(message_id)
+		await remove_reaction(message, emoji, user_id)
+
 	# TODO: a reaction cooldown for each channel? Just, don't process reactions in a channel too quickly in a row?
 	print(f'User reacted with {emoji}')
 	if channels.is_anonymous_channel(channel):
