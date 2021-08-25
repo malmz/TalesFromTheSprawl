@@ -605,7 +605,7 @@ async def add_member_command(ctx, handle_id : str=None, group_id : str=None):
 
 @bot.command(name='run_scenario', help='GM-only: run a scenario.')
 @commands.has_role('gm')
-async def run_scenario_command(ctx, handle_id : str=None, group_id : str=None):
+async def run_scenario_command(ctx):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
@@ -614,7 +614,15 @@ async def run_scenario_command(ctx, handle_id : str=None, group_id : str=None):
         await ctx.send(report)
 
 
-
+@bot.command(name='create_scenario', help='GM-only: create a basic scenario.')
+@commands.has_role('gm')
+async def create_scenario_command(ctx, name : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = await scenarios.create_scenario(name)
+    if report is not None:
+        await ctx.send(report)
 
 
 

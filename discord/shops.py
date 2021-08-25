@@ -83,14 +83,14 @@ class Shop(object):
 		owner_id : str,
 		storefront_channel_id : str,
 		order_flow_channel_id : str,
-		employees : List[str] = []):
+		employees : List[str] = None):
 		self.name = name
 		self.owner_id = owner_id
 		self.shop_id = actor_id
 		self.storefront_channel_id = storefront_channel_id
 		self.order_flow_channel_id = order_flow_channel_id
 		self.highest_order = 0
-		self.employees = [] if employees == [] else employees
+		self.employees = [] if employees is None else employees
 		self.order_collection_limit = 2
 
 	@staticmethod
@@ -155,7 +155,7 @@ class Order(object):
 		price_total : int,
 		order_flow_msg_id : str=None,
 		time_created : PostTimestamp=None,
-		undo_hooks : List[Tuple[str, str]]=[],
+		undo_hooks : List[Tuple[str, str]]=None,
 		items_ordered={}):
 		self.order_id = order_id
 		self.delivery_id = delivery_id
@@ -164,7 +164,7 @@ class Order(object):
 		self.items_ordered = items_ordered
 		self.time_created : PostTimestamp = time_created
 		self.time_updated : PostTimestamp = time_created
-		self.undo_hooks = undo_hooks
+		self.undo_hooks = [] if undo_hooks is None else undo_hooks
 		self.updated : bool = False
 
 	@staticmethod

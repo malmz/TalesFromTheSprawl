@@ -14,8 +14,8 @@ from common import emoji_cancel, emoji_open, emoji_green, emoji_red, emoji_green
 from custom_types import Handle, HandleTypes, PostTimestamp
 
 chats_dir = 'chats'
-chats = ConfigObj(f'chats.conf')
-chat_channel_budget = ConfigObj('channel_budget.conf')
+chats = ConfigObj(f'{chats_dir}/chats.conf')
+chat_channel_budget = ConfigObj(f'{chats_dir}/channel_budget.conf')
 
 channel_limit_per_actor = 6
 

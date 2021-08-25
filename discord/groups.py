@@ -134,7 +134,8 @@ async def create_group_from_command(ctx, group_name : str):
 	group = await create_new_group(ctx.guild, group_name, initial_members=members)
 	return f'Created group \"{group.group_id}\".' + members_report
 
-async def create_new_group(guild, group_name : str, initial_members : List[str] = []):
+async def create_new_group(guild, group_name : str, initial_members : List[str] = None):
+	initial_members = [] if initial_members is None else initial_members
 	group_id = group_name.lower()
 	group_index = get_next_group_index()
 

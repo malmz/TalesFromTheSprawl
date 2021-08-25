@@ -24,7 +24,6 @@ from shops import Shop
 from custom_types import Handle, HandleTypes, Actor, ActionResult
 
 
-
 class EventType(str, Enum):
 	NetworkOutage = 'outage'
 	MessageHandles = 'msg_handles'
@@ -47,7 +46,10 @@ class NetworkOutageEvent(object):
 		return obj
 
 	def to_string(self):
-		return simplejson.dumps(self.__dict__)	
+		return simplejson.dumps(self.__dict__)
+
+	def get_type(self):
+		return EventType.NetworkOutage
 
 
 class Event(object):
@@ -62,6 +64,9 @@ class Event(object):
 		self.data = data
 		self.repetitions = repetitions
 		self.spacing = spacing
+
+	def from_specific_event(event_obj, repetitions : int=1, spacing : int=0):
+		return Event(event_obj.get_type(), event_obj.to_string(), repetitions=repetitions, spacing=spacing)
 
 	@staticmethod
 	def from_string(string : str):
@@ -91,10 +96,10 @@ class Event(object):
 class Scenario(object):
 	def __init__(
 		self,
-		scenario_name : str,
-		steps : List[Event] = []):
-		self.scenario_name = scenario_name
-		self.steps = steps
+		name : str,
+		steps : List[Event] = None):
+		self.name = name
+		self.steps = [] if steps is None else steps
 
 	@staticmethod
 	def from_string(string : str):
@@ -122,3 +127,41 @@ async def test_scenarios():
 	step_1 = NetworkOutageEvent(time_in_seconds=60)
 	scenario.steps.append(Event(EventType.NetworkOutage, step_1.to_string(), repetitions=2))
 	await scenario.execute()
+
+
+
+scenarios_conf_dir = 'scenarios'
+name_index = '___name'
+
+def store_scenario(scenario : Scenario):
+	file_name = f'{scenarios_conf_dir}/{scenario.name}.conf'
+	scenario_conf = ConfigObj(file_name)
+	scenario_conf[name_index] = scenario.name
+	for i, step in enumerate(scenario.steps):
+		scenario_conf[str(i)] = scenario.steps[i].to_string()
+	scenario_conf.write()
+
+def read_scenario(name : str):
+	file_name = f'{scenarios_conf_dir}/{name}.conf'
+	scenario_conf = ConfigObj(file_name)
+	if name_index in scenario_conf and scenario_conf[name_index] == name:
+		scenario = Scenario(name)
+		index = 0
+		while str(index) in scenario_conf:
+			scenario.steps.append(Event.from_string(scenario_conf[str(index)]))
+			index += 1
+		return scenario
+
+
+
+async def create_scenario(name : str):
+	if name is None:
+		return 'Error: you must give a name for the scenario.'
+	scenario = Scenario(name)
+	scenario.steps.append(
+		Event.from_specific_event(
+			NetworkOutageEvent(time_in_seconds=10)
+			)
+		)
+	store_scenario(scenario)
+	#scenario2 = read_scenario(name)

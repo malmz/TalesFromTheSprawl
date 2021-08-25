@@ -169,14 +169,14 @@ class PlayerData(object):
 		self,
 		player_id : str,
 		cmd_line_channel_id : int,
-		shops_owner : List[str] = [],
-		shops_employee : List[str] = [],
-		groups : List[str] = []):
+		shops_owner : List[str] = None,
+		shops_employee : List[str] = None,
+		groups : List[str] = None):
 		self.player_id = player_id
 		self.cmd_line_channel_id = cmd_line_channel_id
-		self.shops_owner = shops_owner
-		self.shops_employee = shops_employee
-		self.groups = groups
+		self.shops_owner = [] if shops_owner is None else shops_owner
+		self.shops_employee = [] if shops_employee is None else shops_employee
+		self.groups = [] if groups is None else groups
 
 	@staticmethod
 	def from_string(string : str):
@@ -220,11 +220,11 @@ class Group(object):
 		group_index : str,
 		group_id : str,
 		main_channel_id : str,
-		members : List[str] = [] # actor_ids
+		members : List[str] = None # actor_ids
 		):
 		self.group_index = group_index
 		self.group_id = group_id
-		self.members = members
+		self.members = [] if members is None else members
 		self.main_channel_id = main_channel_id
 
 	@staticmethod
