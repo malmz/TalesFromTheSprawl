@@ -23,6 +23,7 @@ import server
 import shops
 import groups
 import player_setup
+import scenarios
 from common import coin
 
 
@@ -599,6 +600,19 @@ async def add_member_command(ctx, handle_id : str=None, group_id : str=None):
     report = await groups.add_member_from_handle(guild, handle_id, group_id)
     if report is not None:
         await ctx.send(report)
+
+
+
+@bot.command(name='run_scenario', help='GM-only: run a scenario.')
+@commands.has_role('gm')
+async def run_scenario_command(ctx, handle_id : str=None, group_id : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = await scenarios.test_scenarios()
+    if report is not None:
+        await ctx.send(report)
+
 
 
 
