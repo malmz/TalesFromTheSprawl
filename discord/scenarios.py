@@ -30,7 +30,7 @@ class EventType(str, Enum):
 	MessageAllPlayersExceptHandles = 'msg_except_handles'
 	MessageGroup = 'msg_groups'
 	MessageExceptGroups = 'msg_except_groups'
-	Unknown = 'u'
+	Unknown = 'NA'
 
 class NetworkOutageEvent(object):
 	def __init__(
@@ -77,18 +77,24 @@ class Event(object):
 	def to_string(self):
 		return simplejson.dumps(self.__dict__)
 
+	def to_specific_type(self):
+		if self.event_type == EventType.NetworkOutage:
+			return NetworkOutageEvent.from_string(self.data)
+		else:
+			print(f'Scenario event type {self.event_type} not implemented yet.')
+
 	async def execute(self):
 		for i in range(self.repetitions):
 			if self.event_type == EventType.NetworkOutage:
 				event = NetworkOutageEvent.from_string(self.data)
 				game.set_network_down()
-				print(f'Network out.')
+				print(f'  Network out.')
 				await asyncio.sleep(event.time_in_seconds)
 				game.set_network_restored()
-				print(f'Network restored.')
+				print(f'  Network restored.')
 			else:
-				print(f'Scenario event type {self.event_type} not implemented yet.')
-			print(f'Executed repetition {i} out of {self.repetitions}')
+				print(f'  Scenario event type {self.event_type} not implemented yet.')
+			print(f'  Executed repetition {i+1} out of {self.repetitions}')
 			await asyncio.sleep(self.spacing)
 
 
@@ -116,17 +122,14 @@ class Scenario(object):
 		dict_to_save['steps'] = list_of_strings
 		return simplejson.dumps(dict_to_save)
 
-	async def execute():
-		for step in self.steps:
+	async def execute(self):
+		print(f'Executing scenario \"{self.name}\"...')
+		for i, step in enumerate(self.steps):
+			repetition_string = '' if step.repetitions == 1 else f' x{step.repetitions}'
+			print(f'Executing step #{i} ({step.event_type}{repetition_string}) of scenario \"{self.name}\"...')
 			await step.execute()
-
-
-
-async def test_scenarios():
-	scenario = Scenario('deus_crash')
-	step_1 = NetworkOutageEvent(time_in_seconds=60)
-	scenario.steps.append(Event(EventType.NetworkOutage, step_1.to_string(), repetitions=2))
-	await scenario.execute()
+			print(f'Finished executing step #{i} ({step.event_type}{repetition_string}) of scenario \"{self.name}\".')
+		print(f'Finished scenario \"{self.name}\".')
 
 
 
@@ -164,4 +167,9 @@ async def create_scenario(name : str):
 			)
 		)
 	store_scenario(scenario)
-	#scenario2 = read_scenario(name)
+
+async def run_scenario(name : str):
+	if name is None:
+		return 'Error: you must give a name for the scenario.'
+	scenario = read_scenario(name)
+	await scenario.execute()
