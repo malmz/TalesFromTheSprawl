@@ -26,11 +26,16 @@ from custom_types import Handle, HandleTypes, Actor, ActionResult
 
 class EventType(str, Enum):
 	NetworkOutage = 'outage'
-	MessageHandles = 'msg_handles'
+	MessagePlayersByHandles = 'msg_handles'
 	MessageAllPlayersExceptHandles = 'msg_except_handles'
 	MessageGroup = 'msg_groups'
 	MessageExceptGroups = 'msg_except_groups'
 	Unknown = 'NA'
+
+
+async def send_message_to_channels(message : str, channel_list):
+	task_list = [asyncio.create_task(c.send(message)) for c in channel_list]
+	await asyncio.gather(*task_list)
 
 class NetworkOutageEvent(object):
 	def __init__(
@@ -50,6 +55,73 @@ class NetworkOutageEvent(object):
 
 	def get_type(self):
 		return EventType.NetworkOutage
+
+	async def execute(self):
+		channel_list = [players.get_cmd_line_channel(p) for p in players.get_all_players()]
+		await send_message_to_channels('```Error: Network connection lost```', channel_list)
+		game.set_network_down()
+		await asyncio.sleep(self.time_in_seconds)
+		game.set_network_restored()
+		await send_message_to_channels('```Network connection restored```', channel_list)
+
+
+
+class MessagePlayersByHandleEvent(object):
+	def __init__(
+		self,
+		message : str,
+		handles : List[str]=None
+		):
+		self.message = message
+		self.handles = [] if handles is None else handles
+
+	@staticmethod
+	def from_string(string : str):
+		obj = MessagePlayersByHandleEvent(None)
+		obj.__dict__ = simplejson.loads(string)
+		return obj
+
+	def to_string(self):
+		return simplejson.dumps(self.__dict__)
+
+	def get_type(self):
+		return EventType.MessagePlayersByHandles
+
+	async def execute(self):
+		channel_list = players.get_cmd_line_channels_for_handles(self.handles)
+		await send_message_to_channels(self.message, channel_list)
+
+
+class MessagePlayersExceptHandlesEvent(object):
+	def __init__(
+		self,
+		message : str,
+		handles : List[str]=None
+		):
+		self.message = message
+		self.handles = [] if handles is None else handles
+
+	@staticmethod
+	def from_string(string : str):
+		obj = MessagePlayersExceptHandlesEvent(None)
+		obj.__dict__ = simplejson.loads(string)
+		return obj
+
+	def to_string(self):
+		return simplejson.dumps(self.__dict__)
+
+	def get_type(self):
+		return EventType.MessageAllPlayersExceptHandles
+
+	async def execute(self):
+		channel_ids_to_avoid = [c.id for c in players.get_cmd_line_channels_for_handles(self.handles)]
+		channel_list = []
+		for player_id in players.get_all_players():
+			channel = players.get_cmd_line_channel(player_id)
+			if channel is not None and channel.id not in channel_ids_to_avoid:
+				channel_list.append(channel)
+		await send_message_to_channels(self.message, channel_list)
+
 
 
 class Event(object):
@@ -80,6 +152,8 @@ class Event(object):
 	def to_specific_type(self):
 		if self.event_type == EventType.NetworkOutage:
 			return NetworkOutageEvent.from_string(self.data)
+		elif self.event_type == EventType.MessagePlayersByHandles:
+			return MessagePlayersByHandleEvent.from_string(self.data)
 		else:
 			print(f'Scenario event type {self.event_type} not implemented yet.')
 
@@ -87,13 +161,14 @@ class Event(object):
 		for i in range(self.repetitions):
 			if self.event_type == EventType.NetworkOutage:
 				event = NetworkOutageEvent.from_string(self.data)
-				game.set_network_down()
-				print(f'  Network out.')
-				await asyncio.sleep(event.time_in_seconds)
-				game.set_network_restored()
-				print(f'  Network restored.')
+			elif self.event_type == EventType.MessagePlayersByHandles:
+				event = MessagePlayersByHandleEvent.from_string(self.data)
+			elif self.event_type == EventType.MessageAllPlayersExceptHandles:
+				event = MessagePlayersExceptHandlesEvent.from_string(self.data)
 			else:
 				print(f'  Scenario event type {self.event_type} not implemented yet.')
+				return
+			await event.execute()
 			print(f'  Executed repetition {i+1} out of {self.repetitions}')
 			await asyncio.sleep(self.spacing)
 
@@ -163,9 +238,21 @@ async def create_scenario(name : str):
 	scenario = Scenario(name)
 	scenario.steps.append(
 		Event.from_specific_event(
-			NetworkOutageEvent(time_in_seconds=10)
+			NetworkOutageEvent(time_in_seconds=1)
 			)
 		)
+	scenario.steps.append(
+		Event.from_specific_event(
+			MessagePlayersByHandleEvent(message=f'This is a message from {name}.', handles=['switch', 'trinity_taskbar', 'u2701', 'u2702'])
+			)
+		)
+	scenario.steps.append(
+		Event.from_specific_event(
+			MessagePlayersExceptHandlesEvent(message=f'This is a secret message from {name}.', handles=['switch', 'sandwich', 'u2701'])
+			)
+		)
+
+
 	store_scenario(scenario)
 
 async def run_scenario(name : str):

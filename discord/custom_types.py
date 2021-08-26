@@ -153,6 +153,13 @@ class Actor(object):
 		self.finance_stmt_msg_id = finance_stmt_msg_id
 		self.chat_channel_id = chat_channel_id
 
+	def __eq__(self, other):
+		if isinstance(other, self.__class__):
+			return self.__dict__ == other.__dict__
+		else:
+			return False
+	def __hash__(self):
+		return hash(tuple(sorted(self.__dict__.items())))
 
 	@staticmethod
 	def from_string(string : str):

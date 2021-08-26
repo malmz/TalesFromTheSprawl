@@ -11,6 +11,7 @@ from custom_types import PlayerData, Handle
 import discord
 import asyncio
 from configobj import ConfigObj
+from typing import List
 
 
 players = ConfigObj('players.conf')
@@ -179,6 +180,19 @@ async def send_startup_message_cmd_line(player_id : str, channel):
 		content = f'{content}  {emoji} = {coin}{amount}\n'
 
 	await channel.send(content)
+
+def get_cmd_line_channels_for_handles(handles : List[str]):
+	actor_set = set() # Use a set to weed out duplicates
+	for handle_id in handles:
+		actor = actors.get_actor_for_handle(handle_id)
+		if actor is not None:
+			actor_set.add(actor)
+	channel_list = []
+	for actor in actor_set:
+		channel = get_cmd_line_channel(actor.actor_id)
+		if channel is not None:
+			channel_list.append(channel)
+	return channel_list
 
 
 def get_cmd_line_channel_for_handle(handle : Handle):
