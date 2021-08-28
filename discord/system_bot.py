@@ -25,6 +25,7 @@ import groups
 import player_setup
 import scenarios
 import game
+import artifacts
 from common import coin
 
 
@@ -65,6 +66,7 @@ async def on_ready():
     await chats.init(clear_all=clear_all)
     await shops.init(guild, clear_all=clear_all)
     await groups.init(guild, clear_all=clear_all)
+    artifacts.init(clear_all=clear_all)
     print('Initialization complete.')
     report = game.start_game()
 
@@ -621,6 +623,37 @@ async def create_scenario_command(ctx, name : str=None):
         await swallow(ctx.message);
         return
     report = await scenarios.create_scenario(name)
+    if report is not None:
+        await ctx.send(report)
+
+
+
+@bot.command(name='create_artifact', help='GM-only: create an artifact.')
+@commands.has_role('gm')
+async def create_artifact_command(ctx, name : str=None, content : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = artifacts.create_artifact(name, content)
+    if report is not None:
+        await ctx.send(report)
+
+
+@bot.command(name='connect', help='Connect to device or remote server.')
+async def connect_command(ctx, name : str=None, code : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = artifacts.access_artifact(name, code)
+    if report is not None:
+        await ctx.send(report)
+
+@bot.command(name='login', help='Connect to device or remote server. Alias: \".connect\"')
+async def connect_command(ctx, name : str=None, code : str=None):
+    if not channels.is_cmd_line(ctx.channel.name):
+        await swallow(ctx.message);
+        return
+    report = artifacts.access_artifact(name, code)
     if report is not None:
         await ctx.send(report)
 

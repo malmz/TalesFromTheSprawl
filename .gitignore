@@ -1,5 +1,6 @@
 # Runtime conf files
 discord/*.conf
+discord/artifacts/*.conf
 discord/scenarios/*.conf
 discord/chats/*.conf
 discord/groups/*.conf
