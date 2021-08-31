@@ -58,10 +58,10 @@ async def on_ready():
     clear_all = False
     guild = discord.utils.find(lambda g: g.name == guild_name, bot.guilds)
     await server.init(bot, guild)
+    await handles.init(clear_all)
     await actors.init(guild, clear_all=clear_all)
     await players.init(bot, guild, clear_all=clear_all)
     await channels.init()
-    await handles.init(clear_all)
     finances.init_finances()
     await chats.init(clear_all=clear_all)
     await shops.init(guild, clear_all=clear_all)

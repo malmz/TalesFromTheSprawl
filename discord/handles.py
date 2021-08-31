@@ -15,37 +15,24 @@ import re
 # players can create.
 
 # 'handles' is the config object holding each user's current handles.
-handles = ConfigObj('handles.conf')
+handles_conf_dir = 'handles'
+
+handles = ConfigObj(handles_conf_dir + '/__handles.conf')
+handles_to_actors = '___handle_to_actor_mapping'
+actors_index = '___all_actors'
+
+# Each actor gets their own file, containing all their handles, along with record of their
+# current active one and their most recently active regular (non-burner, non-NPC) handles
 active_index = '___active'
 last_regular_index = '___last_regular'
+handles_index = '___all_handles'
+
 
 # May contain letters, numbers and underscores
 # Must start and end with letter or number
 # Must be at least two characters (TODO: not necessary, but makes for an easier regex)
 alphanumeric_regex = re.compile(f'^[a-zA-Z0-9][a-zA-Z0-9_]*[a-zA-Z0-9]$')
 double_underscore = '__'
-
-async def init(clear_all : bool=False):
-    if clear_all:
-        await clear_all_handles()
-
-async def clear_all_handles():
-    for actor_id in handles:
-        await clear_all_handles_for_actor(actor_id)
-
-async def clear_all_handles_for_actor(actor_id : str):
-    for handle in get_handles_for_actor(actor_id, include_burnt=True):
-        await finances.deinit_finances_for_handle(handle, actor_id, record=False)
-    del handles[actor_id]
-    handles.write()
-
-async def init_handles_for_actor(actor_id : str, first_handle : str=None, overwrite=True):
-    if first_handle is None:
-        first_handle = actor_id
-    if overwrite or actor_id not in handles:
-        handles[actor_id] = {}
-        handle : Handle = await create_handle(actor_id, first_handle, HandleTypes.Regular)
-        switch_to_handle(actor_id, handle)
 
 def is_forbidden_handle(new_handle : str):
     matches = re.search(alphanumeric_regex, new_handle)
@@ -56,82 +43,131 @@ def is_forbidden_handle(new_handle : str):
     else:
         return False
 
+
+async def init(clear_all : bool=False):
+    if handles_to_actors not in handles:
+        handles[handles_to_actors] = {}
+    if actors_index not in handles:
+        handles[actors_index] = {}
+    handles.write()
+    if clear_all:
+        await clear_all_handles()
+
+async def clear_all_handles():
+    for actor_id in handles[actors_index]:
+        await clear_all_handles_for_actor(actor_id)
+    handles[actors_index] = {}
+    handles[handles_to_actors] = {}
+    handles.write()
+
+async def clear_all_handles_for_actor(actor_id : str):
+    for handle in get_handles_for_actor(actor_id, include_burnt=True):
+        await finances.deinit_finances_for_handle(handle, actor_id, record=False)
+    del handles[actors_index][actor_id]
+    del handles[handles_to_actors][handle.handle_id]
+    handles.write()
+
+async def init_handles_for_actor(actor_id : str, first_handle : str=None, overwrite=True):
+    if first_handle is None:
+        first_handle = actor_id
+    if overwrite or actor_id not in handles[actors_index]:
+        handles[actors_index][actor_id] = {}
+        handles.write()
+        file_name = f'{handles_conf_dir}/{actor_id}.conf'
+        actor_handles_conf = ConfigObj(file_name)
+        for entry in actor_handles_conf:
+            del actor_handles_conf[entry]
+        actor_handles_conf[handles_index] = {}
+        actor_handles_conf.write()
+        handle : Handle = await create_handle(actor_id, first_handle, HandleTypes.Regular)
+        switch_to_handle(handle)
+
+def store_handle(handle : Handle):
+    handles[actors_index][handle.actor_id] = {}
+    handles[handles_to_actors][handle.handle_id] = handle.actor_id
+    handles.write()
+
+    file_name = f'{handles_conf_dir}/{handle.actor_id}.conf'
+    actor_handles_conf = ConfigObj(file_name)
+    actor_handles_conf[handles_index][handle.handle_id] = handle.to_string()
+    actor_handles_conf.write()
+
+
 async def create_handle(actor_id : str, handle_id : str, handle_type : HandleTypes):
     handle = Handle(handle_id, handle_type = handle_type, actor_id = actor_id)
     if is_forbidden_handle(handle_id):
         handle.handle_type = HandleTypes.Unused
     else:
-        store_handle(actor_id, handle)
+        store_handle(handle)
         finances.init_finances_for_handle(handle)
     return handle
 
-# TODO: we don't really need actor_id as a separate field here
-def store_handle(actor_id : str, handle : Handle):
-    handles[actor_id][handle.handle_id] = handle.to_string()
-    handles.write()
 
-def read_handle(actor_id : str, handle_id : str):
+def read_handle(actor_handles, handle_id : str):
     # Unprotected -- only use for handles that you know exist
-    #print(f'{handles[actor_id][handle_id]} at[ {actor_id}][{handle_id}]')
-    return Handle.from_string(handles[actor_id][handle_id])
+    return Handle.from_string(actor_handles[handles_index][handle_id])
 
 def get_active_handle_id(actor_id : str):
-    if actor_id in handles:
-        if active_index in handles[actor_id]:
-            return handles[actor_id][active_index]
+    if actor_id in handles[actors_index]:
+        file_name = f'{handles_conf_dir}/{actor_id}.conf'
+        actor_handles_conf = ConfigObj(file_name)
+        if active_index in actor_handles_conf:
+            return actor_handles_conf[active_index]
             
 def get_active_handle(actor_id : str):
-    if actor_id in handles:
-        if active_index in handles[actor_id]:
-            active_id = handles[actor_id][active_index]
-            if active_id in handles[actor_id]:
-                return read_handle(actor_id, active_id)
+    if actor_id in handles[actors_index]:
+        file_name = f'{handles_conf_dir}/{actor_id}.conf'
+        actor_handles_conf = ConfigObj(file_name)
+        if active_index in actor_handles_conf:
+            active_id = actor_handles_conf[active_index]
+            if active_id in actor_handles_conf[handles_index]:
+                handle = read_handle(actor_handles_conf, active_id)
+                return handle
 
 def get_last_regular_id(actor_id : str):
-    if actor_id in handles:
-        if last_regular_index in handles[actor_id]:
-            return handles[actor_id][last_regular_index]
+    if actor_id in handles[actors_index]:
+        file_name = f'{handles_conf_dir}/{actor_id}.conf'
+        actor_handles_conf = ConfigObj(file_name)
+        if last_regular_index in actor_handles_conf:
+            return actor_handles_conf[last_regular_index]
 
 def get_last_regular(actor_id : str):
-    if actor_id in handles:
-        if last_regular_index in handles[actor_id]:
-            last_regular_id = handles[actor_id][last_regular_index]
-            if last_regular_id in handles[actor_id]:
-                return read_handle(actor_id, last_regular_id)
+    if actor_id in handles[actors_index]:
+        file_name = f'{handles_conf_dir}/{actor_id}.conf'
+        actor_handles_conf = ConfigObj(file_name)
+        if last_regular_index in actor_handles_conf:
+            last_regular_id = actor_handles_conf[last_regular_index]
+            if last_regular_id in actor_handles_conf[handles_index]:
+                return read_handle(actor_handles_conf, last_regular_id)
+
+
+def get_all_handles():
+    for actor_id in handles[actors_index]:
+        for handle in get_handles_for_actor(actor_id, include_burnt=True):
+            yield handle
+
+
+def get_handle(handle_name : str):
+    handle_id = handle_name.lower()
+    for actor_id in handles[actors_index]:
+        for handle in get_handles_for_actor(actor_id, include_burnt=True):
+            if handle.handle_id == handle_id:
+                return handle
+    return Handle(handle_id, handle_type=HandleTypes.Unused)
+
+
 
 def is_active_handle_type(handle_type : HandleTypes):
     return handle_type not in [HandleTypes.Burnt, HandleTypes.Unused]
 
-# returns the amount of money (if any) that was transferred away from the burner
-async def destroy_burner(guild, actor_id : str, burner : Handle):
-    balance = 0
-    # If we burn the active handle, we must figure out the new active one
-    active : Handle = get_active_handle(actor_id)
-    if active.handle_id == burner.handle_id:
-        new_active = get_last_regular(actor_id)
-        switch_to_handle(actor_id, new_active)
-    else:
-        new_active = active
 
-    # Rescue any money about to be burned
-    balance = finances.get_current_balance(burner)
-    if balance > 0:
-        await finances.transfer_from_burner(burner, new_active, balance)
-
-    # archive any chats for the burner
-    await chats.archive_all_chats_for_handle(burner)
-
-    # Destroy the burner
-    burner.handle_type = HandleTypes.Burnt
-    store_handle(actor_id, burner)
-    await finances.deinit_finances_for_handle(burner, actor_id, record=True)
-    return balance
-
-def switch_to_handle(actor_id : str, handle : Handle):
-    handles[actor_id][active_index] = handle.handle_id
+def switch_to_handle(handle : Handle):
+    file_name = f'{handles_conf_dir}/{handle.actor_id}.conf'
+    actor_handles_conf = ConfigObj(file_name)
+    actor_handles_conf[active_index] = handle.handle_id
     if handle.handle_type == HandleTypes.Regular:
-        handles[actor_id][last_regular_index] = handle.handle_id
-    handles.write()
+        actor_handles_conf[last_regular_index] = handle.handle_id
+    actor_handles_conf.write()
 
 def get_handles_for_actor(actor_id : str, include_burnt : bool=False, include_npc : bool=True):
     types_list = [HandleTypes.Regular, HandleTypes.Burner]
@@ -142,26 +178,15 @@ def get_handles_for_actor(actor_id : str, include_burnt : bool=False, include_np
     return get_handles_for_actor_of_types(actor_id, types_list)
 
 def get_handles_for_actor_of_types(actor_id : str, types_list : List[HandleTypes]):
-    for handle_id in handles[actor_id]:
-        if handle_id != active_index and handle_id != last_regular_index:
-            handle = read_handle(actor_id, handle_id)
-            if handle.handle_type in types_list:
-                yield handle
-
-
-def get_all_handles():
-    for actor_id in handles:
-        for handle in get_handles_for_actor(actor_id, include_burnt=True):
+    file_name = f'{handles_conf_dir}/{actor_id}.conf'
+    actor_handles_conf = ConfigObj(file_name)
+    for handle_id in actor_handles_conf[handles_index]:
+        handle = read_handle(actor_handles_conf, handle_id)
+        if handle.handle_type in types_list:
             yield handle
 
 
-def get_handle(handle_name : str):
-    handle_id = handle_name.lower()
-    for actor_id in handles:
-        for handle in get_handles_for_actor(actor_id, include_burnt=True):
-            if handle.handle_id == handle_id:
-                return handle
-    return Handle(handle_id, handle_type=HandleTypes.Unused)
+
 
 
 ### Async methods, directly related to commands
@@ -183,7 +208,7 @@ def switch_to_own_existing_handle(actor_id : str, handle : Handle, expected_type
         if expected_type in [HandleTypes.Regular, HandleTypes.Burner]:
             # We can switch to a burner handle using both .handle and .burner
             response = f'Switched to burner handle **{handle.handle_id}**. Remember to burn it when done, using \".burn {handle.handle_id}\".'
-            switch_to_handle(actor_id, handle)
+            switch_to_handle(handle)
         else:
             response = f'Attempted to switch to {expected_type} handle {handle.handle_id}, but {handle.handle_id} is in fact a burner.'
     elif handle.handle_type == HandleTypes.Burnt:
@@ -192,13 +217,13 @@ def switch_to_own_existing_handle(actor_id : str, handle : Handle, expected_type
     elif handle.handle_type == HandleTypes.Regular:
         if expected_type == HandleTypes.Regular:
             response = f'Switched to handle **{handle.handle_id}**.'
-            switch_to_handle(actor_id, handle)
+            switch_to_handle(handle)
         else:
             # We cannot switch to a non-burner using .burner
             response = f'Handle **{handle.handle_id}** already exists but is not a {expected_type} handle. Use \".handle {handle.handle_id}\" to switch to it.'
     elif handle.handle_type == HandleTypes.NPC:
         response = f'Switched to NPC handle **{handle.handle_id}**.'
-        switch_to_handle(actor_id, handle)
+        switch_to_handle(handle)
     else:
         raise RuntimeError(f'Unexpected handle type of active handle. Dump: {handle.to_string()}')
     return response
@@ -206,7 +231,7 @@ def switch_to_own_existing_handle(actor_id : str, handle : Handle, expected_type
 async def create_handle_and_switch(actor_id : str, new_handle_id : str, handle_type : HandleTypes):
     handle : Handle = await create_handle(actor_id, new_handle_id, handle_type)
     if handle.handle_type == handle_type and handle.handle_type != HandleTypes.Unused:
-        switch_to_handle(actor_id, handle)
+        switch_to_handle(handle)
         response = await player_setup.player_setup_for_new_handle(handle)
         if response is not None:
             # If something happened in player_setup_for_new_handle(), that report will be enough
@@ -253,6 +278,34 @@ async def process_handle_command(ctx, new_handle_id : str=None, burner : bool=Fa
             response += f'\nNote that handles are lowercase only: {new_handle_id} -> **{existing_handle.handle_id}**.'
 
     return response
+
+
+#Burners
+
+# returns the amount of money (if any) that was transferred away from the burner
+async def destroy_burner(guild, actor_id : str, burner : Handle):
+    balance = 0
+    # If we burn the active handle, we must figure out the new active one
+    active : Handle = get_active_handle(actor_id)
+    if active.handle_id == burner.handle_id:
+        new_active = get_last_regular(actor_id)
+        switch_to_handle(new_active)
+    else:
+        new_active = active
+
+    # Rescue any money about to be burned
+    balance = finances.get_current_balance(burner)
+    if balance > 0:
+        await finances.transfer_from_burner(burner, new_active, balance)
+
+    # archive any chats for the burner
+    await chats.archive_all_chats_for_handle(burner)
+
+    # Destroy the burner
+    burner.handle_type = HandleTypes.Burnt
+    store_handle(burner)
+    await finances.deinit_finances_for_handle(burner, actor_id, record=True)
+    return balance
 
 async def process_burn_command(ctx, burner_id : str=None):
     if burner_id == None:

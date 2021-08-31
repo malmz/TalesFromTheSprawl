@@ -1,5 +1,7 @@
 # Runtime conf files
 discord/*.conf
+discord/handles/*.conf
+discord/finances/*.conf
 discord/artifacts/*.conf
 discord/scenarios/*.conf
 discord/chats/*.conf
