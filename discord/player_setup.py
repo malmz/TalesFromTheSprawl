@@ -31,7 +31,8 @@ class PlayerSetupInfo(object):
 		self.npc_handles = [('__example_npc1', 0), ('__example_npc1', 0)]
 		self.burners = [('__example_burner1', 0), ('__example_burner1', 0)]
 		self.groups = ['__example_group1', '__example_group2']
-		self.shops = ['__example_shop1']
+		self.shops_owner = ['__example_shop1']
+		self.shops_employee = ['__example_shop1']
 		self.starting_money = 10
 
 	@staticmethod
@@ -44,6 +45,11 @@ class PlayerSetupInfo(object):
 		return simplejson.dumps(self.__dict__)
 
 double_underscore = '__'
+
+def remove_examples(entries : List[str]):
+	for entry in entries:
+		if double_underscore not in entry:
+			yield entry
 
 def add_known_handle(handle_id : str):
 	if handle_id not in known_handles:
@@ -120,12 +126,11 @@ async def setup_groups(handle : Handle, group_names : List[str]):
 	report = ''
 	any_found = False
 	guild = server.get_guild()
-	for group_name in group_names:
-		if double_underscore not in group_name:
-			any_found = True
-			await setup_group_for_new_member(guild, group_name, handle.actor_id)
-			channel = groups.get_main_channel(group_name)
-			report += f'- Confirmed group membership: {channels.clickable_channel_ref(channel)}\n'
+	for group_name in remove_examples(group_names):
+		any_found = True
+		await setup_group_for_new_member(guild, group_name, handle.actor_id)
+		channel = groups.get_main_channel(group_name)
+		report += f'- Confirmed group membership: {channels.clickable_channel_ref(channel)}\n'
 	if any_found:
 		report += '  Keep in mind that you can access your groups using all your handles.\n\n'
 	return report
@@ -143,21 +148,20 @@ async def setup_owned_shops(handle : Handle, shop_names : List[str]):
 	report = ''
 	any_found = False
 	guild = server.get_guild()
-	for shop_name in shop_names:
-		if double_underscore not in shop_name:
-			shop : Shop = await setup_new_shop_for_owner(guild, shop_name, handle)
-			if shop is None:
-				report += f'- Failed to connect to shop **{shop_name}**. Most likely the player data entry for {handle.actor_id} is corrupt.\n\n'
-			elif shop.owner_id != handle.actor_id:
-				report += f'- Connected to shop **{shop_name}**. Failed to set {handle.actor_id} as owner because the shop already existed.\n\n'
-			else:
-				any_found = True
-				report += f'- Connected to shop **{shop.name}** owned by {handle.actor_id}.\n'
-				report += f'  Public storefront: {channels.clickable_channel_id_ref(shop.storefront_channel_id)}.\n'
-				report += f'  Order status: {channels.clickable_channel_id_ref(shop.order_flow_channel_id)}.\n'
-				shop_actor : Actor = actors.read_actor(shop.shop_id)
-				report += f'  Financial status: {channels.clickable_channel_id_ref(shop_actor.finance_channel_id)}.\n'
-				report += f'  Business chat hub: {channels.clickable_channel_id_ref(shop_actor.chat_channel_id)}.\n'
+	for shop_name in remove_examples(shop_names):
+		shop : Shop = await setup_new_shop_for_owner(guild, shop_name, handle)
+		if shop is None:
+			report += f'- Failed to connect to shop **{shop_name}**. Most likely the player data entry for {handle.actor_id} is corrupt.\n\n'
+		elif shop.owner_id != handle.actor_id:
+			report += f'- Connected to shop **{shop_name}**. Failed to set {handle.actor_id} as owner because the shop already existed.\n\n'
+		else:
+			any_found = True
+			report += f'- Connected to shop **{shop.name}** owned by {handle.actor_id}.\n'
+			report += f'  Public storefront: {channels.clickable_channel_id_ref(shop.storefront_channel_id)}.\n'
+			report += f'  Order status: {channels.clickable_channel_id_ref(shop.order_flow_channel_id)}.\n'
+			shop_actor : Actor = actors.read_actor(shop.shop_id)
+			report += f'  Financial status: {channels.clickable_channel_id_ref(shop_actor.finance_channel_id)}.\n'
+			report += f'  Business chat hub: {channels.clickable_channel_id_ref(shop_actor.chat_channel_id)}.\n'
 	if any_found:
 		report += ('  As owner of a shop, you may need to grant your employees access:\n'
 			+ '> .employ <handle>\n\n')
@@ -180,19 +184,18 @@ async def setup_employed_shops(handle : Handle, shop_names : List[str]):
 	report = ''
 	any_found = False
 	guild = server.get_guild()
-	for shop_name in shop_names:
-		if double_underscore not in shop_name:
-			any_found = True
-			shop : Shop = await setup_shop_for_new_member(guild, shop_name, handle)
-			if shop is None:
-				report += f'- Failed to connect to shop **{shop_name}**. Please ask shop owner for assistance once they have finished their setup.'
-			else:
-				report += f'- Connected to shop **{shop.name}** as an employee.\n'
-				report += f'  Public storefront: {channels.clickable_channel_id_ref(shop.storefront_channel_id)}.\n'
-				report += f'  Order status: {channels.clickable_channel_id_ref(shop.order_flow_channel_id)}.\n'
-				shop_actor : Actor = actors.read_actor(shop.shop_id)
-				report += f'  Financial status: {channels.clickable_channel_id_ref(shop_actor.finance_channel_id)}.\n'
-				report += f'  Business chat hub: {channels.clickable_channel_id_ref(shop_actor.chat_channel_id)}.\n'
+	for shop_name in remove_examples(shop_names):
+		any_found = True
+		shop : Shop = await setup_shop_for_new_member(guild, shop_name, handle)
+		if shop is None:
+			report += f'- Failed to connect to shop **{shop_name}**. Please ask shop owner for assistance once they have finished their setup.'
+		else:
+			report += f'- Connected to shop **{shop.name}** as an employee.\n'
+			report += f'  Public storefront: {channels.clickable_channel_id_ref(shop.storefront_channel_id)}.\n'
+			report += f'  Order status: {channels.clickable_channel_id_ref(shop.order_flow_channel_id)}.\n'
+			shop_actor : Actor = actors.read_actor(shop.shop_id)
+			report += f'  Financial status: {channels.clickable_channel_id_ref(shop_actor.finance_channel_id)}.\n'
+			report += f'  Business chat hub: {channels.clickable_channel_id_ref(shop_actor.chat_channel_id)}.\n'
 	if any_found:
 		report += '  Keep in mind that you can access your shops using all your handles.\n\n'
 	return report

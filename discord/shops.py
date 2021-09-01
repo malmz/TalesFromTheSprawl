@@ -1408,6 +1408,7 @@ async def attempt_refund(transaction : Transaction, initiator_id : str):
 		else:
 			transaction.report = (f'Error: could not find order to refund. If you have switched your delivery option '
 				+'(e.g. table, address, handle), try switching back to the one you had when you ordered. 2')
+		return_order_semaphore(shop.shop_id, delivery_id)
 		return
 
 	product_name = transaction.data
@@ -1419,6 +1420,7 @@ async def attempt_refund(transaction : Transaction, initiator_id : str):
 		# marked the order as "locked" or "delivered". Both those options should remove the undo option from the
 		# buyer's side, though.
 		transaction.report = f'Error: could not refund. Order has been delivered, is in preparation, or this item has already been refunded.'
+		return_order_semaphore(shop.shop_id, delivery_id)
 		return
 
 	# attempt to transfer back money
@@ -1429,6 +1431,7 @@ async def attempt_refund(transaction : Transaction, initiator_id : str):
 	if not transaction.success:
 		# try_to_pay will have put in a good-enough error message
 		transaction.report = 'Error: could not refund.\n' + transaction.report
+		return_order_semaphore(shop.shop_id, delivery_id)
 		return
 
 	await execute_refund_in_order_flow(shop, transaction, order)

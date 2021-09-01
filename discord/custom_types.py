@@ -69,8 +69,8 @@ class TransTypes(str, Enum):
 class Transaction(object):
 	def __init__(
 		self,
-		payer : str,
-		recip : str,
+		payer : str, # handle ID
+		recip : str, # handle ID
 		payer_actor : str,
 		recip_actor : str,
 		amount : int,
@@ -176,13 +176,11 @@ class PlayerData(object):
 		self,
 		player_id : str,
 		cmd_line_channel_id : int,
-		shops_owner : List[str] = None,
-		shops_employee : List[str] = None,
+		shops : List[str] = None,
 		groups : List[str] = None):
 		self.player_id = player_id
 		self.cmd_line_channel_id = cmd_line_channel_id
-		self.shops_owner = [] if shops_owner is None else shops_owner
-		self.shops_employee = [] if shops_employee is None else shops_employee
+		self.shops = [] if shops is None else shops
 		self.groups = [] if groups is None else groups
 
 	@staticmethod

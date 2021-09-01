@@ -62,7 +62,7 @@ async def clear_all_handles():
 
 async def clear_all_handles_for_actor(actor_id : str):
     for handle in get_handles_for_actor(actor_id, include_burnt=True):
-        await finances.deinit_finances_for_handle(handle, actor_id, record=False)
+        await finances.deinit_finances_for_handle(handle, record=False)
     del handles[actors_index][actor_id]
     del handles[handles_to_actors][handle.handle_id]
     handles.write()
@@ -283,12 +283,12 @@ async def process_handle_command(ctx, new_handle_id : str=None, burner : bool=Fa
 #Burners
 
 # returns the amount of money (if any) that was transferred away from the burner
-async def destroy_burner(guild, actor_id : str, burner : Handle):
+async def destroy_burner(guild, burner : Handle):
     balance = 0
     # If we burn the active handle, we must figure out the new active one
-    active : Handle = get_active_handle(actor_id)
+    active : Handle = get_active_handle(burner.actor_id)
     if active.handle_id == burner.handle_id:
-        new_active = get_last_regular(actor_id)
+        new_active = get_last_regular(burner.actor_id)
         switch_to_handle(new_active)
     else:
         new_active = active
@@ -304,7 +304,7 @@ async def destroy_burner(guild, actor_id : str, burner : Handle):
     # Destroy the burner
     burner.handle_type = HandleTypes.Burnt
     store_handle(burner)
-    await finances.deinit_finances_for_handle(burner, actor_id, record=True)
+    await finances.deinit_finances_for_handle(burner, record=True)
     return balance
 
 async def process_burn_command(ctx, burner_id : str=None):
@@ -320,7 +320,7 @@ async def process_burn_command(ctx, burner_id : str=None):
         elif burner.handle_type in [HandleTypes.Regular, HandleTypes.NPC]:
             response = f'Error: **{burner_id}** is not a burner handle, cannot be destroyed. To stop using it, simply switch to another handle.'
         elif burner.handle_type == HandleTypes.Burner:
-            amount = await destroy_burner(ctx.guild, actor_id, burner)
+            amount = await destroy_burner(ctx.guild, burner)
             current_handle_id = get_active_handle_id(actor_id)
             response = 'Destroyed burner handle **' + burner_id + '**.\n'
             response = response + 'It will not be possible to use again, for anyone. Its previous use cannot be traced to you.\n'

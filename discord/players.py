@@ -221,6 +221,9 @@ def get_shops(player_id : str):
 	return read_player_data(player_id).shops
 
 
+# TODO: remove the group from the player data when they are removed from a group (or a group is deleted)
+# TODO: remove player from group data when player is deleted
+
 def add_group(player_id : str, group_id : str):
 	player : PlayerData = read_player_data(player_id)
 	if player is not None and group_id not in player.groups:

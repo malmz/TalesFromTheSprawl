@@ -1,58 +1,132 @@
 import channels
 import handles
 import actors
-from custom_types import Transaction, TransTypes, Handle, HandleTypes
+from custom_types import Transaction, TransTypes, Handle, HandleTypes, PostTimestamp
 from common import coin, transaction_collector, transaction_collected
 
 from configobj import ConfigObj
+from copy import deepcopy
 import asyncio
+import simplejson
 
 ### Module finances.py
 # This module tracks and handles money and transactions between handles
 
 
+class InternalTransRecord(object):
+    def __init__(
+        self,
+        other_handle : str,
+        other_actor : str,
+        amount : int,
+        cause : TransTypes=TransTypes.Transfer,
+        timestamp : PostTimestamp=None,
+        data : str=None,
+        emoji : str=None
+        ):
+        self.other_handle = other_handle
+        self.other_actor = other_actor
+        self.amount = amount
+        self.cause = cause
+        self.timestamp = timestamp
+        self.data = data
+        self.emoji = emoji
+
+    @staticmethod
+    def from_string(string : str):
+        obj = InternalTransRecord(None, None, 0)
+        loaded_dict = simplejson.loads(string)
+        obj.__dict__ = loaded_dict
+        obj.timestamp : PostTimestamp = PostTimestamp.from_string(loaded_dict['timestamp'])
+        return obj
+
+    def to_string(self):
+        dict_to_save = deepcopy(self.__dict__)
+        if self.timestamp is not None:
+            dict_to_save['timestamp'] = PostTimestamp.to_string(self.timestamp)
+        return simplejson.dumps(dict_to_save)
+
+    @staticmethod
+    def from_transaction(transaction : Transaction, for_payer : bool):
+        record = InternalTransRecord(
+            transaction.payer,
+            transaction.payer_actor,
+            transaction.amount,
+            cause = transaction.cause,
+            timestamp = transaction.timestamp,
+            data = transaction.data,
+            emoji = transaction.emoji)
+        if for_payer:
+            record.other_handle = transaction.recip
+            record.other_actor = transaction.recip_actor
+            record.amount = -transaction.amount
+        return record
+
 
 # TODO: BITCOIN BITCOIN BITCOIN!!!
 
+finances_conf_dir = 'finances'
 balance_index = '___balance'
+transactions_index = '___transactions'
+highest_transaction_index = '___highest'
+
 system_fake_handle = '[system]'
-
-
-# TODO: move each handle's finances into its own file, with read-write just at the time of transaction
-# TODO: write each transaction to a log file (separate from the record in finance_ channel), to have it
-# available for hacking on a per-handle basis
-# 'finances' holds the money associated with each handle
-finances = ConfigObj('finances.conf')
 
 def init_finances():
     for handle in handles.get_all_handles():
-        if not handle.handle_id in finances and can_have_finances(handle.handle_type):
-            init_finances_for_handle(handle)
+        if can_have_finances(handle.handle_type):
+            init_finances_for_handle(handle, overwrite=False)
 
-def init_finances_for_handle(handle : Handle):
-    finances[handle.handle_id] = {}
-    finances[handle.handle_id][balance_index] = '0'
-    finances.write()
+def init_finances_for_handle(handle : Handle, overwrite : bool=True):
+    file_name = f'{finances_conf_dir}/{handle.handle_id}.conf'
+    finances_conf = ConfigObj(file_name)
+    if not finances_conf or overwrite:
+        for entry in finances_conf:
+            del finances_conf[entry]
+    if balance_index not in finances_conf:
+        finances_conf[balance_index] = '0'
+    if transactions_index not in finances_conf:
+        finances_conf[transactions_index] = {}
+    if highest_transaction_index not in finances_conf[transactions_index]:
+        finances_conf[transactions_index][highest_transaction_index] = '0'
+    finances_conf.write()
 
-async def deinit_finances_for_handle(handle : Handle, actor_id : str, record : bool):
-    if handle.handle_id in finances:
-        del finances[handle.handle_id]
-        finances.write()
+async def deinit_finances_for_handle(handle : Handle, record : bool):
+    file_name = f'{finances_conf_dir}/{handle.handle_id}.conf'
+    finances_conf = ConfigObj(file_name)
+    if finances_conf:
+        for entry in finances_conf:
+            del finances_conf[entry]
+        finances_conf.write()
     if record:
-        await actors.refresh_financial_statement(actor_id)
+        await actors.refresh_financial_statement(handle.actor_id)
 
 def get_current_balance(handle : Handle):
     return get_current_balance_handle_id(handle.handle_id)
 
 def get_current_balance_handle_id(handle_id : str):
-    return int(finances[handle_id][balance_index])
+    file_name = f'{finances_conf_dir}/{handle_id}.conf'
+    finances_conf = ConfigObj(file_name)
+    return int(finances_conf[balance_index])
 
 def set_current_balance(handle : Handle, balance : int):
     set_current_balance_handle_id(handle.handle_id, balance)
 
 def set_current_balance_handle_id(handle_id : str, balance : int):
-    finances[handle_id][balance_index] = str(balance)
-    finances.write()
+    file_name = f'{finances_conf_dir}/{handle_id}.conf'
+    finances_conf = ConfigObj(file_name)
+    finances_conf[balance_index] = str(balance)
+    finances_conf.write()
+
+
+def add_internal_record(handle_id : str, record : InternalTransRecord):
+    file_name = f'{finances_conf_dir}/{handle_id}.conf'
+    finances_conf = ConfigObj(file_name)
+    prev_highest = int(finances_conf[transactions_index][highest_transaction_index])
+    new_index = str(prev_highest + 1)
+    finances_conf[transactions_index][highest_transaction_index] = new_index
+    finances_conf[transactions_index][new_index] = record.to_string()
+    finances_conf.write()
 
 async def overwrite_balance(handle : Handle, balance : int):
     old_balance = get_current_balance(handle)
@@ -115,7 +189,7 @@ def get_all_handles_balance_report(actor_id : str):
     return report
 
 def transfer_funds_if_available(transaction : Transaction):
-    avail_at_payer = int(finances[transaction.payer][balance_index])
+    avail_at_payer = get_current_balance_handle_id(transaction.payer)
     if avail_at_payer >= transaction.amount:
         amount_at_recip = get_current_balance_handle_id(transaction.recip)
         set_current_balance_handle_id(transaction.recip, amount_at_recip + transaction.amount)
@@ -140,10 +214,9 @@ async def transfer_from_burner(burner : Handle, new_active : Handle, amount : in
 async def add_funds(handle : Handle, amount : int):
     if amount == 0:
         return
-    previous_balance = int(finances[handle.handle_id][balance_index])
+    previous_balance = get_current_balance_handle_id(handle.handle_id)
     new_balance = previous_balance + amount
-    finances[handle.handle_id][balance_index] = str(new_balance)
-    finances.write()
+    set_current_balance_handle_id(handle.handle_id, new_balance)
     transaction = Transaction(payer=system_fake_handle, payer_actor=None, recip=handle.handle_id, recip_actor=None, amount=amount)
     find_transaction_parties(transaction)
     await record_transaction(transaction)
@@ -276,13 +349,50 @@ async def try_to_pay(transaction : Transaction, from_reaction : bool=False):
 
 # Record for transactions:
 
+
+
+
+
 async def record_transaction(transaction : Transaction):
+    record_transaction_internal(transaction)
     if int(transaction.amount) == 0:
         # No need to write anything for 0-transactions, should they occur
         return
     record_payer = await generate_record_for_payer(transaction)
     record_recip = await generate_record_for_recip(transaction)
     await actors.write_financial_record(transaction, record_payer, record_recip)
+
+def record_transaction_internal(transaction : Transaction):
+    if transaction.payer_actor is not None:
+        payer_record = InternalTransRecord.from_transaction(transaction, for_payer=True)
+        add_internal_record(transaction.payer, payer_record)
+    if transaction.recip_actor is not None:
+        recip_record = InternalTransRecord.from_transaction(transaction, for_payer=False)
+        add_internal_record(transaction.recip, recip_record)
+
+
+async def generate_internal_record_for_payer(transaction : Transaction):
+    if transaction.payer_actor is None:
+        return None
+    if transaction.payer_actor == transaction.recip_actor:
+        if transaction.cause == TransTypes.Burn:
+            # Will be generated for the recipient
+            return None
+        else:
+            return generate_record_self_transfer(transaction)
+    if transaction.cause == TransTypes.Transfer:
+        return generate_record_payer(transaction)
+    if transaction.cause == TransTypes.ChatReact:
+        # TODO add more info
+        return generate_record_payer(transaction)
+    if transaction.cause == TransTypes.Collect:
+        return generate_record_collected(transaction)
+    if transaction.cause == TransTypes.ShopOrder:
+        return generate_record_buyer(transaction)
+    if transaction.cause == TransTypes.ShopRefund:
+        # Will not be recorded -- the original transaction will just vanish instead
+        await actors.refresh_financial_statement(transaction.payer_actor)
+
 
 async def generate_record_for_payer(transaction : Transaction):
     if transaction.payer_actor is None:
