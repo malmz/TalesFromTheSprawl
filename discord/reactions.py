@@ -82,9 +82,7 @@ async def process_reaction_in_chat_hub(message_id : int, user_id : int, channel,
 	await chats.process_reaction_in_chat_hub(message, str(emoji))
 
 async def process_reaction_in_storefront(message_id : int, user_id : int, channel, emoji):
-	# Remove the reaction right away, regardless of what it is
 	message = await channel.fetch_message(message_id)
-	await remove_reaction(message, emoji, user_id)
 	result : ActionResult = await shops.process_reaction_in_storefront(message, str(user_id), str(emoji))
 	if not result.success and result.report != None:
 		player_id = players.get_player_id(str(user_id))
@@ -92,30 +90,61 @@ async def process_reaction_in_storefront(message_id : int, user_id : int, channe
 		if cmd_line_channel is not None:
 			await cmd_line_channel.send(result.report)
 
-async def process_reaction_in_finance_channel(message_id : int, user_id : int, channel, emoji):
-	# Remove the reaction right away, regardless of what it is
-	message = await channel.fetch_message(message_id)
-	await remove_reaction(message, emoji, user_id)
+	# Remove the reaction regardless of what it is
+	try:
+		await remove_reaction(message, emoji, user_id)
+	except discord.errors.NotFound:
+		pass # Ignore: it means the message was deleted so we cannot remove the reaction
 
+
+async def process_reaction_in_finance_channel(message_id : int, user_id : int, channel, emoji):
 	await actors.process_reaction_in_finance_channel(str(channel.id), str(message_id), str(emoji))
 
-async def process_reaction_in_order_flow(message_id : int, user_id : int, channel, emoji):
-	# Remove the reaction right away, regardless of what it is
+	# Remove the reaction regardless of what it is
 	message = await channel.fetch_message(message_id)
-	await remove_reaction(message, emoji, user_id)
+	try:
+		await remove_reaction(message, emoji, user_id)
+	except discord.errors.NotFound:
+		pass # Ignore: it means the message was deleted so we cannot remove the reaction
+
+async def process_reaction_in_order_flow(message_id : int, user_id : int, channel, emoji):
+	message = await channel.fetch_message(message_id)
 
 	result : ActionResult = await shops.process_reaction_in_order_flow(str(channel.id), str(message_id), str(emoji))
 	if not result.success and result.report is not None:
 		await channel.send(content=result.report, delete_after=5)
 
+	# Remove the reaction regardless of what it is
+	try:
+		await remove_reaction(message, emoji, user_id)
+	except discord.errors.NotFound:
+		pass # Ignore: it means the message was deleted so we cannot remove the reaction
+
+
+reactions_timestamps = {}
 
 async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
+	global reactions_timestamps
 	if not game.can_process_reactions():
 		# Remove the reaction
 		message = await channel.fetch_message(message_id)
 		await remove_reaction(message, emoji, user_id)
 
-	# TODO: a reaction cooldown for each channel? Just, don't process reactions in a channel too quickly in a row?
+	# Reaction cooldown per user:
+	current_time = datetime.datetime.today()
+	dict_index = str(user_id)
+	if dict_index in reactions_timestamps:
+		prev_time = reactions_timestamps[dict_index]
+		diff = current_time - prev_time
+		if diff.total_seconds() < 5:
+			# We cannot handle reactions from the same user too quickly after one another
+			# Swallow this one, the user will have to try again.
+			message = await channel.fetch_message(message_id)
+			await remove_reaction(message, emoji, user_id)
+			return
+
+	reactions_timestamps[dict_index] = current_time
+
 	print(f'User reacted with {emoji}')
 	if channels.is_anonymous_channel(channel):
 		# Reactions are allowed in anonymous channels, but trigger no effects
