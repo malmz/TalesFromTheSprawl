@@ -60,7 +60,7 @@ async def on_ready():
     await server.init(bot, guild)
     await handles.init(clear_all)
     await actors.init(guild, clear_all=clear_all)
-    await players.init(bot, guild, clear_all=clear_all)
+    await players.init(guild, clear_all=clear_all)
     await channels.init()
     finances.init_finances()
     await chats.init(clear_all=clear_all)
@@ -312,7 +312,7 @@ async def fake_join_command(ctx, nick : str):
 @bot.command(name='clear_all_players', help='Admin-only: de-initialise all players.')
 @commands.has_role('gm')
 async def clear_all_players_command(ctx):
-    await players.init(bot, guild, clear_all=True)
+    await players.init(guild, clear_all=True)
     try:
         await ctx.send('Done.')
     except discord.errors.NotFound:
@@ -606,7 +606,7 @@ async def add_member_command(ctx, handle_id : str=None, group_id : str=None):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = await groups.add_member_from_handle(guild, handle_id, group_id)
+    report = await groups.add_member_from_handle(guild, group_id, handle_id)
     if report is not None:
         await ctx.send(report)
 

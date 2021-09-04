@@ -21,14 +21,14 @@ players = ConfigObj('players.conf')
 user_id_mappings_index = '___user_id_to_player_id'
 
 # TODO: loop through all users, find their player_ids and re-map personal channels if not available
-async def init(bot, guild, clear_all=False):
+async def init(guild, clear_all=False):
 	if not user_id_mappings_index in players or clear_all:
 		players[user_id_mappings_index] = {}
 	if not highest_ever_index in players[user_id_mappings_index] or clear_all:
 		players[user_id_mappings_index][highest_ever_index] = str(player_personal_role_start)
 	if clear_all:
 		for player_id in get_all_players():
-			await clear_player(player_id)
+			await clear_player(guild, player_id)
 			del players[player_id]
 	await delete_all_player_roles(guild, spare_used=not clear_all)
 
@@ -44,12 +44,13 @@ async def delete_if_player_role(role, spare_used : bool):
 		if not spare_used or len(role.members) == 0:
 			await role.delete()
 
-async def clear_player(player_id : str):
+async def clear_player(guild, player_id : str):
 	await actors.clear_actor(guild, player_id)
 	await channels.delete_all_personal_channels(player_id)
 	player : PlayerData = read_player_data(player_id)
 	for shop_id in player.shops:
 		await shops.remove_employee_player(shop_id, player_id)
+	print(f'Removing {player_id} from all groups: {player.groups}')
 	for group_id in player.groups:
 		await groups.remove_member(group_id, player_id)
 
@@ -231,6 +232,7 @@ def get_shops(player_id : str):
 
 def add_group(player_id : str, group_id : str):
 	player : PlayerData = read_player_data(player_id)
+	print(f'Trying to add {player_id} to {group_id}; existing groups are {player.groups}')
 	if player is not None and group_id not in player.groups:
 		player.groups.append(group_id)
 		store_player_data(player)

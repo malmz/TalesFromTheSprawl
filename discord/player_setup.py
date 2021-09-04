@@ -136,8 +136,10 @@ async def setup_groups(handle : Handle, group_names : List[str]):
 	return report
 
 async def setup_group_for_new_member(guild, group_name : str, actor_id : str):
+	print('Entered setup_group_for_new_member')
 	if groups.group_exists(group_name):
-		await groups.add_member_from_player_id(guild, group_name, actor_id)
+		report = await groups.add_member_from_player_id(guild, group_name, actor_id)
+		print(report)
 	else:
 		await groups.create_new_group(guild, group_name, [actor_id])
 

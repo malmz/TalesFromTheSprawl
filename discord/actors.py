@@ -9,6 +9,7 @@ import finances
 import common
 import server
 import shops
+import players
 
 from custom_types import Transaction, Actor, TransTypes
 from common import emoji_cancel
@@ -25,6 +26,8 @@ finance_channel_mapping_index = '___finance_channels'
 
 
 async def init(guild, clear_all=False):
+	await players.init(guild, clear_all=clear_all)
+	await shops.init(guild, clear_all=clear_all)
 	if clear_all:
 		for actor_id in get_all_actor_ids():
 			await clear_actor(guild, actor_id)

@@ -137,6 +137,7 @@ async def create_group_from_command(ctx, group_name : str):
 
 async def create_new_group(guild, group_name : str, initial_members : List[str] = None):
 	initial_members = [] if initial_members is None else initial_members
+	print(f'Creating new group {group_name} with players {initial_members}')
 	group_id = group_name.lower()
 	group_index = get_next_group_index()
 
@@ -145,6 +146,7 @@ async def create_new_group(guild, group_name : str, initial_members : List[str] 
 	channel = await channels.create_group_channel(guild, role, group_id)
 
 	for player_id in initial_members:
+		players.add_group(player_id, group_id)
 		member = await server.get_member_from_nick(player_id)
 		if member is not None:
 			await server.give_member_role(member, role)
@@ -160,7 +162,7 @@ async def create_new_group(guild, group_name : str, initial_members : List[str] 
 
 # Edit groups
 
-async def add_member_from_handle(guild, handle_id : str, group_id : str):
+async def add_member_from_handle(guild, group_id : str, handle_id : str):
 	if handle_id is None:
 		return f'Error: you must give a handle ID and group name. Use \".add_member <handle> <group>\"'
 	handle : Handle = handles.get_handle(handle_id)
@@ -178,13 +180,13 @@ async def add_member_from_handle(guild, handle_id : str, group_id : str):
 	if handle.actor_id in group.members:
 		return f'Error: player {handle.actor_id} (owner of handle {handle.handle_id}) is already a member of {group.group_id}.'
 
-	error_report = add_member(guild, group, member, handle.actor_id)
+	error_report = await add_member(guild, group, member, handle.actor_id)
 	if error_report is None:
 		return f'Added {handle.handle_id} to group {group.group_id}.'
 	else:
 		return error_report
 
-async def add_member_from_player_id(guild, player_id : str, group_id : str):
+async def add_member_from_player_id(guild, group_id : str, player_id : str):
 	if player_id is None:
 		return f'Error: you must give a player ID.'
 	member = await server.get_member_from_nick(player_id)
@@ -199,22 +201,30 @@ async def add_member_from_player_id(guild, player_id : str, group_id : str):
 	if player_id in group.members:
 		return f'Error: player {player_id} is already a member of {group.group_id}.'
 
-	error_report = add_member(guild, group, member, player_id)
+	error_report = await add_member(guild, group, member, player_id)
 	if error_report is None:
 		return f'Added {player_id} to group {group.group_id}.'
 	else:
 		return error_report
 
 async def add_member(guild, group, member, player_id : str):
-	group.members.append(actor_id)
+	print(f'Adding {player_id} to {group.group_id}')
+	group.members.append(player_id)
 	store_group(group)
 
 	players.add_group(player_id, group.group_id)
 
 	role = get_group_role(guild, group.group_id)
-	await server.give_member_role(member, role)
+	if role is not None:
+		await server.give_member_role(member, role)
+	else:
+		print(f'Error: could not find the role belonging to group {group.group_id}')
 
 async def remove_member(group_id : str, player_id : str):
+	print(f'Trying to remove {player_id} from {group_id}')
+	group : Group = read_group(group_id)
+	if group is None:
+		return f'Error: could not find group {group_id}.'
 	group.members = [m for m in group.members if m != player_id]
 	store_group(group)
 
