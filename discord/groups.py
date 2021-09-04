@@ -51,7 +51,8 @@ async def init(guild, clear_all=False):
 async def clear_group(guild, group_id : str):
 	if group_exists(group_id):
 		group = read_group(group_id)
-		# TOOD: update all actors that think they belong to this group
+		for player_id in group.members:
+			players.remove_group(player_id, group.group_id)
 		del groups[group_id]
 		groups.write()
 		await delete_all_group_roles(guild, spare_used=True)
@@ -204,14 +205,26 @@ async def add_member_from_player_id(guild, player_id : str, group_id : str):
 	else:
 		return error_report
 
-# TODO: also add the membership to the player's entry in players
-async def add_member(guild, group, member, actor_id : str):
+async def add_member(guild, group, member, player_id : str):
 	group.members.append(actor_id)
 	store_group(group)
+
+	players.add_group(player_id, group.group_id)
 
 	role = get_group_role(guild, group.group_id)
 	await server.give_member_role(member, role)
 
+async def remove_member(group_id : str, player_id : str):
+	group.members = [m for m in group.members if m != player_id]
+	store_group(group)
+
+	member = await server.get_member_from_nick(player_id)
+	if member is None:
+		return f'Error: actor {player_id} is not a player, or does not follow the server nick scheme.'
+
+	guild = server.get_guild()
+	role = get_group_role(guild, group_id)
+	await server.remove_role_from_member(member, role)
 
 # Use groups
 

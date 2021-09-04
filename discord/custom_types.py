@@ -225,7 +225,7 @@ class Group(object):
 		group_index : str,
 		group_id : str,
 		main_channel_id : str,
-		members : List[str] = None # actor_ids
+		members : List[str] = None # player_ids
 		):
 		self.group_index = group_index
 		self.group_id = group_id

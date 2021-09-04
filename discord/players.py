@@ -4,6 +4,8 @@ import reactions
 import common
 import server
 import actors
+import shops
+import groups
 
 from common import coin, highest_ever_index, player_personal_role_start
 from custom_types import PlayerData, Handle
@@ -26,13 +28,9 @@ async def init(bot, guild, clear_all=False):
 		players[user_id_mappings_index][highest_ever_index] = str(player_personal_role_start)
 	if clear_all:
 		for player_id in get_all_players():
-			await actors.clear_actor(guild, player_id)
+			await clear_player(player_id)
 			del players[player_id]
-			await channels.delete_all_personal_channels(player_id)
 	await delete_all_player_roles(guild, spare_used=not clear_all)
-		#await channels.delete_all_personal_channels()
-		#await handles.clear_all_handles()
-		# TODO: only clear out players, not shops
 
 	players.write()
 
@@ -46,6 +44,14 @@ async def delete_if_player_role(role, spare_used : bool):
 		if not spare_used or len(role.members) == 0:
 			await role.delete()
 
+async def clear_player(player_id : str):
+	await actors.clear_actor(guild, player_id)
+	await channels.delete_all_personal_channels(player_id)
+	player : PlayerData = read_player_data(player_id)
+	for shop_id in player.shops:
+		await shops.remove_employee_player(shop_id, player_id)
+	for group_id in player.groups:
+		await groups.remove_member(group_id, player_id)
 
 async def initialise_all_users(guild):
 	task_list = (asyncio.create_task(create_player(m)) for m in guild.members if not m.bot)
@@ -221,11 +227,17 @@ def get_shops(player_id : str):
 	return read_player_data(player_id).shops
 
 
-# TODO: remove the group from the player data when they are removed from a group (or a group is deleted)
 # TODO: remove player from group data when player is deleted
 
 def add_group(player_id : str, group_id : str):
 	player : PlayerData = read_player_data(player_id)
 	if player is not None and group_id not in player.groups:
 		player.groups.append(group_id)
-	store_player_data(player)
+		store_player_data(player)
+
+
+def remove_group(player_id : str, group_id : str):
+	player : PlayerData = read_player_data(player_id)
+	if player is not None and group_id in player.groups:
+		player.groups = [g for g in player.groups if g != group_id]
+		store_player_data(player)

@@ -231,7 +231,7 @@ class MsgOrderMapping(object):
 ### Init, getters, setters, deleters
 
 # TODO: gm-only function to remove a single shop
-# Necessary as fail-safe if we want players to create their own shops
+# Necessary as fail-safe if we allow players to create their own shops
 
 async def init(guild, clear_all=False):
 	if clear_all:
@@ -242,6 +242,7 @@ async def init(guild, clear_all=False):
 			await actors.clear_actor(guild, shop_id)
 			clear_catalogue(shop_id)
 			clear_delivery_data(shop_id)
+			await clear_order_data(shop_id)
 			del shops[shop_data_index][shop_id]
 		for channel in shops[storefront_channel_map_index]:
 			del shops[storefront_channel_map_index][channel]
@@ -755,18 +756,26 @@ async def process_employ_command(user_id : str, guild, handle_id : str, shop_nam
 				+ f'> .publish_menu')
 	return result.report
 
-async def remove_employee(guild, handle : Handle, shop : Shop):
+async def remove_employee(shop : Shop, player_id : str, handle_id : str=None):
 	player_id = handle.actor_id
 	member = await server.get_member_from_nick(player_id)
 	if not players.player_exists(player_id) or member is None:
-		return f'Error: handle {handle.handle_id} is not owned by a person, or they don\'t conform to the server nick scheme.'
+		if handle_id is None:
+			return f'Error: player {player_id} does not conform to the server nick scheme.'
+		else:
+			return f'Error: handle {handle_id} is not owned by a person, or they don\'t conform to the server nick scheme.'
 
 	if player_id not in shop.employees:
-		return f'Error: {handle.handle_id} does not work at {shop.name}.'
+		initiator_id = handle_id if handle_id is not None else player_id
+		return f'Error: {initiator_id} does not work at {shop.name}.'
 	if player_id == shop.owner_id:
-		return f'Error: {handle.handle_id} is controlled by {player_id} who is the owner of {shop.name} and cannot be removed.'
+		if handle_id is None:
+			return f'Error: {player_id} is the owner of {shop.name} and cannot be removed.'
+		else:
+			return f'Error: {handle_id} is controlled by {player_id} who is the owner of {shop.name} and cannot be removed.'
 
 	# Revoke the discord role:
+	guild = server.get_guild()
 	role = actors.get_actor_role(guild, shop.shop_id)
 	await server.remove_role_from_member(member, role)
 	# Update the shop's record:
@@ -776,10 +785,11 @@ async def remove_employee(guild, handle : Handle, shop : Shop):
 
 	store_shop(shop)
 
-	return (f'Removed employee {player_id} (controlling handle {handle.handle_id}) from {shop.name}. '
+	ident_string = player_id if handle_id is None else f'{player_id} (controlling handle {handle_id})'
+	return (f'Removed employee {ident_string} from {shop.name}. '
 		+ 'They no longer have access to the shop\'s finances, chat or order channels, and can no longer edit the product catalogue.')
 
-async def process_fire_command(user_id : str, guild, handle_id : str, shop_name : str):
+async def process_fire_command(user_id : str, handle_id : str, shop_name : str):
 	result : FindShopResult = find_shop_for_command(user_id, shop_name, must_be_owner=True)
 	if result.error_report is not None or result.shop is None:
 		return result.error_report
@@ -791,9 +801,13 @@ async def process_fire_command(user_id : str, guild, handle_id : str, shop_name 
 	if handle.handle_type == HandleTypes.Unused:
 		return f'Error: handle {handle_id} does not exist.'
 
-	return await remove_employee(guild, handle, shop)
+	return await remove_employee(shop, handle.actor_id, handle.handle_id)
 
-
+async def remove_employee_player(player_id : str, shop_name : str):
+	if not shop_exists(shop_name):
+		return
+	shop : Shop = read_shop(shop_name)
+	await remove_employee(shop, player_id)
 
 
 ## Adding and editing products for a shop

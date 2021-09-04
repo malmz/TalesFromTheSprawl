@@ -146,6 +146,13 @@ async def on_member_join(member):
     return await players.create_player(member)
 
 
+
+# TODO: .handle should be able to return a full handle report (similar to .balance)
+# TODO: Fix the .help command:
+# - Only show the commands that should be visible to the player
+# - Group them by catgory, not alphabetically
+
+
 # Commands related to handles
 # These work in both cmd_line and chat_hub channels
 
@@ -440,7 +447,7 @@ async def employ_command(ctx, handle_id : str=None, shop_name : str=None):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
         return
-    report = await shops.process_fire_command(str(ctx.message.author.id), ctx.guild, handle_id, shop_name)
+    report = await shops.process_fire_command(str(ctx.message.author.id), handle_id, shop_name)
     if report is not None:
         await ctx.send(report)
 
