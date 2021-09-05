@@ -96,12 +96,13 @@ async def process_reaction_in_storefront(message_id : int, user_id : int, channe
 		if cmd_line_channel is not None:
 			await cmd_line_channel.send(result.report)
 
+
+
 async def process_reaction_in_finance_channel(message_id : int, user_id : int, channel, emoji):
 	await actors.process_reaction_in_finance_channel(str(channel.id), str(message_id), str(emoji))
 
 async def process_reaction_in_order_flow(message_id : int, user_id : int, channel, emoji):
 	message = await channel.fetch_message(message_id)
-
 	result : ActionResult = await shops.process_reaction_in_order_flow(str(channel.id), str(message_id), str(emoji))
 	if not result.success and result.report is not None:
 		await channel.send(content=result.report, delete_after=5)
@@ -115,19 +116,13 @@ async def get_reaction_semaphore(user_id : str):
 	number_iterations = 0
 	while True:
 		if user_id not in reactions_semaphores:
-			print(f'Trying to claim semaphore for {user_id} for process {sem_value}')
 			reactions_semaphores[user_id] = sem_value
-			await asyncio.sleep(1)
+			await asyncio.sleep(0.5)
 			if reactions_semaphores[user_id] == sem_value:
-				print(f'Succeeded in claiming semaphore for {user_id} for process {sem_value}')
 				break
-			else:
-				print(f'Failed to claim semaphore for {user_id} for process {sem_value}')
-		else:
-			print(f'Semaphore busy for {user_id} for process {sem_value}, waiting 1s')
-		await asyncio.sleep(1)
+		await asyncio.sleep(0.5)
 		number_iterations += 1
-		if number_iterations > 60:
+		if number_iterations > 120:
 			print(f'Error: semaphore probably stuck! Resetting semaphore for {user_id}.')
 			if user_id in reactions_semaphores:
 				del reactions_semaphores[user_id]
@@ -164,24 +159,28 @@ async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
 	print(f'User reacted with {emoji}')
 	should_remove_reaction = True
 	if semaphore is not None:
-		if channels.is_anonymous_channel(channel):
-			# Reactions are allowed in anonymous channels, but trigger no effects
-			return
-		if channels.is_cmd_line(channel.name):
-			# Reactions in cmd_line are silently server.swallowed
+		try:
+			if channels.is_anonymous_channel(channel):
+				# Reactions are allowed in anonymous channels, but trigger no effects
+				should_remove_reaction = False
+			elif channels.is_cmd_line(channel.name):
+				# Reactions in cmd_line are silently swallowed
+				pass
+			elif channels.is_chat_hub(channel.name):
+				await process_reaction_in_chat_hub(message_id, user_id, channel, emoji)
+				should_remove_reaction = False # Not needed after this
+			elif channels.is_shop_channel(channel):
+				await process_reaction_in_storefront(message_id, user_id, channel, emoji)
+			elif channels.is_finance(channel.name):
+				await process_reaction_in_finance_channel(message_id, user_id, channel, emoji)
+			elif channels.is_order_flow(channel.name):
+				await process_reaction_in_order_flow(message_id, user_id, channel, emoji)
+			else:
+				await process_reaction_for_tipping(message_id, user_id, channel, emoji)
+				should_remove_reaction = False # Reaction should stay unless removed by above function
+		except discord.errors.NotFound:
+			# If the message has already been removed, processing will fail and we just move on
 			pass
-		elif channels.is_chat_hub(channel.name):
-			await process_reaction_in_chat_hub(message_id, user_id, channel, emoji)
-			should_remove_reaction = False # Not needed after this
-		elif channels.is_shop_channel(channel):
-			await process_reaction_in_storefront(message_id, user_id, channel, emoji)
-		elif channels.is_finance(channel.name):
-			await process_reaction_in_finance_channel(message_id, user_id, channel, emoji)
-		elif channels.is_order_flow(channel.name):
-			await process_reaction_in_order_flow(message_id, user_id, channel, emoji)
-		else:
-			await process_reaction_for_tipping(message_id, user_id, channel, emoji)
-			should_remove_reaction = False # Reaction should stay unless removed by above function
 		return_reaction_semaphore(user_id, semaphore)
 	else:
 		pass

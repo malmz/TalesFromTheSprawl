@@ -1545,15 +1545,12 @@ async def get_order_semaphore(shop_id : str, delivery_id : str):
 	while True:
 		if sem_id not in delivery_ids_semaphores:
 			delivery_ids_semaphores[sem_id] = sem_value
-			await asyncio.sleep(1)
+			await asyncio.sleep(0.5)
 			if delivery_ids_semaphores[sem_id] == sem_value:
 				break
-			else:
-				pass
-				#print(f'Failed to claim semaphore for {delivery_id} for process {sem_value}')
-		await asyncio.sleep(1)
+		await asyncio.sleep(0.5)
 		number_iterations += 1
-		if number_iterations > 60:
+		if number_iterations > 120:
 			print(f'Error: semaphore probably stuck! Resetting semaphore for {sem_id}.')
 			if delivery_id in delivery_ids_semaphores:
 				del delivery_ids_semaphores[sem_id]
