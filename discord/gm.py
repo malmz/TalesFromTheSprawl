@@ -5,6 +5,7 @@ import player_setup
 import scenarios
 import artifacts
 import channels
+import server
 
 from discord.ext import commands
 import discord
@@ -52,7 +53,7 @@ class GmCog(commands.Cog, name='admin'):
 	@commands.has_role('gm')
 	async def run_scenario_command(self, ctx, name : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		report = await scenarios.run_scenario(name)
 		if report is not None:
@@ -65,7 +66,7 @@ class GmCog(commands.Cog, name='admin'):
 	@commands.has_role('gm')
 	async def create_scenario_command(self, ctx, name : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		report = await scenarios.create_scenario(name)
 		if report is not None:
@@ -87,7 +88,7 @@ class GmCog(commands.Cog, name='admin'):
 	@commands.has_role('gm')
 	async def create_artifact_command(self, ctx, name : str=None, content : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		report = artifacts.create_artifact(name, content)
 		if report is not None:

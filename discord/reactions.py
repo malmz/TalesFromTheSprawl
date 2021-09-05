@@ -1,4 +1,8 @@
 import datetime
+import random
+import asyncio
+import discord
+
 import posting
 import channels
 import finances
@@ -11,7 +15,6 @@ import game
 
 from custom_types import ActionResult
 
-
 # good-to-have emojis:
 # ✅
 # ❇️
@@ -20,6 +23,9 @@ from custom_types import ActionResult
 # 🔥
 
 reactions_worth_money = {'💴' : 1, '💸' : 1, '💰' : 1, '🍺' : 1, '💯' : 100, '🪙' : 1}
+
+def init():
+	clear_reaction_semaphores()
 
 async def remove_reaction(message, emoji, user_id : int):
 	member = await message.channel.guild.fetch_member(user_id)
@@ -90,22 +96,8 @@ async def process_reaction_in_storefront(message_id : int, user_id : int, channe
 		if cmd_line_channel is not None:
 			await cmd_line_channel.send(result.report)
 
-	# Remove the reaction regardless of what it is
-	try:
-		await remove_reaction(message, emoji, user_id)
-	except discord.errors.NotFound:
-		pass # Ignore: it means the message was deleted so we cannot remove the reaction
-
-
 async def process_reaction_in_finance_channel(message_id : int, user_id : int, channel, emoji):
 	await actors.process_reaction_in_finance_channel(str(channel.id), str(message_id), str(emoji))
-
-	# Remove the reaction regardless of what it is
-	message = await channel.fetch_message(message_id)
-	try:
-		await remove_reaction(message, emoji, user_id)
-	except discord.errors.NotFound:
-		pass # Ignore: it means the message was deleted so we cannot remove the reaction
 
 async def process_reaction_in_order_flow(message_id : int, user_id : int, channel, emoji):
 	message = await channel.fetch_message(message_id)
@@ -114,49 +106,66 @@ async def process_reaction_in_order_flow(message_id : int, user_id : int, channe
 	if not result.success and result.report is not None:
 		await channel.send(content=result.report, delete_after=5)
 
-	# Remove the reaction regardless of what it is
-	try:
-		await remove_reaction(message, emoji, user_id)
-	except discord.errors.NotFound:
-		pass # Ignore: it means the message was deleted so we cannot remove the reaction
+
+reactions_semaphores = {}
+
+async def get_reaction_semaphore(user_id : str):
+	global reactions_semaphores
+	sem_value = str(random.randrange(10000))
+	while True:
+		if user_id not in reactions_semaphores:
+			print(f'Trying to claim semaphore for {user_id} for process {sem_value}')
+			reactions_semaphores[user_id] = sem_value
+			await asyncio.sleep(1)
+			if reactions_semaphores[user_id] == sem_value:
+				print(f'Succeeded in claiming semaphore for {user_id} for process {sem_value}')
+				break
+			else:
+				print(f'Failed to claim semaphore for {user_id} for process {sem_value}')
+		else:
+			print(f'Semaphore busy for {user_id} for process {sem_value}, waiting 1s')
+		await asyncio.sleep(1)
+	return sem_value
 
 
-reactions_timestamps = {}
+def return_reaction_semaphore(user_id : str, sem_value :str):
+	global reactions_semaphores
+	if user_id in reactions_semaphores:
+		if reactions_semaphores[user_id] == sem_value:
+			print(f'Returned semaphore for {user_id} for process {reactions_semaphores[user_id]}')
+			del reactions_semaphores[user_id]
+		else:
+			print(f'Error: Tried to return semaphore for {user_id} but it was taken by another process.')
+	else:
+		print(f'Semaphore error: tried to return semaphore for {user_id} but it was already free!')
+
+def clear_reaction_semaphores():
+	global reactions_semaphores
+	for sem_id in reactions_semaphores:
+		del reactions_semaphores[sem_id]
+
+
 
 async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
-	global reactions_timestamps
 	if not game.can_process_reactions():
 		# Remove the reaction
 		message = await channel.fetch_message(message_id)
 		await remove_reaction(message, emoji, user_id)
 
-	# Reaction cooldown per user:
-	current_time = datetime.datetime.today()
-	dict_index = str(user_id)
-	if dict_index in reactions_timestamps:
-		prev_time = reactions_timestamps[dict_index]
-		diff = current_time - prev_time
-		if diff.total_seconds() < 5:
-			# We cannot handle reactions from the same user too quickly after one another
-			# Swallow this one, the user will have to try again.
-			message = await channel.fetch_message(message_id)
-			await remove_reaction(message, emoji, user_id)
-			return
-
-	reactions_timestamps[dict_index] = current_time
+	# Semaphore handling to ensure we only process one action per player at a time:
+	semaphore = await get_reaction_semaphore(user_id)
 
 	print(f'User reacted with {emoji}')
+	should_remove_reaction = True
 	if channels.is_anonymous_channel(channel):
 		# Reactions are allowed in anonymous channels, but trigger no effects
 		return
 	if channels.is_cmd_line(channel.name):
-		# Reactions in cmd_line are silently swallowed
-		message = await channel.fetch_message(message_id)
-		await remove_reaction(message, emoji, user_id)
-		return
-
-	if channels.is_chat_hub(channel.name):
+		# Reactions in cmd_line are silently server.swallowed
+		pass
+	elif channels.is_chat_hub(channel.name):
 		await process_reaction_in_chat_hub(message_id, user_id, channel, emoji)
+		should_remove_reaction = False # Not needed after this
 	elif channels.is_shop_channel(channel):
 		await process_reaction_in_storefront(message_id, user_id, channel, emoji)
 	elif channels.is_finance(channel.name):
@@ -165,5 +174,16 @@ async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
 		await process_reaction_in_order_flow(message_id, user_id, channel, emoji)
 	else:
 		await process_reaction_for_tipping(message_id, user_id, channel, emoji)
+		should_remove_reaction = False # Reaction should stay unless removed by above function
+
+	return_reaction_semaphore(user_id, semaphore)
+	if should_remove_reaction:
+		try:
+			message = await channel.fetch_message(message_id)
+			await remove_reaction(message, emoji, user_id)
+		except discord.errors.NotFound:
+			# If the processing above has removed the message or the reaction, we just ignore it
+			pass
+
 
 

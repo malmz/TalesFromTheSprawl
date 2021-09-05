@@ -95,3 +95,11 @@ async def get_member_from_nick(nick : str):
 
 async def get_all_channels():
 	return await guild.fetch_channels()
+
+
+async def swallow(message, alert=True):
+	await message.delete()
+	if alert:
+		await message.channel.send(
+			'You cannot do that here. Try it in your #cmd_line instead.',
+			delete_after=5)

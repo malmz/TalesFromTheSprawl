@@ -54,7 +54,7 @@ class ShoppingCog(commands.Cog, name='shopping'):
 		)
 	async def order_command(self, ctx, product_name : str=None, shop_name : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		report = await order_product_from_command(str(ctx.message.author.id), shop_name, product_name)
 		if report is not None:
@@ -67,7 +67,7 @@ class ShoppingCog(commands.Cog, name='shopping'):
 	@commands.has_role('gm')
 	async def order_other_command(self, ctx, product_name : str=None, shop_name : str=None, buyer : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 
 		buyer_handle : custom_types.Handle = handles.get_handle(buyer)
@@ -87,7 +87,7 @@ class ShoppingCog(commands.Cog, name='shopping'):
 		)
 	async def set_delivery_id_command(self, ctx, delivery_id : str=None, shop_name : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		report = set_delivery_id_from_command(str(ctx.message.author.id), delivery_id, shop_name)
 		if report is not None:
@@ -103,7 +103,7 @@ class ShoppingCog(commands.Cog, name='shopping'):
 		)
 	async def set_delivery_id_command(self, ctx, option : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		report = set_delivery_table_from_command(str(ctx.message.author.id), option, main_shop)
 		if report is not None:
@@ -130,7 +130,7 @@ class EmployeeCog(commands.Cog, name='employee'):
 	@commands.has_role('gm')
 	async def create_shop_command(self, ctx, shop_name : str=None, player_id : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		result = ActionResult = await create_shop(ctx.guild, shop_name, player_id)
 		if result.report is not None:
@@ -146,7 +146,7 @@ class EmployeeCog(commands.Cog, name='employee'):
 		)
 	async def employ_command(self, ctx, handle_id : str=None, shop_name : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		report = await process_employ_command(str(ctx.message.author.id), ctx.guild, handle_id, shop_name)
 		if report is not None:
@@ -162,7 +162,7 @@ class EmployeeCog(commands.Cog, name='employee'):
 		)
 	async def fire_command(self, ctx, handle_id : str=None, shop_name : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		report = await process_fire_command(str(ctx.message.author.id), handle_id, shop_name)
 		if report is not None:
@@ -187,7 +187,7 @@ class EmployeeCog(commands.Cog, name='employee'):
 		symbol : str=None,
 		shop_name : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		report = add_product(str(ctx.message.author.id), product_name, description, price, symbol, shop_name)
 		if report is not None:
@@ -218,7 +218,7 @@ class EmployeeCog(commands.Cog, name='employee'):
 		value : str=None,
 		shop_name : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		report = edit_product_from_command(str(ctx.message.author.id), product_name, key, value, shop_name)
 		if report is not None:
@@ -239,7 +239,7 @@ class EmployeeCog(commands.Cog, name='employee'):
 		product_name : str=None,
 		shop_name : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		report = await remove_product(str(ctx.message.author.id), product_name, shop_name)
 		if report is not None:
@@ -261,7 +261,7 @@ class EmployeeCog(commands.Cog, name='employee'):
 		value : bool=True, # TODO
 		shop_name : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		report = await edit_product_from_command(str(ctx.message.author.id), product_name, 'in_stock', str(value), shop_name)
 		if report is not None:
@@ -278,7 +278,7 @@ class EmployeeCog(commands.Cog, name='employee'):
 		)
 	async def clear_orders_command(self, ctx, shop_name : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		await reinitialize(str(ctx.message.author.id), shop_name)
 		await publish_menu_command(ctx, shop_name=shop_name)
@@ -293,7 +293,7 @@ class EmployeeCog(commands.Cog, name='employee'):
 		)
 	async def publish_menu_command(self, ctx, product_name : str=None, shop_name : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		if product_name is not None:
 			report = await post_catalogue_item(str(ctx.message.author.id), product_name, shop_name)
@@ -309,7 +309,7 @@ class EmployeeCog(commands.Cog, name='employee'):
 	@commands.has_role('gm')
 	async def clear_shops_command(self, ctx):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		await init(guild, clear_all=True)
 		await ctx.send('Done.')

@@ -27,7 +27,7 @@ class ArtifactsCog(commands.Cog, name='network'):
 	@commands.command(name='connect', help='Connect to device or remote server. Aliases: .login, .access')
 	async def connect_command(self, ctx, name : str=None, code : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		report = access_artifact(name, code)
 		if report is not None:

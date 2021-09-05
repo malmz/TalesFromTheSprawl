@@ -51,7 +51,7 @@ class ChatsCog(commands.Cog, name='chats'):
 			return
 		handle = handle.lower()
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		await create_chat_from_command(ctx, handle)
 
@@ -63,7 +63,7 @@ class ChatsCog(commands.Cog, name='chats'):
 		my_handle = my_handle.lower()
 		other_handle = other_handle.lower()
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		report = await create_2party_chat_from_handle_id(my_handle, other_handle)
 		if report != None:
@@ -84,7 +84,7 @@ class ChatsCog(commands.Cog, name='chats'):
 			return
 		handle = handle.lower()
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		await close_chat_session_from_command(ctx, handle)
 
@@ -97,7 +97,7 @@ class ChatsCog(commands.Cog, name='chats'):
 		my_handle = my_handle.lower()
 		other_handle = other_handle.lower()
 		if not channels.is_cmd_line(ctx.channel.name):
-			await swallow(ctx.message);
+			await server.swallow(ctx.message);
 			return
 		report = await close_2party_chat_session_from_handle_id(my_handle, other_handle)
 		if report is not None:

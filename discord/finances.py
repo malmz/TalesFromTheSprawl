@@ -2,6 +2,7 @@ import channels
 import handles
 import actors
 import players
+import server
 from custom_types import Transaction, TransTypes, Handle, HandleTypes, PostTimestamp
 from common import coin, transaction_collector, transaction_collected
 
@@ -33,7 +34,7 @@ class FinancesCog(commands.Cog, name='finances'):
     @commands.has_role('gm')
     async def create_money_command(self, ctx, handle_id : str=None, amount : int=0):
         if not channels.is_cmd_line(ctx.channel.name):
-            await swallow(ctx.message);
+            await server.swallow(ctx.message);
             return
 
         if handle_id == None:
@@ -58,7 +59,7 @@ class FinancesCog(commands.Cog, name='finances'):
     @commands.has_role('gm')
     async def set_money_command(self, ctx, handle_id : str=None, amount : int=-1):
         if not channels.is_cmd_line(ctx.channel.name):
-            await swallow(ctx.message);
+            await server.swallow(ctx.message);
             return
 
         if handle_id == None:
@@ -86,7 +87,7 @@ class FinancesCog(commands.Cog, name='finances'):
         )
     async def pay_money_command(self, ctx, handle_recip : str=None, amount : int=0):
         if not channels.is_cmd_line(ctx.channel.name):
-            await swallow(ctx.message);
+            await server.swallow(ctx.message);
             return
 
         if handle_recip == None:
@@ -105,7 +106,7 @@ class FinancesCog(commands.Cog, name='finances'):
         help='Show the current balance (amount of money available) on all active handles that you control.')
     async def show_balance_command(self, ctx):
         if not channels.is_cmd_line(ctx.channel.name):
-            await swallow(ctx.message);
+            await server.swallow(ctx.message);
             return
 
         player_id = players.get_player_id(str(ctx.message.author.id))
@@ -121,7 +122,7 @@ class FinancesCog(commands.Cog, name='finances'):
         )
     async def collect_command(self, ctx):
         if not channels.is_cmd_line(ctx.channel.name):
-            await swallow(ctx.message);
+            await server.swallow(ctx.message);
             return
 
         player_id = players.get_player_id(str(ctx.message.author.id))
