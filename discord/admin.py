@@ -2,6 +2,7 @@ import actors
 import players
 
 from discord.ext import commands
+import discord
 import asyncio
 
 ### Module admin.py
@@ -38,7 +39,7 @@ class AdminCog(commands.Cog, name='admin'):
 		if member_to_fake_join is None:
 			await ctx.send(f'Failed: member with user_id {user_id} not found.')
 		else:
-			report = await on_member_join(member_to_fake_join)
+			report = await players.create_player(member_to_fake_join)
 			if report is None:
 				report = "Done."
 			await ctx.send(report)
@@ -54,7 +55,7 @@ class AdminCog(commands.Cog, name='admin'):
 		if member_to_fake_join is None:
 			await ctx.send(f'Failed: member with name {name} not found.')
 		else:
-			report = await on_member_join(member_to_fake_join)
+			report = await players.create_player(member_to_fake_join)
 			if report is None:
 				report = "Done."
 			await ctx.send(report)
@@ -69,7 +70,7 @@ class AdminCog(commands.Cog, name='admin'):
 		if member_to_fake_join is None:
 			await ctx.send(f'Failed: member with nick {nick} not found.')
 		else:
-			report = await on_member_join(member_to_fake_join)
+			report = await players.create_player(member_to_fake_join)
 			if report is None:
 				report = "Done."
 			await ctx.send(report)

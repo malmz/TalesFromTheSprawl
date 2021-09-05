@@ -3,6 +3,7 @@ import asyncio
 import simplejson
 from configobj import ConfigObj
 from enum import Enum
+from discord.ext import commands
 
 import actors
 import players
@@ -13,8 +14,117 @@ import posting
 from common import emoji_cancel, emoji_open, emoji_green, emoji_red, emoji_green_book, emoji_red_book, emoji_unread
 from custom_types import Handle, HandleTypes, PostTimestamp
 
+
+
+### Module chats.py
+# This module handles chats between handles
+
+class ChatsCog(commands.Cog, name='chats'):
+	"""Commands related to chats.
+	These are private conversations between two different handles."""
+	def __init__(self, bot):
+		self.bot = bot
+		self._last_member = None
+
+	# Commands related to chats
+	# These only work in cmd_line channels
+
+
+	# TODO: add handling for using .chat and .close_chat without argument
+	@commands.command(
+		name='chat',
+		brief='Open a chat session with another user.',
+		help=(
+			'Open a chat session between you (using your current handle) and another user. ' +
+			'If you have never had a chat between those two handles before, one will be created. ' +
+			'All your active chats are shown in your personal chat_hub channel, where you can open and ' +
+			'close the connections as needed.\n' +
+			'You can close a chat and re-open it and all the chat history will be stored, except for file attachments. ' +
+			'Note: you cannot change your handle in an existing chat, so make sure to start the chat from the correct one! ' +
+			'If you switch handles and open a new chat, the other person can see that two handles have tried to contact them, ' +
+			'but they will not see that they belong to the same person.'
+		)
+		)
+	async def chat_command(self, ctx, handle : str=None):
+		if handle is None:
+			await ctx.send(f'Error: you must say who you want to chat with. Example: \".chat shadow_weaver\"')
+			return
+		handle = handle.lower()
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		await create_chat_from_command(ctx, handle)
+
+	@commands.command(
+		name='chat_other',
+		help='Admin-only. Open a chat session for someone else.',
+		hidden=True)
+	async def chat_other_command(self, ctx,  my_handle : str, other_handle : str):
+		my_handle = my_handle.lower()
+		other_handle = other_handle.lower()
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		report = await create_2party_chat_from_handle_id(my_handle, other_handle)
+		if report != None:
+			await ctx.send(report)
+
+	@commands.command(
+		name='close_chat',
+		brief='Close a chat session from your end.',
+		help=(
+			'Close a chat session from your end. This will not affect how the other participant sees the chat. ' +
+			f'You can re-open the chat at any time using \".chat\", or by clicking the {emoji_open} in your chat_hub. ' +
+			'The chat will re-open automatically if the other person sends anything, unless you have the maximum number'
+			)#TODO finish this text
+		)
+	async def close_chat_command(self, ctx, handle : str=None):
+		if handle is None:
+			await ctx.send(f'Error: you must say which chat you want to close. Example: \".close_chat shadow_weaver\"')
+			return
+		handle = handle.lower()
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		await close_chat_session_from_command(ctx, handle)
+
+	@commands.command(
+		name='close_chat_other',
+		help='Admin-only. Close a chat session for someone else.',
+		hidden=True)
+	@commands.has_role('gm')
+	async def close_chat_other_command(self, ctx, my_handle : str, other_handle : str):
+		my_handle = my_handle.lower()
+		other_handle = other_handle.lower()
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		report = await close_2party_chat_session_from_handle_id(my_handle, other_handle)
+		if report is not None:
+			await ctx.send(report)
+
+	@commands.command(
+		name='clear_all_chats',
+		help='Admin-only. Delete all chats and chat channels for all users.',
+		hidden=True)
+	@commands.has_role('gm')
+	async def clear_all_chats_command(self, ctx):
+		await init(clear_all=True)
+		await ctx.send('Done.')
+
+	@commands.command(name='check_chats')
+	async def check_chats_command(self, ctx):
+		dump();
+
+
 chats_dir = 'chats'
 chats = ConfigObj(f'{chats_dir}/chats.conf')
+
+def setup(bot):
+	global chats
+	bot.add_cog(ChatsCog(bot))
+	chats = ConfigObj(f'{chats_dir}/chats.conf')
+
 chat_channel_budget = ConfigObj(f'{chats_dir}/channel_budget.conf')
 
 channel_limit_per_actor = 6
@@ -132,13 +242,22 @@ class Activation(str, Enum):
 
 
 def init_chats_confobj():
+	global chats
+	chats = ConfigObj(f'{chats_dir}/chats.conf')
 	if not chat_channel_data_index in chats:
 		chats[chat_channel_data_index] = {}
 	if not chat_hub_msg_data_index in chats:
 		chats[chat_hub_msg_data_index] = {}
 	if not chats_with_logs_index in chats:
 		chats[chats_with_logs_index] = {}
+	chats.write()
 
+
+def dump():
+	for cat in chats:
+		print(f'Dumping category {cat}:')
+		for entry in chats[cat]:
+			print(f'Entry {entry}: {chats[cat][entry]}')
 
 async def init(clear_all : bool=False):
 	init_chats_confobj()
@@ -183,26 +302,44 @@ def create_2party_chat_name(handle1 : Handle, handle2 : Handle):
 	handles_ordered = sorted([handle1.handle_id, handle2.handle_id])
 	return f'{handles_ordered[0]}_{handles_ordered[1]}'
 
-
 def read_chat_connection_from_channel(channel_id : str):
+	init_chats_confobj()
+	chats = ConfigObj(f'{chats_dir}/chats.conf')
+	print(f'Dump inside read_chat:')
+	for cat in chats:
+		print(f'Dumping category {cat}:')
+		for entry in chats[cat]:
+			print(f'Entry {entry}: {chats[cat][entry]}')
+
+	print(f'trying to find {channel_id} in chats')
+	for entry in chats[chat_channel_data_index]:
+		print(f'Entry: {entry}, comparing to {channel_id}')
 	if channel_id in chats[chat_channel_data_index]:
 		string = chats[chat_channel_data_index][channel_id]
+		print(f'trying to find {channel_id} in chats[{chat_channel_data_index}], found {string}')
 		chat_connection : ChatConnectionMapping = ChatConnectionMapping.from_string(string)
 		return chat_connection
 	else:
+		print('Dump because we didn\'t find anything')
+		dump()
 		return None
 
 def store_chat_connection_for_channel(channel_id : str, chat_connection : ChatConnectionMapping):
+	init_chats_confobj()
 	chats[chat_channel_data_index][channel_id] = chat_connection.to_string()
 	chats.write()
+	for entry in chats[chat_channel_data_index]:
+		print(f'Storing, entry= {entry}')
 
 def clear_channel_connection_mappings(channel_id):
+	init_chats_confobj()
 	if channel_id in chats[chat_channel_data_index]:
 		del chats[chat_channel_data_index][channel_id]
 		chats.write()
 
 
 def read_chat_connection_from_hub_msg(msg_id : str):
+	init_chats_confobj()
 	if msg_id in chats[chat_hub_msg_data_index]:
 		string = chats[chat_hub_msg_data_index][msg_id]
 		chat_connection : ChatConnectionMapping = ChatConnectionMapping.from_string(string)
@@ -211,10 +348,12 @@ def read_chat_connection_from_hub_msg(msg_id : str):
 		return None
 
 def store_chat_connection_for_hub_msg(msg_id : str, chat_connection : ChatConnectionMapping):
+	init_chats_confobj()
 	chats[chat_hub_msg_data_index][msg_id] = chat_connection.to_string()
 	chats.write()
 
 def clear_hub_msg_connection_mapping(msg_id):
+	init_chats_confobj()
 	if msg_id in chats[chat_hub_msg_data_index]:
 		del chats[chat_hub_msg_data_index][msg_id]
 		chats.write()
@@ -222,6 +361,7 @@ def clear_hub_msg_connection_mapping(msg_id):
 
 
 def chat_exists(chat_name : str):
+	init_chats_confobj()
 	return chat_name in chats[chats_with_logs_index]
 
 def get_chat_state(chat_name : str):
@@ -229,6 +369,7 @@ def get_chat_state(chat_name : str):
 	return ConfigObj(f'{chats_dir}/{chat_file_name}')
 
 def get_chats_for_handle(handle : Handle):
+	init_chats_confobj()
 	for msg_id in chats[chat_hub_msg_data_index]:
 		chat_connection : ChatConnectionMapping = read_chat_connection_from_hub_msg(msg_id)
 		if chat_connection.handle == handle.handle_id:
@@ -253,9 +394,11 @@ def store_participant(chat_name : str, participant : ChatParticipant):
 
 
 def get_log_length(chat_name : str):
+	init_chats_confobj()
 	return int(chats[chats_with_logs_index][chat_name])
 
 def increment_log_length(chat_name : str):
+	init_chats_confobj()
 	prev_length = int(chats[chats_with_logs_index][chat_name])
 	chats[chats_with_logs_index][chat_name] = str(prev_length + 1)
 	chats.write()
@@ -295,6 +438,7 @@ def write_new_chat_log_entry(chat_name : str, entry : ChatLogEntry):
 
 # Returns True if the chat was newly created, False if it already existed
 def init_chat_log(chat_name : str):
+	init_chats_confobj()
 	if not chat_name in chats[chats_with_logs_index]:
 		chats[chats_with_logs_index][chat_name] = 0
 		chats.write()
@@ -313,6 +457,7 @@ def init_chat_state(chat_state):
 		print(f'Overwriting existing chat log file - the record did not indicate that chat {chat_state.filename} would exist.')
 
 def get_chat_log_length(chat_name):
+	init_chats_confobj()
 	return int(chats[chats_with_logs_index][chat_name])
 
 
@@ -411,8 +556,10 @@ async def create_2party_chat(my_handle : Handle, partner_handle_id : str):
 		report = (f'Created chat {chat_name}, but it is currently closed since you have too many chat sessions open. '
 			+ f'You can access the chat from {clickable_chat_hub}, if you close another chat first.')
 		return report
+	print(f'Created chat for me: {my_ui.chat_name}, {my_ui.channel.id}')
 	my_clickable_ref = channels.clickable_channel_ref(my_ui.channel)
 	partner_clickable_ref = channels.clickable_channel_ref(my_ui.channel) if partner_ui.channel is not None else None
+	print(f'Created chat for partner: {partner_ui.chat_name}, {partner_ui.session_status}')
 
 	if not newly_created_chat:
 		report = f'Re-opened chat between {my_handle.handle_id} and {partner_handle.handle_id}: {my_clickable_ref}'

@@ -54,7 +54,7 @@ guild = None
 
 # Below cogs represents our folder our cogs are in. Following is the file name. So 'meme.py' in cogs, would be cogs.meme
 # Think of it like a dot path import
-initial_extensions = ['handles', 'finances', 'admin']
+initial_extensions = ['handles', 'finances', 'admin', 'chats']
 
 # Here we load our extensions(cogs) listed above in [initial_extensions].
 if __name__ == '__main__':
@@ -173,60 +173,6 @@ async def add_known_handle_command(ctx, handle_id : str):
     else:
         player_setup.add_known_handle(handle_id)
         await ctx.send(f'Added entry for {handle_id}. Please update its contents manually by editing the file.')
-
-
-
-
-# Chats
-
-# TODO: add handling for using .chat and .close_chat without argument
-@bot.command(name='chat', help='Open a chat session with another user.')
-async def chat_command(ctx, handle : str):
-    handle = handle.lower()
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    await chats.create_chat_from_command(ctx, handle)
-
-@bot.command(name='chat_other', help='Admin-only: open a chat session for someone else.')
-async def chat_other_command(ctx,  my_handle : str, other_handle : str):
-    my_handle = my_handle.lower()
-    other_handle = other_handle.lower()
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    report = await chats.create_2party_chat_from_handle_id(my_handle, other_handle)
-    if report != None:
-        await ctx.send(report)
-
-@bot.command(name='close_chat', help='Close a chat session from your end.')
-async def close_chat_command(ctx, handle : str):
-    handle = handle.lower()
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    await chats.close_chat_session_from_command(ctx, handle)
-
-
-@bot.command(name='close_chat_other', help='Admin-only: close a chat session for someone else.')
-@commands.has_role('gm')
-async def close_chat_other_command(ctx, my_handle : str, other_handle : str):
-    my_handle = my_handle.lower()
-    other_handle = other_handle.lower()
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    report = await chats.close_2party_chat_session_from_handle_id(my_handle, other_handle)
-    if report is not None:
-        await ctx.send(report)
-
-@bot.command(name='clear_all_chats', help='Admin-only: delete all chats and chat channels for all users.')
-@commands.has_role('gm')
-async def clear_all_chats_command(ctx):
-    await chats.init(clear_all=True)
-    await ctx.send('Done.')
-
-
 
 
 
