@@ -51,6 +51,15 @@ bot = commands.Bot(
 
 guild = None
 
+# Below cogs represents our folder our cogs are in. Following is the file name. So 'meme.py' in cogs, would be cogs.meme
+# Think of it like a dot path import
+initial_extensions = ['handles']
+
+# Here we load our extensions(cogs) listed above in [initial_extensions].
+if __name__ == '__main__':
+    for extension in initial_extensions:
+        bot.load_extension(extension)
+
 @bot.event
 async def on_ready():
     global guild
@@ -151,36 +160,6 @@ async def on_member_join(member):
 # TODO: Fix the .help command:
 # - Only show the commands that should be visible to the player
 # - Group them by catgory, not alphabetically
-
-
-# Commands related to handles
-# These work in both cmd_line and chat_hub channels
-
-@bot.command(name='handle', help='Show current handle, or switch to another handle. To switch, new handle must be free (then it will be created) or controlled by you. Your handle is shown to other users in most other channels.')
-async def switch_handle_command(ctx, new_handle : str=None, burner : bool=False):
-    response = await handles.process_handle_command(ctx, new_handle, burner=burner)
-    if channels.is_cmd_line(ctx.channel.name):
-        await ctx.send(response)
-    elif channels.is_chat_hub(ctx.channel.name):
-        # TODO: perform the action, but do not send the report
-        await ctx.send(response)
-
-@bot.command(name='burner', help='Create a new burner handle, or switch to one that you already that you have not burned yet.')
-async def create_burner_command(ctx, new_id : str=None):
-    await switch_handle_command(ctx, new_id, True)
-
-
-@bot.command(name='burn', help='Destroy a burner account forever.')
-async def burn_command(ctx, burner_id : str=None):
-    response = await handles.process_burn_command(ctx, burner_id)
-    await ctx.send(response)
-
-@bot.command(name='clear_all_handles', help='Admin-only: clear all handles, reinitializing players to their player_id only.')
-async def clear_handles_command(ctx, burner_id : str=None):
-    await handles.clear_all_handles()
-    await actors.init(guild, clear_all=False)
-    await ctx.send('Done.')
-
 
 
 

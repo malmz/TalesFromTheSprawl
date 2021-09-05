@@ -3,9 +3,11 @@ import players
 import actors
 import chats
 import player_setup
+import channels
 from common import forbidden_content, forbidden_content_print, coin
 from custom_types import Handle, HandleTypes
 
+from discord.ext import commands
 from configobj import ConfigObj
 from typing import List
 import re
@@ -13,6 +15,64 @@ import re
 ### Module handles.py
 # This module tracks and handles state related to handles, e.g. in-game names/accounts that
 # players can create.
+
+
+class Handles(commands.Cog, name='handles'):
+    '''Commands related to **handles**. 
+    Your handle is how you appear to other users in most other channels. 
+    Each handle has its own separate finances (see \".help finances\").'''
+    def __init__(self, bot):
+        self.bot = bot
+        self._last_member = None
+
+    # Commands related to handles
+    # These work in both cmd_line and chat_hub channels
+
+    @commands.command(
+        name='handle',
+        brief='Show current handle or switch to another handle.',
+        help=(
+            'Show current handle, or switch to another handle.\n' +
+            'To show current, use \".handle\"\n' +
+            'To switch, use \".handle new_handle\"\n'
+            'The new handle can either be one you already control, or an unused one which will then be registered to you.'
+        )
+        )
+    async def handle_command(self, ctx, new_handle : str=None):
+        await self.handle_command_internal(ctx, new_handle, burner=False)
+
+    @commands.command(name='burner', help='Create a new burner handle or switch to existing burner.')
+    async def create_burner_command(self, ctx, new_burner : str=None):
+        await self.handle_command_internal(ctx, new_burner, burner=True)
+
+    async def handle_command_internal(self, ctx, new_handle : str=None, burner : bool=False):
+        response = await process_handle_command(ctx, new_handle, burner=burner)
+        if channels.is_cmd_line(ctx.channel.name):
+            await ctx.send(response)
+        elif channels.is_chat_hub(ctx.channel.name):
+            # TODO: perform the action, but do not send the report
+            await ctx.send(response)
+
+    @commands.command(name='burn', help='Destroy a burner account forever.')
+    async def burn_command(self, ctx, burner_name : str=None):
+        response = await process_burn_command(ctx, burner_name)
+        await ctx.send(response)
+
+    @commands.command(
+        name='clear_all_handles',
+        brief='Admin-only.',
+        help=('Admin-only. Remove all handles (including all financial info) ' +
+            'and reset all users to their original handle uXXXX.')
+        )
+    async def clear_handles_command(self, ctx):
+        await clear_all_handles()
+        await actors.init(guild, clear_all=False)
+        await ctx.send('Done.')
+
+def setup(bot):
+    bot.add_cog(Handles(bot))
+
+
 
 # 'handles' is the config object holding each user's current handles.
 handles_conf_dir = 'handles'
