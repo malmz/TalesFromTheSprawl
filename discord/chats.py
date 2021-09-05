@@ -542,7 +542,7 @@ async def create_2party_chat(my_handle : Handle, partner_handle_id : str):
 		return report
 	print(f'Created chat for me: {my_ui.chat_name}, {my_ui.channel.id}')
 	my_clickable_ref = channels.clickable_channel_ref(my_ui.channel)
-	partner_clickable_ref = channels.clickable_channel_ref(my_ui.channel) if partner_ui.channel is not None else None
+	partner_clickable_ref = channels.clickable_channel_ref(partner_ui.channel) if partner_ui.channel is not None else None
 	print(f'Created chat for partner: {partner_ui.chat_name}, {partner_ui.session_status}')
 
 	if not newly_created_chat:
