@@ -1,5 +1,6 @@
 # Runtime conf files
 discord/*.conf
+discord/players/*.conf
 discord/handles/*.conf
 discord/finances/*.conf
 discord/artifacts/*.conf

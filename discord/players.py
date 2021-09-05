@@ -16,12 +16,20 @@ from configobj import ConfigObj
 from typing import List
 
 
-players = ConfigObj('players.conf')
-
+players_conf_dir = 'players'
 user_id_mappings_index = '___user_id_to_player_id'
+
+def get_players_confobj():
+	players = ConfigObj(players_conf_dir + '/__players.conf')
+	if not user_id_mappings_index in players:
+		players[user_id_mappings_index] = {}
+		players.write()
+	return players
+
 
 # TODO: loop through all users, find their player_ids and re-map personal channels if not available
 async def init(guild, clear_all=False):
+	players = get_players_confobj()
 	if not user_id_mappings_index in players or clear_all:
 		players[user_id_mappings_index] = {}
 	if not highest_ever_index in players[user_id_mappings_index] or clear_all:
@@ -60,6 +68,7 @@ async def initialise_all_users():
 	await asyncio.gather(*task_list)
 
 def get_all_players():
+	players = get_players_confobj()
 	for player in players:
 		if not player in [highest_ever_index, user_id_mappings_index]:
 			yield player
@@ -71,15 +80,18 @@ def is_player(actor_id : str):
 	return player_id in get_all_players()
 
 def store_player_data(player_data : PlayerData):
+	players = get_players_confobj()
 	players[player_data.player_id] = player_data.to_string()
 	players.write()
 
 def read_player_data(player_id : str):
+	players = get_players_confobj()
 	if player_id in players:
 		return PlayerData.from_string(players[player_id])
 
 
 def get_player_id(user_id : str, expect_to_find=True):
+	players = get_players_confobj()
 	if not user_id in players[user_id_mappings_index]:
 		if expect_to_find:
 			raise RuntimeError(f'User {user_id} has not been initialized as a player. Fix that first.')
@@ -89,6 +101,7 @@ def get_player_id(user_id : str, expect_to_find=True):
 
 
 def get_next_player_actor_index():
+	players = get_players_confobj()
 	prev_highest = int(players[user_id_mappings_index][highest_ever_index])
 	actor_index = str(prev_highest + 1)
 	players[user_id_mappings_index][highest_ever_index] = actor_index
@@ -101,7 +114,6 @@ async def create_player(member):
 	if existing_player_id is not None:
 		return f'Error: Could not create player for member {user_id}, since they already have player_id {existing_player_id}.'
 
-	prev_highest = int(players[user_id_mappings_index][highest_ever_index])
 	new_player_index = get_next_player_actor_index()
 	new_player_id = 'u' + new_player_index
 
@@ -109,6 +121,7 @@ async def create_player(member):
 	actor : actors.Actor = await actors.create_new_actor(member.guild, actor_index=new_player_index, actor_id=new_player_id)
 	role = actors.get_actor_role(member.guild, actor.actor_id)
 	
+	players = get_players_confobj()
 	players[user_id_mappings_index][user_id] = new_player_id
 	players.write()
 

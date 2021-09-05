@@ -26,11 +26,11 @@ class ChatsCog(commands.Cog, name='chats'):
 		self.bot = bot
 		self._last_member = None
 
+	# TODO: swallow messages (and post alerts) when trying to use commands in chat channel
+
 	# Commands related to chats
 	# These only work in cmd_line channels
 
-
-	# TODO: add handling for using .chat and .close_chat without argument
 	@commands.command(
 		name='chat',
 		brief='Open a chat session with another user.',

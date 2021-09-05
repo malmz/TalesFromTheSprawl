@@ -17,7 +17,6 @@ import re
 # This module tracks and handles state related to handles, e.g. in-game names/accounts that
 # players can create.
 
-
 class HandlesCog(commands.Cog, name='handles'):
     '''Commands related to handles. 
     Your handle is how you appear to other users in most other channels. 
@@ -30,6 +29,7 @@ class HandlesCog(commands.Cog, name='handles'):
     # Commands related to handles
     # These work in both cmd_line and chat_hub channels
 
+    # TODO: admin-only command to remove a handle completely (for mistakes)
 
     # TODO: .handle should be able to return a full handle report (similar to .balance)
 
@@ -83,7 +83,6 @@ def setup(bot):
 # 'handles' is the config object holding each user's current handles.
 handles_conf_dir = 'handles'
 
-handles = ConfigObj(handles_conf_dir + '/__handles.conf')
 handles_to_actors = '___handle_to_actor_mapping'
 actors_index = '___all_actors'
 
@@ -92,6 +91,16 @@ actors_index = '___all_actors'
 active_index = '___active'
 last_regular_index = '___last_regular'
 handles_index = '___all_handles'
+
+def get_handles_confobj():
+    handles = ConfigObj(handles_conf_dir + '/__handles.conf')
+    if not handles_to_actors in handles:
+        handles[handles_to_actors] = {}
+        handles.write()
+    if not actors_index in handles:
+        handles[actors_index] = {}
+        handles.write()
+    return handles
 
 
 # May contain letters, numbers and underscores
@@ -111,6 +120,7 @@ def is_forbidden_handle(new_handle : str):
 
 
 async def init(clear_all : bool=False):
+    handles = get_handles_confobj()
     if handles_to_actors not in handles:
         handles[handles_to_actors] = {}
     if actors_index not in handles:
@@ -120,6 +130,7 @@ async def init(clear_all : bool=False):
         await clear_all_handles()
 
 async def clear_all_handles():
+    handles = get_handles_confobj()
     for actor_id in handles[actors_index]:
         await clear_all_handles_for_actor(actor_id)
     handles[actors_index] = {}
@@ -127,15 +138,18 @@ async def clear_all_handles():
     handles.write()
 
 async def clear_all_handles_for_actor(actor_id : str):
+    handles = get_handles_confobj()
     for handle in get_handles_for_actor(actor_id, include_burnt=True):
         await finances.deinit_finances_for_handle(handle, record=False)
+        if handle.handle_id in handles[handles_to_actors]:
+            del handles[handles_to_actors][handle.handle_id]
     del handles[actors_index][actor_id]
-    del handles[handles_to_actors][handle.handle_id]
     handles.write()
 
 async def init_handles_for_actor(actor_id : str, first_handle : str=None, overwrite=True):
     if first_handle is None:
         first_handle = actor_id
+    handles = get_handles_confobj()
     if overwrite or actor_id not in handles[actors_index]:
         handles[actors_index][actor_id] = {}
         handles.write()
@@ -149,6 +163,7 @@ async def init_handles_for_actor(actor_id : str, first_handle : str=None, overwr
         switch_to_handle(handle)
 
 def store_handle(handle : Handle):
+    handles = get_handles_confobj()
     handles[actors_index][handle.actor_id] = {}
     handles[handles_to_actors][handle.handle_id] = handle.actor_id
     handles.write()
@@ -170,10 +185,12 @@ async def create_handle(actor_id : str, handle_id : str, handle_type : HandleTyp
 
 
 def read_handle(actor_handles, handle_id : str):
+    handles = get_handles_confobj()
     # Unprotected -- only use for handles that you know exist
     return Handle.from_string(actor_handles[handles_index][handle_id])
 
 def get_active_handle_id(actor_id : str):
+    handles = get_handles_confobj()
     if actor_id in handles[actors_index]:
         file_name = f'{handles_conf_dir}/{actor_id}.conf'
         actor_handles_conf = ConfigObj(file_name)
@@ -181,6 +198,7 @@ def get_active_handle_id(actor_id : str):
             return actor_handles_conf[active_index]
             
 def get_active_handle(actor_id : str):
+    handles = get_handles_confobj()
     if actor_id in handles[actors_index]:
         file_name = f'{handles_conf_dir}/{actor_id}.conf'
         actor_handles_conf = ConfigObj(file_name)
@@ -191,6 +209,7 @@ def get_active_handle(actor_id : str):
                 return handle
 
 def get_last_regular_id(actor_id : str):
+    handles = get_handles_confobj()
     if actor_id in handles[actors_index]:
         file_name = f'{handles_conf_dir}/{actor_id}.conf'
         actor_handles_conf = ConfigObj(file_name)
@@ -198,6 +217,7 @@ def get_last_regular_id(actor_id : str):
             return actor_handles_conf[last_regular_index]
 
 def get_last_regular(actor_id : str):
+    handles = get_handles_confobj()
     if actor_id in handles[actors_index]:
         file_name = f'{handles_conf_dir}/{actor_id}.conf'
         actor_handles_conf = ConfigObj(file_name)
@@ -208,6 +228,7 @@ def get_last_regular(actor_id : str):
 
 
 def get_all_handles():
+    handles = get_handles_confobj()
     for actor_id in handles[actors_index]:
         for handle in get_handles_for_actor(actor_id, include_burnt=True):
             yield handle
@@ -215,6 +236,7 @@ def get_all_handles():
 
 def get_handle(handle_name : str):
     handle_id = handle_name.lower()
+    handles = get_handles_confobj()
     for actor_id in handles[actors_index]:
         for handle in get_handles_for_actor(actor_id, include_burnt=True):
             if handle.handle_id == handle_id:

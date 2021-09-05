@@ -305,6 +305,14 @@ class EmployeeCog(commands.Cog, name='employee'):
 			await ctx.send(report)
 
 	@commands.command(
+		name='pm',
+		help='Publish the current catalogue/menu. Alias for .publish_menu.',
+		hidden=True
+		)
+	async def pm_command(self, ctx, product_name : str=None, shop_name : str=None):
+		await self.publish_menu_command(ctx, product_name, shop_name)
+
+	@commands.command(
 		name='clear_all_shops',
 		help='Admin-only: delete all shops.',
 		hidden=True)
@@ -354,13 +362,6 @@ max_table_number = 10
 #User reacted with 🍻
 #User reacted with 🍽️
 
-shops_conf_dir = 'shops'
-
-shops = ConfigObj(f'{shops_conf_dir}/shops.conf')
-
-shop_data_index = '__shop_data'
-storefront_channel_map_index = '__storefront_channel_mapping'
-orders_channel_map_index = '__order_flow_channel_mapping'
 
 ### Module to allow one or more players to run a shop together.
 # Having a shop grants:
@@ -531,7 +532,34 @@ class MsgOrderMapping(object):
 # TODO: gm-only function to remove a single shop
 # Necessary as fail-safe if we allow players to create their own shops
 
+
+shops_conf_dir = 'shops'
+
+shop_data_index = '__shop_data'
+storefront_channel_map_index = '__storefront_channel_mapping'
+orders_channel_map_index = '__order_flow_channel_mapping'
+
+def get_shops_configobj():
+	shops = ConfigObj(f'{shops_conf_dir}/__shops.conf')
+	edited = False
+	if shop_data_index not in shops:
+		shops[shop_data_index] = {}
+		edited = True
+	if highest_ever_index not in shops[shop_data_index]:
+		shops[shop_data_index][highest_ever_index] = str(shop_role_start)
+		edited = True
+	if storefront_channel_map_index not in shops:
+		shops[storefront_channel_map_index] = {}
+		edited = True
+	if orders_channel_map_index not in shops:
+		shops[orders_channel_map_index] = {}
+		edited = True
+	if edited:
+		shops.write()
+	return shops
+
 async def init(guild, clear_all=False):
+	shops = get_shops_configobj()
 	if clear_all:
 		for shop_id in get_all_shop_ids():
 			shop : Shop = read_shop(shop_id)
@@ -549,14 +577,8 @@ async def init(guild, clear_all=False):
 		shops.write()
 		await channels.delete_all_shops()
 
-	if shop_data_index not in shops:
-		shops[shop_data_index] = {}
-	if highest_ever_index not in shops[shop_data_index] or clear_all:
+	if clear_all:
 		shops[shop_data_index][highest_ever_index] = str(shop_role_start)
-	if storefront_channel_map_index not in shops:
-		shops[storefront_channel_map_index] = {}
-	if orders_channel_map_index not in shops:
-		shops[orders_channel_map_index] = {}
 	shops.write()
 
 	await delete_all_shop_roles(guild, spare_used=not clear_all)
@@ -594,6 +616,7 @@ async def reinitialize(user_id : str, shop_name : str):
 
 
 def get_next_shop_actor_index():
+	shops = get_shops_configobj()
 	prev_highest = int(shops[shop_data_index][highest_ever_index])
 	shop_actor_id = str(prev_highest + 1)
 	shops[shop_data_index][highest_ever_index] = shop_actor_id
@@ -607,16 +630,19 @@ def shop_exists(shop_name : str):
 		return shop_name.lower() in get_all_shop_ids()
 
 def get_all_shop_ids():
+	shops = get_shops_configobj()
 	for shop_id in shops[shop_data_index]:
 		if shop_id != highest_ever_index:
 			yield shop_id
 
 def store_shop(shop : Shop):
+	shops = get_shops_configobj()
 	shops[shop_data_index][shop.shop_id] = shop.to_string()
 	shops.write()
 
 def read_shop(shop_name : str):
 	shop_id = shop_name.lower()
+	shops = get_shops_configobj()
 	if shop_id in shops[shop_data_index]:
 		return Shop.from_string(shops[shop_data_index][shop_id])
 
@@ -629,17 +655,23 @@ def record_new_order(shop_name : str):
 
 def store_storefront_channel_mapping(channel_id : str, shop_name : str):
 	shop_id = shop_name.lower()
+	shops = get_shops_configobj()
 	shops[storefront_channel_map_index][channel_id] = shop_id
+	shops.write()
 
 def read_storefront_channel_mapping(channel_id : str):
+	shops = get_shops_configobj()
 	if channel_id in shops[storefront_channel_map_index]:
 		return shops[storefront_channel_map_index][channel_id]
 
 def store_order_flow_channel_mapping(channel_id : str, shop_name : str):
 	shop_id = shop_name.lower()
+	shops = get_shops_configobj()
 	shops[orders_channel_map_index][channel_id] = shop_id
+	shops.write()
 
 def read_order_flow_channel_mapping(channel_id : str):
+	shops = get_shops_configobj()
 	if channel_id in shops[orders_channel_map_index]:
 		return shops[orders_channel_map_index][channel_id]
 
@@ -1419,7 +1451,10 @@ async def process_reaction_in_order_flow(channel_id : str, msg_id : str, emoji :
 		return result
 
 	order = None
-	await get_order_semaphore(shop.shop_id, mapping.identifier)
+	sem_success = await get_order_semaphore(shop.shop_id, mapping.identifier)
+	if not sem_success:
+		result.report = f'Error: system overloaded. Try again in a minute.'
+		return result
 	print(f'Trying to mark order {mapping.identifier}, {mapping.status} as {emoji}')
 	if mapping.status == OrderStatus.Active:
 		order = fetch_active_order(shop.shop_id, mapping.identifier)
@@ -1508,10 +1543,10 @@ async def get_order_semaphore(shop_id : str, delivery_id : str):
 	sem_value = random.randrange(10000)
 	number_iterations = 0
 	while True:
-		if delivery_id not in delivery_ids_semaphores:
-			delivery_ids_semaphores[delivery_id] = sem_value
+		if sem_id not in delivery_ids_semaphores:
+			delivery_ids_semaphores[sem_id] = sem_value
 			await asyncio.sleep(1)
-			if delivery_ids_semaphores[delivery_id] == sem_value:
+			if delivery_ids_semaphores[sem_id] == sem_value:
 				break
 			else:
 				pass
@@ -1519,15 +1554,17 @@ async def get_order_semaphore(shop_id : str, delivery_id : str):
 		await asyncio.sleep(1)
 		number_iterations += 1
 		if number_iterations > 60:
-			print(f'Error: semaphore probably stuck! Resetting all semaphores.')
-			delivery_ids_semaphores = {}
-
+			print(f'Error: semaphore probably stuck! Resetting semaphore for {sem_id}.')
+			if delivery_id in delivery_ids_semaphores:
+				del delivery_ids_semaphores[sem_id]
+			return False
+	return True
 
 def return_order_semaphore(shop_id : str, delivery_id :str):
 	global delivery_ids_semaphores
 	sem_id = shop_id + delivery_id
-	if delivery_id in delivery_ids_semaphores:
-		del delivery_ids_semaphores[delivery_id]
+	if sem_id in delivery_ids_semaphores:
+		del delivery_ids_semaphores[sem_id]
 	else:
 		print(f'Semaphore error: tried to return semaphore for {sem_id} but it was already free!')
 
@@ -1548,7 +1585,9 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 		# No delivery ID set for this player
 		delivery_id = buyer_handle.handle_id
 
-	await get_order_semaphore(shop.shop_id, delivery_id)
+	sem_success = await get_order_semaphore(shop.shop_id, delivery_id)
+	if not sem_success:
+		return f'Error: {shop.name} is overloaded. Wait a minute and try again.'
 
 	# TODO: use "from_reaction" somehow to ensure not all transaction failures end up in cmd line?
 	datetime_timestamp = datetime.datetime.today()
@@ -1709,7 +1748,10 @@ async def attempt_refund(transaction : Transaction, initiator_id : str):
 				+'(e.g. table, address, handle), try switching back to the one you had when you ordered. 1')
 			return
 
-	await get_order_semaphore(shop.shop_id, delivery_id)
+	sem_success = await get_order_semaphore(shop.shop_id, delivery_id)
+	if not sem_success:
+		transaction.report = f'Error: could not refund order as {shop.name} is overloaded. If the option remains, try again in a minute.'
+		return
 
 	order = fetch_active_order(shop_id, delivery_id)
 	if order is None:

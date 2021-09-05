@@ -20,14 +20,19 @@ from configobj import ConfigObj
 import re
 
 actors_conf_dir = 'actors'
-actors = ConfigObj('actors.conf')
-
 finance_channel_mapping_index = '___finance_channels'
 
+def get_actors_confobj():
+	actors = ConfigObj(actors_conf_dir + '/__actors.conf')
+	if not finance_channel_mapping_index in actors:
+		actors[finance_channel_mapping_index] = {}
+		actors.write()
+	return actors
 
 async def init(guild, clear_all=False):
-	await players.init(guild, clear_all=clear_all)
 	await shops.init(guild, clear_all=clear_all)
+	await players.init(guild, clear_all=clear_all)
+	get_actors_confobj() # ensures it's properly initialised
 	if clear_all:
 		for actor_id in get_all_actor_ids():
 			await clear_actor(guild, actor_id)
@@ -37,8 +42,6 @@ async def init(guild, clear_all=False):
 		for actor in get_all_actors():
 			await handles.init_handles_for_actor(actor.actor_id, overwrite=False)
 			# TODO: re-map all personal channels?
-	if finance_channel_mapping_index not in actors:
-		actors[finance_channel_mapping_index] = {}
 	await delete_all_actor_roles(guild, spare_used=(not clear_all))
 
 async def clear_actor(guild, actor_id : str):
@@ -46,6 +49,7 @@ async def clear_actor(guild, actor_id : str):
 		# TODO: clear out/archive chat participants from all chats? Not required unless we expect to create and destroy actors during game
 		actor = read_actor(actor_id)
 		finance_channel_id = str(actor.finance_channel_id)
+		actors = get_actors_confobj()
 		if finance_channel_id in actors[finance_channel_mapping_index]:
 			del actors[finance_channel_mapping_index][finance_channel_id]
 		del actors[actor_id]
@@ -84,24 +88,29 @@ def get_all_actors():
 		yield read_actor(actor_id)
 
 def get_all_actor_ids():
+	actors = get_actors_confobj()
 	for actor_id in actors:
 		if actor_id != finance_channel_mapping_index:
 			yield actor_id
 
 
 def actor_exists(actor_id : str):
+	actors = get_actors_confobj()
 	return actor_id in actors
 
 def store_actor(actor : Actor):
+	actors = get_actors_confobj()
 	actors[actor.actor_id] = actor.to_string()
 	actors[finance_channel_mapping_index][str(actor.finance_channel_id)] = actor.actor_id
 	actors.write()
 
 def read_actor(actor_id : str):
 	if actor_id in get_all_actor_ids():
+		actors = get_actors_confobj()
 		return Actor.from_string(actors[actor_id])
 
 def get_owner_of_finance_channel(channel_id : str):
+	actors = get_actors_confobj()
 	if channel_id in actors[finance_channel_mapping_index]:
 		return actors[finance_channel_mapping_index][channel_id]
 
@@ -298,7 +307,8 @@ async def lock_tentative_transaction(actor_id : str, msg_id : str):
 	delete_transaction(actor_id, msg_id)
 	channel = get_finance_channel(actor_id)
 	if channel is None:
-		raise RuntimeError(f'Trying to edit financial record but could not find the channel for {actor_id}.')
+		print(f'Erro: trying to edit financial record but could not find the channel for {actor_id}.')
+		return
 	try:
 		message = await channel.fetch_message(int(msg_id))
 		await message.clear_reactions()
