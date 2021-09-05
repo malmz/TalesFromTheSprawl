@@ -5,11 +5,14 @@ import asyncio
 import simplejson
 import datetime
 import random
+import os
 
 from configobj import ConfigObj
 from typing import List, Tuple
 from copy import deepcopy
 from enum import Enum
+from discord.ext import commands
+from dotenv import load_dotenv
 
 # Custom imports
 import common
@@ -22,6 +25,299 @@ import server
 
 from common import coin, emoji_unavail, shop_role_start, highest_ever_index, emoji_alert, emoji_accept
 from custom_types import Transaction, TransTypes, ActionResult, Handle, HandleTypes, PostTimestamp
+
+
+load_dotenv()
+# Note: for the .table command to work, you must manually set up
+# the in-game bar/restaurant as a shop, using .create_shop etc.
+main_shop = os.getenv('MAIN_SHOP_NAME')
+
+
+class ShoppingCog(commands.Cog, name='shopping'):
+	"""Commands related to buying and ordering at stores and restaurants.
+	If you work at a store/restaurant, see \".help employee\" instead."""
+	def __init__(self, bot):
+		self.bot = bot
+		self._last_member = None
+
+	# Commands related to ordering
+	# These only work in cmd_line channels
+
+
+	@commands.command(
+		name='order',
+		brief='Order a product from a shop.',
+		help=(
+			'Order a product from a shop. Tip: if the shop has published their menu, it is much easier to order ' +
+			f'from their storefront channel, which is found under the category {common.shops_category_name}'
+			)
+		)
+	async def order_command(self, ctx, product_name : str=None, shop_name : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		report = await order_product_from_command(str(ctx.message.author.id), shop_name, product_name)
+		if report is not None:
+			await ctx.send(report)
+
+	@commands.command(
+		name='order_other',
+		help='Admin-only. Order a product from a shop for someone else.',
+		hidden=True)
+	@commands.has_role('gm')
+	async def order_other_command(self, ctx, product_name : str=None, shop_name : str=None, buyer : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+
+		buyer_handle : custom_types.Handle = handles.get_handle(buyer)
+		report = await order_product_for_buyer(shop_name, product_name, buyer_handle)
+		if report is not None:
+			await ctx.send(report)
+
+	@commands.command(
+		name='set_delivery_id',
+		brief='Set your delivery option at a shop.',
+		help=(
+			'Set your delivery option at a shop. ' +
+			'This can be e.g. your table number, your delivery address, or your alias. ' +
+			'If several items are ordered for the same delivery option (e.g. to the same ' +
+			'table or same address) around the same time, they will likely be together.'
+			)
+		)
+	async def set_delivery_id_command(self, ctx, delivery_id : str=None, shop_name : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		report = set_delivery_id_from_command(str(ctx.message.author.id), delivery_id, shop_name)
+		if report is not None:
+			await ctx.send(report)
+
+	@commands.command(
+		name='table',
+		brief=f'Tell {main_shop} where to bring your order.',
+		help=(f'Tell {main_shop} where to bring your order. ' +
+			'Valid options are table numbers, \"bar\", and \"call\" (call out your handle).\n' +
+			f'Note: \'.table 5\" is the same as typing \'.set_delivery_id {main_shop}\"Table 5\"\'.'
+			)
+		)
+	async def set_delivery_id_command(self, ctx, option : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		report = set_delivery_table_from_command(str(ctx.message.author.id), option, main_shop)
+		if report is not None:
+			await ctx.send(report)
+
+
+
+class EmployeeCog(commands.Cog, name='employee'):
+	"""Commands related to working at a store or restaurant.
+	For all of these commands, the "shop_name" argument is optional! The system will find the store you work at, as long as you don't work at more than one.
+	If you want to order from a store/restaurant, see \".help shopping\" instead."""
+	def __init__(self, bot):
+		self.bot = bot
+		self._last_member = None
+
+	# Commands related to managing a shop
+	# These only work in cmd_line channels
+
+
+	@commands.command(
+		name='create_shop',
+		help='Admin-only: create a new shop, run by a certain player.',
+		hidden=True)
+	@commands.has_role('gm')
+	async def create_shop_command(self, ctx, shop_name : str=None, player_id : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		result = ActionResult = await create_shop(ctx.guild, shop_name, player_id)
+		if result.report is not None:
+			await ctx.send(result.report)
+
+	@commands.command(
+		name='employ',
+		brief='Add a new employee to your shop.',
+		help=(
+			'Add a new employee to your shop.\n' +
+			'Note: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
+			)
+		)
+	async def employ_command(self, ctx, handle_id : str=None, shop_name : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		report = await process_employ_command(str(ctx.message.author.id), ctx.guild, handle_id, shop_name)
+		if report is not None:
+			await ctx.send(report)
+
+	@commands.command(
+		name='fire',
+		brief='Shop owner only: remove an employee from your shop.',
+		help=(
+			'Shop owner only: remove an employee from your shop.\n' +
+			'Note: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
+			)
+		)
+	async def fire_command(self, ctx, handle_id : str=None, shop_name : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		report = await process_fire_command(str(ctx.message.author.id), handle_id, shop_name)
+		if report is not None:
+			await ctx.send(report)
+
+
+	@commands.command(
+		name='add_product',
+		brief='Add a new product to the shop.',
+		help=(
+			'Add a new product to the shop.\n' +
+			'If you do not give a description, price or symbol, boring presets will be used but you can edit them afterwards.\n' +
+			'Note: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
+			)		
+		)
+	async def add_product_command(
+		self,
+		ctx,
+		product_name : str=None,
+		description : str=None,
+		price : int=0,
+		symbol : str=None,
+		shop_name : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		report = add_product(str(ctx.message.author.id), product_name, description, price, symbol, shop_name)
+		if report is not None:
+			await ctx.send(report)
+
+	@commands.command(
+		name='edit_product',
+		brief='Edit one of the shop\'s existing products.',
+		help=(
+			'Edit a product\'s properties. Examples:\n' +
+			'.edit_product beer description \"A refreshing soybeer\"\n' +
+			'.edit_product beer price 5\n' +
+			'.edit_product beer symbol beer [some named symbols are avaialable]\n' +
+			'.edit_product beer symbol 🥤 [any standard emoji can be used]\n' +
+			'.edit_product beer available true [\"true\", \"t\" and \"1\" are equivalent]\n' +
+			'.edit_product beer available false [\"false\", \"f\" and \"0\" are equivalent]\n' +
+			'.edit_product beer in_stock true\n' +
+			'\"available\" means the product will be visible in the shop. \"in_stock\" means it can be ordered.\n' +
+			'Note: after editing a product, you must run \".publish_menu\" before the changes are visible to customers.' +
+			'Note 2: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
+			)				
+		)
+	async def edit_product_command(
+		self,
+		ctx,
+		product_name : str=None,
+		key : str=None,
+		value : str=None,
+		shop_name : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		report = edit_product_from_command(str(ctx.message.author.id), product_name, key, value, shop_name)
+		if report is not None:
+			await ctx.send(report)
+
+	@commands.command(
+		name='remove_product',
+		brief='Delete a product from the shop.',
+		help=(
+			'Delete a product from the shop.\n' +
+			'After editing a product, you must run \".publish_menu\" before the changes are visible to customers.' +
+			'Note: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
+			)
+		)
+	async def remove_product_command(
+		self,
+		ctx,
+		product_name : str=None,
+		shop_name : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		report = await remove_product(str(ctx.message.author.id), product_name, shop_name)
+		if report is not None:
+			await ctx.send(report)
+
+	@commands.command(
+		name='in_stock',
+		brief='Set a product to be in stock / out of stock.',
+		help=(
+			'Set a product to be in stock / out of stock. \".in_stock beer true\" is equivalent to \".edit_product beer in_stock true\".\n' +
+			'After editing a product, you must run \".publish_menu\" before the changes are visible to customers.' +
+			'Note: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
+			)
+		)
+	async def in_stock_command(
+		self,
+		ctx,
+		product_name : str=None,
+		value : bool=True, # TODO
+		shop_name : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		report = await edit_product_from_command(str(ctx.message.author.id), product_name, 'in_stock', str(value), shop_name)
+		if report is not None:
+			await ctx.send(report)
+
+	@commands.command(
+		name='clear_orders',
+		brief='Shop owner only: clear your shop\'s orders.',
+		help=(
+			'Remove all orders (both fulfilled and pending), and publish all product updates to the menu.\n' +
+			'Note: all orders that are pre-paid will still be paid, and there will be no easy way to refund them!\n' +
+			'Note 2: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
+			)
+		)
+	async def clear_orders_command(self, ctx, shop_name : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		await reinitialize(str(ctx.message.author.id), shop_name)
+		await publish_menu_command(ctx, shop_name=shop_name)
+
+	@commands.command(
+		name='publish_menu',
+		brief='Publish the current catalogue/menu.',
+		help=(
+			'Publish the current catalogue/menu. After editing a product, you must run this command for the updates to be visible to customers.\n' +
+			'Note: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
+			)
+		)
+	async def publish_menu_command(self, ctx, product_name : str=None, shop_name : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		if product_name is not None:
+			report = await post_catalogue_item(str(ctx.message.author.id), product_name, shop_name)
+		else:
+			report = await post_catalogue(str(ctx.message.author.id), shop_name)
+		if report is not None:
+			await ctx.send(report)
+
+	@commands.command(
+		name='clear_all_shops',
+		help='Admin-only: delete all shops.',
+		hidden=True)
+	@commands.has_role('gm')
+	async def clear_shops_command(self, ctx):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		await init(guild, clear_all=True)
+		await ctx.send('Done.')
+
+def setup(bot):
+	bot.add_cog(ShoppingCog(bot))
+	bot.add_cog(EmployeeCog(bot))
+
 
 
 emoji_shopping = '🛒'
@@ -865,6 +1161,7 @@ async def remove_product(user_id : str, product_name : str, shop_name : str):
 	product = read_product(shop.shop_id, product_name)
 	# First, remove its listing:
 	product.available = False
+	product.in_stock = False
 	channel = channels.get_discord_channel(shop.storefront_channel_id)
 	msg_id = await update_catalogue_item_message(shop, channel, product)
 	if msg_id is not None:
@@ -1157,9 +1454,9 @@ def generate_order_message(order : Order, status : OrderStatus):
 		else:
 			content = f'**#{order.order_id}** for **{order.delivery_id}**   {emoji_unlocked} created at {order.time_created.pretty_print()}\n'
 	elif status == OrderStatus.Locked:
-		content = f'**#{order.order_id}** for **{order.delivery_id}**    {emoji_locked} locked at {order.time_updated.pretty_print()}\n'
+		content = f'**#{order.order_id}** for **{order.delivery_id}**	{emoji_locked} locked at {order.time_updated.pretty_print()}\n'
 	elif status == OrderStatus.Delivered:
-		content = f'**#{order.order_id}** for **{order.delivery_id}**    {emoji_accept} delivered at {order.time_updated.pretty_print()}\n'		
+		content = f'**#{order.order_id}** for **{order.delivery_id}**	{emoji_accept} delivered at {order.time_updated.pretty_print()}\n'		
 	for item, amount in order.items_ordered.items():
 		# TODO: add the emoji for each product, as many times as the order, e.g. "4 Beer 🍺 🍺 🍺 🍺"
 		content += f'> {amount} {item}\n'

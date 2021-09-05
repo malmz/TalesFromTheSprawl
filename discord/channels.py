@@ -3,20 +3,14 @@ import datetime
 import discord
 
 from custom_types import PostTimestamp, ChannelIdentifier
+from common import personal_category_name, shops_category_name, chats_category_name, off_category_name, public_open_category_name, shadowlands_category_name, groups_category_name
+
 import actors
 import server
 import asyncio
 
 ### Module channels.py
 # This module tracks and handles state related to channels
-
-personal_category_name = 'personal_account'
-shops_category_name = 'public_business'
-chats_category_name = 'chats'
-off_category_name = 'offline'
-public_open_category_name = 'public_network'
-shadowlands_category_name = 'shadowlands'
-groups_category_name = 'private_networks'
 
 public_anon_channel_name = 'anon'
 

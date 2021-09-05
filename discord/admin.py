@@ -1,5 +1,6 @@
 import actors
 import players
+import groups
 
 from discord.ext import commands
 import discord
@@ -126,5 +127,45 @@ class AdminCog(commands.Cog, name='admin'):
 		else:
 			await ctx.send(f'Error: could not find the command line channel for {player_id}')
 
+	@commands.command(
+		name='add_member',
+		help='Admin-only. Add a member to a group.',
+		hidden=True)
+	@commands.has_role('gm')
+	async def add_member_command(ctx, handle_id : str=None, group_id : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		report = await groups.add_member_from_handle(guild, group_id, handle_id)
+		if report is not None:
+			await ctx.send(report)
+
+	@commands.command(
+		name='create_group',
+		help='Admin-only. Create a group with yourself as initial member.',
+		hidden=True)
+	@commands.has_role('gm')
+	async def create_group_command(ctx, group_name : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		report = await groups.create_group_from_command(ctx, group_name)
+		if report is not None:
+			await ctx.send(report)
+
+	@commands.command(
+		name='clear_all_groups',
+		help='Admin-only. Delete all groups.',
+		hidden=True)
+	@commands.has_role('gm')
+	async def clear_all_groups_command(ctx):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		await groups.init(guild, clear_all=True)
+		await ctx.send('Done.')
+
+
+
 def setup(bot):
-    bot.add_cog(AdminCog(bot))
+	bot.add_cog(AdminCog(bot))

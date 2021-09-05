@@ -38,6 +38,18 @@ emoji_unavail = '🚫'
 emoji_unread = '💬'
 
 
+
+# channels
+
+personal_category_name = 'personal_account'
+shops_category_name = 'public_business'
+chats_category_name = 'chats'
+off_category_name = 'offline'
+public_open_category_name = 'public_network'
+shadowlands_category_name = 'shadowlands'
+groups_category_name = 'private_networks'
+
+
 # Roles
 all_players_role_name = '251'
 shop_role_start = 2300

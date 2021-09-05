@@ -33,9 +33,6 @@ from common import coin
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 guild_name = os.getenv('GUILD_NAME')
-# Note: for the .table command to work, you must manually set up
-# the in-game bar/restaurant as a shop, using .create_shop etc.
-main_shop = os.getenv('MAIN_SHOP_NAME')
 
 intents = discord.Intents.default()
 intents.members = True
@@ -54,7 +51,7 @@ guild = None
 
 # Below cogs represents our folder our cogs are in. Following is the file name. So 'meme.py' in cogs, would be cogs.meme
 # Think of it like a dot path import
-initial_extensions = ['handles', 'finances', 'admin', 'chats']
+initial_extensions = ['handles', 'finances', 'admin', 'chats', 'shops']
 
 # Here we load our extensions(cogs) listed above in [initial_extensions].
 if __name__ == '__main__':
@@ -173,197 +170,6 @@ async def add_known_handle_command(ctx, handle_id : str):
     else:
         player_setup.add_known_handle(handle_id)
         await ctx.send(f'Added entry for {handle_id}. Please update its contents manually by editing the file.')
-
-
-
-### shops:
-
-@bot.command(name='create_shop', help='Admin-only: create a new shop, run by a certain player.')
-@commands.has_role('gm')
-async def create_shop_command(ctx, shop_name : str=None, player_id : str=None):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    result = ActionResult = await shops.create_shop(ctx.guild, shop_name, player_id)
-    if result.report is not None:
-        await ctx.send(result.report)
-
-@bot.command(name='employ', help='Employee only: add a new player to a shop')
-async def employ_command(ctx, handle_id : str=None, shop_name : str=None):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    report = await shops.process_employ_command(str(ctx.message.author.id), ctx.guild, handle_id, shop_name)
-    if report is not None:
-        await ctx.send(report)
-
-@bot.command(name='fire', help='Shop owner only: remove an employee from a shop')
-async def employ_command(ctx, handle_id : str=None, shop_name : str=None):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    report = await shops.process_fire_command(str(ctx.message.author.id), handle_id, shop_name)
-    if report is not None:
-        await ctx.send(report)
-
-
-
-@bot.command(name='add_product', help='Employee only: add a new product to a shop.')
-async def add_product_command(ctx,
-    product_name : str=None,
-    description : str=None,
-    price : int=0,
-    symbol : str=None,
-    shop_name : str=None):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    report = shops.add_product(str(ctx.message.author.id), product_name, description, price, symbol, shop_name)
-    if report is not None:
-        await ctx.send(report)
-
-@bot.command(name='edit_product', help='Employee only: edit a product.')
-async def edit_product_command(ctx,
-    product_name : str=None,
-    key : str=None,
-    value : str=None,
-    shop_name : str=None):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    report = shops.edit_product_from_command(str(ctx.message.author.id), product_name, key, value, shop_name)
-    if report is not None:
-        await ctx.send(report)
-
-@bot.command(name='remove_product', help='Employee only: delete a product from a shop.')
-async def remove_product_command(ctx,
-    product_name : str=None,
-    shop_name : str=None):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    report = await shops.remove_product(str(ctx.message.author.id), product_name, shop_name)
-    if report is not None:
-        await ctx.send(report)
-
-
-@bot.command(name='in_stock', help='Employee only: set a product to be in stock/out of stock.')
-async def in_stock_command(ctx,
-    product_name : str=None,
-    value : bool=True,
-    shop_name : str=None):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    report = await shops.edit_product_from_command(str(ctx.message.author.id), product_name, 'in_stock', str(value), shop_name)
-    if report is not None:
-        await ctx.send(report)
-
-@bot.command(name='clear_orders', help='Shop owner only: clear a shop\'s orders and update its menu.')
-async def clear_orders_command(ctx, shop_name : str=None):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    await shops.reinitialize(str(ctx.message.author.id), shop_name)
-    await publish_menu_command(ctx, shop_name=shop_name)
-
-
-@bot.command(name='publish_menu', help='Employee only: post a shop\'s catalogue/menu.')
-async def publish_menu_command(ctx, product_name : str=None, shop_name : str=None):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    if product_name is not None:
-        report = await shops.post_catalogue_item(str(ctx.message.author.id), product_name, shop_name)
-    else:
-        report = await shops.post_catalogue(str(ctx.message.author.id), shop_name)
-    if report is not None:
-        await ctx.send(report)
-
-@bot.command(name='order', brief='', help='Order a product from a shop.')
-async def order_command(ctx, product_name : str=None, shop_name : str=None):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    report = await shops.order_product_from_command(str(ctx.message.author.id), shop_name, product_name)
-    if report is not None:
-        await ctx.send(report)
-
-@bot.command(name='order_other', help='Admin-only: order a product from a shop for someone else.')
-@commands.has_role('gm')
-async def order_other_command(ctx, product_name : str=None, shop_name : str=None, buyer : str=None):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-
-    buyer_handle : custom_types.Handle = handles.get_handle(buyer)
-    report = await shops.order_product_for_buyer(shop_name, product_name, buyer_handle)
-    if report is not None:
-        await ctx.send(report)
-
-@bot.command(name='set_delivery_id', help='Set you delivery option at a shop.')
-async def set_delivery_id_command(ctx, delivery_id : str=None, shop_name : str=None):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    report = shops.set_delivery_id_from_command(str(ctx.message.author.id), delivery_id, shop_name)
-    if report is not None:
-        await ctx.send(report)
-
-@bot.command(name='table', help=f'Tell {main_shop} where to bring your order Valid options are table numbers, \"bar\", and \"call\".')
-async def set_delivery_id_command(ctx, option : str=None):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    report = shops.set_delivery_table_from_command(str(ctx.message.author.id), option, main_shop)
-    if report is not None:
-        await ctx.send(report)
-
-
-
-@bot.command(name='clear_all_shops', help='Admin-only: delete all shops.')
-@commands.has_role('gm')
-async def clear_shops_command(ctx):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    await shops.init(guild, clear_all=True)
-    await ctx.send('Done.')
-
-
-
-
-
-
-@bot.command(name='create_group', help='Admin-only: create a group, with the current player as initial member')
-@commands.has_role('gm')
-async def create_group_command(ctx, group_name : str=None):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    report = await groups.create_group_from_command(ctx, group_name)
-    if report is not None:
-        await ctx.send(report)
-
-
-@bot.command(name='clear_all_groups', help='Admin-only: delete all groups.')
-@commands.has_role('gm')
-async def clear_all_groups_command(ctx):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    await groups.init(guild, clear_all=True)
-    await ctx.send('Done.')
-
-@bot.command(name='add_member', help='Admin-only: add a member to a group.')
-@commands.has_role('gm')
-async def add_member_command(ctx, handle_id : str=None, group_id : str=None):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-    report = await groups.add_member_from_handle(guild, group_id, handle_id)
-    if report is not None:
-        await ctx.send(report)
 
 
 
