@@ -95,6 +95,7 @@ async def setup_alternate_handles(main_handle, aliases, alias_type : HandleTypes
 	report = ''
 	any_found = False
 	for (other_handle_id, amount) in aliases:
+		# TODO: check if handle already exists and throw error
 		other_handle = await handles.create_handle(main_handle.actor_id, other_handle_id, alias_type)
 		if other_handle.handle_type != HandleTypes.Unused:
 			report += get_connected_alias_report(other_handle_id, alias_type, int(amount))

@@ -112,11 +112,6 @@ class ChatsCog(commands.Cog, name='chats'):
 		await init(clear_all=True)
 		await ctx.send('Done.')
 
-	@commands.command(name='check_chats')
-	async def check_chats_command(self, ctx):
-		dump();
-
-
 chats_dir = 'chats'
 chats = ConfigObj(f'{chats_dir}/chats.conf')
 
@@ -305,23 +300,12 @@ def create_2party_chat_name(handle1 : Handle, handle2 : Handle):
 def read_chat_connection_from_channel(channel_id : str):
 	init_chats_confobj()
 	chats = ConfigObj(f'{chats_dir}/chats.conf')
-	print(f'Dump inside read_chat:')
-	for cat in chats:
-		print(f'Dumping category {cat}:')
-		for entry in chats[cat]:
-			print(f'Entry {entry}: {chats[cat][entry]}')
 
-	print(f'trying to find {channel_id} in chats')
-	for entry in chats[chat_channel_data_index]:
-		print(f'Entry: {entry}, comparing to {channel_id}')
 	if channel_id in chats[chat_channel_data_index]:
 		string = chats[chat_channel_data_index][channel_id]
-		print(f'trying to find {channel_id} in chats[{chat_channel_data_index}], found {string}')
 		chat_connection : ChatConnectionMapping = ChatConnectionMapping.from_string(string)
 		return chat_connection
 	else:
-		print('Dump because we didn\'t find anything')
-		dump()
 		return None
 
 def store_chat_connection_for_channel(channel_id : str, chat_connection : ChatConnectionMapping):
@@ -552,7 +536,7 @@ async def create_2party_chat(my_handle : Handle, partner_handle_id : str):
 
 	[my_ui, partner_ui] = await asyncio.gather(task_add_me, task_add_partner)
 	if my_ui.channel is None:
-		clickable_chat_hub = channels.clickable_channel_ref(get_chat_hub_channel(my_handle.actor_id))
+		clickable_chat_hub = channels.clickable_channel_ref(actors.get_chat_hub_channel(my_handle.actor_id))
 		report = (f'Created chat {chat_name}, but it is currently closed since you have too many chat sessions open. '
 			+ f'You can access the chat from {clickable_chat_hub}, if you close another chat first.')
 		return report

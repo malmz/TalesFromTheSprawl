@@ -299,11 +299,13 @@ async def lock_tentative_transaction(actor_id : str, msg_id : str):
 	channel = get_finance_channel(actor_id)
 	if channel is None:
 		raise RuntimeError(f'Trying to edit financial record but could not find the channel for {actor_id}.')
-	message = await channel.fetch_message(int(msg_id))
-	if message is None:
+	try:
+		message = await channel.fetch_message(int(msg_id))
+		await message.clear_reactions()
+	except discord.errors.NotFound:
 		print(f'Tried to lock in transaction with msg_id {msg_id} for {actor_id}, but message has been removed.')
 		return
-	await message.clear_reactions()
+
 
 async def remove_tentative_transaction(actor_id : str, msg_id : str):
 	delete_transaction(actor_id, msg_id)

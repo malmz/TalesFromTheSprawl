@@ -72,7 +72,7 @@ class HandlesCog(commands.Cog, name='handles'):
         )
     async def clear_handles_command(self, ctx):
         await clear_all_handles()
-        await actors.init(guild, clear_all=False)
+        await actors.init(ctx.guild, clear_all=False)
         await ctx.send('Done.')
 
 def setup(bot):

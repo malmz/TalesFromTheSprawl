@@ -135,7 +135,7 @@ def return_reaction_semaphore(user_id : str, sem_value :str):
 			print(f'Returned semaphore for {user_id} for process {reactions_semaphores[user_id]}')
 			del reactions_semaphores[user_id]
 		else:
-			print(f'Error: Tried to return semaphore for {user_id} but it was taken by another process.')
+			print(f'Semaphore error: Tried to return semaphore for {user_id} but it was taken by another process.')
 	else:
 		print(f'Semaphore error: tried to return semaphore for {user_id} but it was already free!')
 

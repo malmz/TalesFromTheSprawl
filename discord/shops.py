@@ -33,6 +33,8 @@ load_dotenv()
 main_shop = os.getenv('MAIN_SHOP_NAME')
 
 
+# TODO: for some reason the confobj is not correctly refreshed after moving to cogs
+
 class ShoppingCog(commands.Cog, name='shopping'):
 	"""Commands related to buying and ordering at stores and restaurants.
 	If you work at a store/restaurant, see \".help employee\" instead."""
@@ -311,7 +313,7 @@ class EmployeeCog(commands.Cog, name='employee'):
 		if not channels.is_cmd_line(ctx.channel.name):
 			await server.swallow(ctx.message);
 			return
-		await init(guild, clear_all=True)
+		await init(ctx.guild, clear_all=True)
 		await ctx.send('Done.')
 
 def setup(bot):
@@ -1504,26 +1506,27 @@ async def get_order_semaphore(shop_id : str, delivery_id : str):
 	global delivery_ids_semaphores
 	sem_id = shop_id + delivery_id
 	sem_value = random.randrange(10000)
+	number_iterations = 0
 	while True:
 		if delivery_id not in delivery_ids_semaphores:
-			print(f'Trying to claim semaphore for {delivery_id} for process {sem_value}')
 			delivery_ids_semaphores[delivery_id] = sem_value
 			await asyncio.sleep(1)
 			if delivery_ids_semaphores[delivery_id] == sem_value:
-				print(f'Succeeded in claiming semaphore for {delivery_id} for process {sem_value}')
 				break
 			else:
-				print(f'Failed to claim semaphore for {delivery_id} for process {sem_value}')
-		else:
-			print(f'Semaphore busy for {delivery_id} for process {sem_value}, waiting 1s')
+				pass
+				#print(f'Failed to claim semaphore for {delivery_id} for process {sem_value}')
 		await asyncio.sleep(1)
+		number_iterations += 1
+		if number_iterations > 60:
+			print(f'Error: semaphore probably stuck! Resetting all semaphores.')
+			delivery_ids_semaphores = {}
 
 
 def return_order_semaphore(shop_id : str, delivery_id :str):
 	global delivery_ids_semaphores
 	sem_id = shop_id + delivery_id
 	if delivery_id in delivery_ids_semaphores:
-		print(f'Returned semaphore for {delivery_id} for process {delivery_ids_semaphores[delivery_id]}')
 		del delivery_ids_semaphores[delivery_id]
 	else:
 		print(f'Semaphore error: tried to return semaphore for {sem_id} but it was already free!')
@@ -1560,15 +1563,13 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 		data=product.name,
 		timestamp=timestamp)
 	transaction.emoji = product.emoji
-	#transaction = finances.find_transaction_parties(transaction)
 	transaction = await finances.try_to_pay(transaction)
-	print(f'Transaction: {transaction.to_string()}')
+	#print(f'Transaction: {transaction.to_string()}')
 	if not transaction.success:
 		result.report = transaction.report
 	else:
 		# Otherwise, we move on to create the order
-		print(f'Final transaction: {transaction.to_string()}')
-
+		print(f'{transaction.payer} just bought {transaction.data} from {transaction.recip}!')
 		await place_order_in_flow(shop, transaction, delivery_id)
 
 		result.report = f'Successfully ordered {product.name} from {shop.name}'

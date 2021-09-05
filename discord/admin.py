@@ -1,6 +1,7 @@
 import actors
 import players
 import groups
+import channels
 import server
 
 from discord.ext import commands
@@ -139,7 +140,7 @@ class AdminCog(commands.Cog, name='admin'):
 		if not channels.is_cmd_line(ctx.channel.name):
 			await server.swallow(ctx.message);
 			return
-		report = await groups.add_member_from_handle(guild, group_id, handle_id)
+		report = await groups.add_member_from_handle(ctx.guild, group_id, handle_id)
 		if report is not None:
 			await ctx.send(report)
 
@@ -165,7 +166,7 @@ class AdminCog(commands.Cog, name='admin'):
 		if not channels.is_cmd_line(ctx.channel.name):
 			await server.swallow(ctx.message);
 			return
-		await groups.init(guild, clear_all=True)
+		await groups.init(ctx.guild, clear_all=True)
 		await ctx.send('Done.')
 
 

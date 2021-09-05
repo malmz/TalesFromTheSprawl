@@ -59,6 +59,8 @@ async def give_member_role(member, role):
 	await member.edit(roles=new_roles)
 
 async def remove_role_from_member(member, role):
+	if role is None:
+		return
 	new_roles = member.roles
 	new_roles = [r for r in member.roles if r.name != role.name]
 	await member.edit(roles=new_roles)
