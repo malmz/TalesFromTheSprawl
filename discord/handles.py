@@ -17,16 +17,20 @@ import re
 # players can create.
 
 
-class Handles(commands.Cog, name='handles'):
-    '''Commands related to **handles**. 
+class HandlesCog(commands.Cog, name='handles'):
+    '''Commands related to handles. 
     Your handle is how you appear to other users in most other channels. 
-    Each handle has its own separate finances (see \".help finances\").'''
+    Each handle has its own separate finances (see \".help finances\").
+    These commands can also be used in your chat hub channel.'''
     def __init__(self, bot):
         self.bot = bot
         self._last_member = None
 
     # Commands related to handles
     # These work in both cmd_line and chat_hub channels
+
+
+    # TODO: .handle should be able to return a full handle report (similar to .balance)
 
     @commands.command(
         name='handle',
@@ -70,7 +74,7 @@ class Handles(commands.Cog, name='handles'):
         await ctx.send('Done.')
 
 def setup(bot):
-    bot.add_cog(Handles(bot))
+    bot.add_cog(HandlesCog(bot))
 
 
 

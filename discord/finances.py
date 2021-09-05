@@ -1,9 +1,11 @@
 import channels
 import handles
 import actors
+import players
 from custom_types import Transaction, TransTypes, Handle, HandleTypes, PostTimestamp
 from common import coin, transaction_collector, transaction_collected
 
+from discord.ext import commands
 from configobj import ConfigObj
 from copy import deepcopy
 import asyncio
@@ -11,6 +13,127 @@ import simplejson
 
 ### Module finances.py
 # This module tracks and handles money and transactions between handles
+
+class FinancesCog(commands.Cog, name='finances'):
+    """Commands related to finances.
+    Money is tracked separately for each handle (for more info, see \".help handles\")"""
+    def __init__(self, bot):
+        self.bot = bot
+        self._last_member = None
+
+    # Commands related to money
+    # These only work in cmd_line channels
+
+    @commands.command(
+        name='create_money',
+        brief='Admin-only.',
+        help='Admin-only. Use \".create_money <handle> <amount>\" to create new money.'
+        )
+    @commands.has_role('gm')
+    async def create_money_command(self, ctx, handle_id : str=None, amount : int=0):
+        if not channels.is_cmd_line(ctx.channel.name):
+            await swallow(ctx.message);
+            return
+
+        if handle_id == None:
+            response = 'Error: no handle specified.'
+        elif amount <= 0:
+            response = f'Error: cannot create less than {coin} 1.'
+        else:
+            handle = handles.get_handle(handle_id)
+            if can_have_finances(handle.handle_type):
+                await add_funds(handle, amount)
+                response = f'Added {amount} to the balance of {handle.handle_id}'
+            else:
+                response = f'Error: handle \"{handle_id}\" does not exist, or is not capable of having money.'
+        await ctx.send(response)
+
+    @commands.command(
+        name='set_money',
+        brief='Admin-only.',
+        help='Admin-only. Use \".set_money <handle> <amount>\" to set the balance of an account.'
+        )
+    @commands.has_role('gm')
+    async def set_money_command(self, ctx, handle_id : str=None, amount : int=-1):
+        if not channels.is_cmd_line(ctx.channel.name):
+            await swallow(ctx.message);
+            return
+
+        if handle_id == None:
+            response = 'Error: no handle specified.'
+        elif amount < 0:
+            response = 'Error: you must set a new balance.'
+        else:
+            handle = handles.get_handle(handle_id)
+            if can_have_finances(handle.handle_type):
+                await overwrite_balance(handle, amount)
+                response = f'Set the balance of {handle.handle_id} to {amount}'
+            else:
+                response = f'Error: handle \"{handle_id}\" does not exist, or is not capable of having money'
+        await ctx.send(response)
+
+    #TODO: move some of this error handling into try_to_pay_from_command
+    @commands.command(
+        name='pay',
+        brief=f'Pay money ({coin}) to another handle.',
+        help=(f'Pay money ({coin}) to another handle.\nThe money will be paid from your current handle. ' +
+            f'Minimum transfer is {coin} 1.' +
+            'Use .balance or check your personal finance channel to see if you have enough.\n' +
+            f'Example: \".pay shadow_weaver 10\" to pay {coin} 10 to shadow_weaver.\n' +
+            'Note: this command is also used to transfer money between two handles you control.')
+        )
+    async def pay_money_command(self, ctx, handle_recip : str=None, amount : int=0):
+        if not channels.is_cmd_line(ctx.channel.name):
+            await swallow(ctx.message);
+            return
+
+        if handle_recip == None:
+            response = 'Error: no recipient specified. Use \".pay <recipient> <amount>\", e.g. \".pay shadow_weaver 500\".'
+        elif amount <= 0:
+            response = f'Error: cannot transfer less than {coin} 1. Use \".pay <recipient> <amount>\", e.g. \".pay {handle_recip} 500\".'
+        else:
+            player_id = players.get_player_id(str(ctx.message.author.id))
+            transaction : custom_types.Transaction = await try_to_pay_from_actor(player_id, handle_recip, amount)
+            response = transaction.report
+        await ctx.send(response)
+
+    @commands.command(
+        name='balance',
+        brief='Show current balance (money) on all your handles.',
+        help='Show the current balance (amount of money available) on all active handles that you control.')
+    async def show_balance_command(self, ctx):
+        if not channels.is_cmd_line(ctx.channel.name):
+            await swallow(ctx.message);
+            return
+
+        player_id = players.get_player_id(str(ctx.message.author.id))
+        response = get_all_handles_balance_report(player_id)
+        await ctx.send(response)
+
+    @commands.command(
+        name='collect',
+        brief='Collect all your funds to the same handle.',
+        help=(
+            'Collect all your money from all handles you control. ' +
+            'All money will end up at your curent handle. Use \".handle\" to switch to the handle you want first.')
+        )
+    async def collect_command(self, ctx):
+        if not channels.is_cmd_line(ctx.channel.name):
+            await swallow(ctx.message);
+            return
+
+        player_id = players.get_player_id(str(ctx.message.author.id))
+        response = 'Collecting all funds to the account of the current handle...'
+        task_list = [asyncio.create_task(ctx.send(response)), asyncio.create_task(collect_all_funds(player_id))]
+        [_, report] = await asyncio.gather(*task_list)
+        if report is not None:
+            ctx.send(report)
+
+def setup(bot):
+    bot.add_cog(FinancesCog(bot))
+
+
+
 
 
 class InternalTransRecord(object):

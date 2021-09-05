@@ -53,7 +53,7 @@ guild = None
 
 # Below cogs represents our folder our cogs are in. Following is the file name. So 'meme.py' in cogs, would be cogs.meme
 # Think of it like a dot path import
-initial_extensions = ['handles']
+initial_extensions = ['handles', 'finances']
 
 # Here we load our extensions(cogs) listed above in [initial_extensions].
 if __name__ == '__main__':
@@ -156,97 +156,12 @@ async def on_member_join(member):
 
 
 
-# TODO: .handle should be able to return a full handle report (similar to .balance)
 # TODO: Fix the .help command:
 # - Only show the commands that should be visible to the player
-# - Group them by catgory, not alphabetically
+# - Group them by category, not alphabetically
 
 
 
-
-
-# Commands related to money
-# These only work in cmd_line channels
-
-@bot.command(name='create_money', help='Use \".create_money <handle> <amount>\" to create new money (will be admin-only during the game)')
-@commands.has_role('gm')
-async def create_money_command(ctx, handle_id : str=None, amount : int=0):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-
-    if handle_id == None:
-        response = 'Error: no handle specified.'
-    elif amount <= 0:
-        response = f'Error: cannot create less than {coin} 1.'
-    else:
-        handle = handles.get_handle(handle_id)
-        if finances.can_have_finances(handle.handle_type):
-            await finances.add_funds(handle, amount)
-            response = f'Added {amount} to the balance of {handle.handle_id}'
-        else:
-            response = f'Error: handle \"{handle_id}\" does not exist, or is not capable of having money.'
-    await ctx.send(response)
-
-@bot.command(name='set_money', help='Use \".set_money <handle> <amount>\" to set the balance of an account (will be admin-only during the game)')
-@commands.has_role('gm')
-async def set_money_command(ctx, handle_id : str=None, amount : int=-1):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-
-    if handle_id == None:
-        response = 'Error: no handle specified.'
-    elif amount < 0:
-        response = 'Error: you must set a new balance.'
-    else:
-        handle = handles.get_handle(handle_id)
-        if finances.can_have_finances(handle.handle_type):
-            await finances.overwrite_balance(handle, amount)
-            response = f'Set the balance of {handle.handle_id} to {amount}'
-        else:
-            response = f'Error: handle \"{handle_id}\" does not exist, or is not capable of having money'
-    await ctx.send(response)
-
-#TODO: move some of this error handling into try_to_pay_from_command
-@bot.command(name='pay', help=f'Pay money ({coin}) to the owner of another handle')
-async def pay_money_command(ctx, handle_recip : str=None, amount : int=0):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-
-    if handle_recip == None:
-        response = 'Error: no recipient specified. Use \".pay <recipient> <amount>\", e.g. \".pay Shadow_Weaver 500\".'
-    elif amount <= 0:
-        response = f'Error: cannot transfer less than {coin} 1. Use \".pay <recipient> <amount>\", e.g. \".pay {handle_recip} 500\".'
-    else:
-        player_id = players.get_player_id(str(ctx.message.author.id))
-        transaction : custom_types.Transaction = await finances.try_to_pay_from_actor(player_id, handle_recip, amount)
-        response = transaction.report
-    await ctx.send(response)
-
-@bot.command(name='balance', help='Show current balance (amount of money available) on all available handles.')
-async def show_balance_command(ctx):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-
-    player_id = players.get_player_id(str(ctx.message.author.id))
-    response = finances.get_all_handles_balance_report(player_id)
-    await ctx.send(response)
-
-@bot.command(name='collect', help='Collect all your funds from all handles to the current handle\'s account')
-async def collect_command(ctx):
-    if not channels.is_cmd_line(ctx.channel.name):
-        await swallow(ctx.message);
-        return
-
-    player_id = players.get_player_id(str(ctx.message.author.id))
-    response = 'Collecting all funds to the account of the current handle...'
-    task_list = [asyncio.create_task(ctx.send(response)), asyncio.create_task(finances.collect_all_funds(player_id))]
-    [_, report] = await asyncio.gather(*task_list)
-    if report is not None:
-        ctx.send(report)
 
 
 # Admin-only commands for testing etc.
@@ -504,7 +419,7 @@ async def publish_menu_command(ctx, product_name : str=None, shop_name : str=Non
     if report is not None:
         await ctx.send(report)
 
-@bot.command(name='order', help='Order a product from a shop.')
+@bot.command(name='order', brief='', help='Order a product from a shop.')
 async def order_command(ctx, product_name : str=None, shop_name : str=None):
     if not channels.is_cmd_line(ctx.channel.name):
         await swallow(ctx.message);
