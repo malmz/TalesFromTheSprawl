@@ -10,11 +10,40 @@ from configobj import ConfigObj
 from enum import Enum
 from typing import List
 from copy import deepcopy
+from discord.ext import commands
 
 import channels
 import server
 import finances
 import actors
+
+
+class ArtifactsCog(commands.Cog, name='network'):
+	"""Commands for connecting to devices and accessing files."""
+	def __init__(self, bot):
+		self.bot = bot
+		self._last_member = None
+
+	@commands.command(name='connect', help='Connect to device or remote server. Aliases: .login, .access')
+	async def connect_command(self, ctx, name : str=None, code : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await swallow(ctx.message);
+			return
+		report = access_artifact(name, code)
+		if report is not None:
+			await ctx.send(report)
+
+	@commands.command(name='login', help='Connect to device or remote server. Same as .connect.', hidden=True)
+	async def login_command(self, ctx, name : str=None, code : str=None):
+		await self.connect_command(ctx, name, code)
+
+	@commands.command(name='access', help='Connect to device or remote server. Same as .connect.', hidden=True)
+	async def access_command(self, ctx, name : str=None, code : str=None):
+		await self.connect_command(ctx, name, code)
+
+def setup(bot):
+	bot.add_cog(ArtifactsCog(bot))
+
 
 
 artifacts_conf_dir = 'artifacts'

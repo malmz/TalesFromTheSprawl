@@ -51,7 +51,7 @@ guild = None
 
 # Below cogs represents our folder our cogs are in. Following is the file name. So 'meme.py' in cogs, would be cogs.meme
 # Think of it like a dot path import
-initial_extensions = ['handles', 'finances', 'admin', 'chats', 'shops', 'gm']
+initial_extensions = ['handles', 'finances', 'admin', 'chats', 'shops', 'gm', 'artifacts']
 
 # Here we load our extensions(cogs) listed above in [initial_extensions].
 if __name__ == '__main__':
@@ -64,6 +64,7 @@ async def on_ready():
 	global guild_name
 	clear_all = False
 	guild = discord.utils.find(lambda g: g.name == guild_name, bot.guilds)
+    # TODO: move some of the initialisation to the cogs instead
 	await server.init(bot, guild)
 	await handles.init(clear_all)
 	await actors.init(guild, clear_all=clear_all)
@@ -152,35 +153,6 @@ async def on_raw_reaction_add(payload):
 async def on_member_join(member):
 	return await players.create_player(member)
 
-
-
-# TODO: Fix the .help command:
-# - Only show the commands that should be visible to the player
-# - Group them by category, not alphabetically
-
-
-
-# TODO: create GM-only cog
-
-
-
-@bot.command(name='connect', help='Connect to device or remote server.')
-async def connect_command(ctx, name : str=None, code : str=None):
-	if not channels.is_cmd_line(ctx.channel.name):
-		await swallow(ctx.message);
-		return
-	report = artifacts.access_artifact(name, code)
-	if report is not None:
-		await ctx.send(report)
-
-@bot.command(name='login', help='Connect to device or remote server. Alias: \".connect\"')
-async def connect_command(ctx, name : str=None, code : str=None):
-	if not channels.is_cmd_line(ctx.channel.name):
-		await swallow(ctx.message);
-		return
-	report = artifacts.access_artifact(name, code)
-	if report is not None:
-		await ctx.send(report)
 
 
 

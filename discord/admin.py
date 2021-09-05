@@ -10,6 +10,8 @@ import asyncio
 # This module holds the admin cog, which is used to
 
 
+# TODO: change these to be admin-only (currently they are actually GM-only)
+# TODO: grab the name of the admin role from env file
 
 class AdminCog(commands.Cog, name='admin'):
 	"""Admin-only commands, hidden by default. To view documentation, use \"help <command>\". The commands are:

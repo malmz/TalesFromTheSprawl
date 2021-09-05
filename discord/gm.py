@@ -4,6 +4,7 @@ import groups
 import player_setup
 import scenarios
 import artifacts
+import channels
 
 from discord.ext import commands
 import discord
@@ -12,11 +13,12 @@ import asyncio
 ### Module gm.py
 # This module holds the gm cog, which is used to set up in-game content
 
+# TODO: grab the name of the GM role from env file
 
 
 class GmCog(commands.Cog, name='admin'):
 	"""GM-only commands, hidden by default. To view documentation, use \"help <command>\". The commands are:
-	init_all_players, fake_join, fake_join_name, fake_join_nick, clear_all_players, clear_all_actors, clear_actor, ping"""
+	add_known_handle, create_scenario, run_scenario, create_artifact"""
 	def __init__(self, bot):
 		self.bot = bot
 		self._last_member = None
