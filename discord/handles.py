@@ -66,7 +66,8 @@ class HandlesCog(commands.Cog, name='handles'):
         name='clear_all_handles',
         brief='Admin-only.',
         help=('Admin-only. Remove all handles (including all financial info) ' +
-            'and reset all users to their original handle uXXXX.')
+            'and reset all users to their original handle uXXXX.'),
+        hidden=True
         )
     async def clear_handles_command(self, ctx):
         await clear_all_handles()

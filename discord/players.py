@@ -54,7 +54,8 @@ async def clear_player(guild, player_id : str):
 	for group_id in player.groups:
 		await groups.remove_member(group_id, player_id)
 
-async def initialise_all_users(guild):
+async def initialise_all_users():
+	guild = server.get_guild()
 	task_list = (asyncio.create_task(create_player(m)) for m in guild.members if not m.bot)
 	await asyncio.gather(*task_list)
 

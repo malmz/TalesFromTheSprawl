@@ -26,6 +26,7 @@ import player_setup
 import scenarios
 import game
 import artifacts
+import admin
 from common import coin
 
 
@@ -53,7 +54,7 @@ guild = None
 
 # Below cogs represents our folder our cogs are in. Following is the file name. So 'meme.py' in cogs, would be cogs.meme
 # Think of it like a dot path import
-initial_extensions = ['handles', 'finances']
+initial_extensions = ['handles', 'finances', 'admin']
 
 # Here we load our extensions(cogs) listed above in [initial_extensions].
 if __name__ == '__main__':
@@ -162,93 +163,7 @@ async def on_member_join(member):
 
 
 
-
-
-# Admin-only commands for testing etc.
-
-@bot.command(name='fake_join', help='Admin-only function to test run the new member mechanics')
-@commands.has_role('gm')
-async def fake_join_command(ctx, user_id):
-    member_to_fake_join = await ctx.guild.fetch_member(user_id)
-    if member_to_fake_join is None:
-        await ctx.send(f'Failed: member with user_id {user_id} not found.')
-    else:
-        report = await on_member_join(member_to_fake_join)
-        if report is None:
-            report = "Done."
-        await ctx.send(report)
-
-@bot.command(name='fake_join_name', help='Admin-only function to test run the new member mechanics')
-@commands.has_role('gm')
-async def fake_join_command(ctx, name : str):
-    members = await ctx.guild.fetch_members(limit=100).flatten()
-    member_to_fake_join = discord.utils.find(lambda m: m.name == name, members)
-    if member_to_fake_join is None:
-        await ctx.send(f'Failed: member with name {name} not found.')
-    else:
-        report = await on_member_join(member_to_fake_join)
-        if report is None:
-            report = "Done."
-        await ctx.send(report)
-
-@bot.command(name='fake_join_nick', help='Admin-only function to test run the new member mechanics')
-@commands.has_role('gm')
-async def fake_join_command(ctx, nick : str):
-    member_to_fake_join = await server.get_member_from_nick(nick)
-    if member_to_fake_join is None:
-        await ctx.send(f'Failed: member with nick {nick} not found.')
-    else:
-        report = await on_member_join(member_to_fake_join)
-        if report is None:
-            report = "Done."
-        await ctx.send(report)
-
-@bot.command(name='clear_all_players', help='Admin-only: de-initialise all players.')
-@commands.has_role('gm')
-async def clear_all_players_command(ctx):
-    await players.init(guild, clear_all=True)
-    try:
-        await ctx.send('Done.')
-    except discord.errors.NotFound:
-        print('Cleared all players. Could not send report because channel is missing – '
-            +'the command was probably given in a player-only command line that was deleted.')
-
-@bot.command(name='clear_all_actors', help='Admin-only: de-initialise all actors (players and shops).')
-@commands.has_role('gm')
-async def clear_all_actors_command(ctx):
-    await actors.init(guild, clear_all=True)
-    try:
-        await ctx.send('Done.')
-    except discord.errors.NotFound:
-        print('Cleared all actors. Could not send report because channel is missing – '
-            +'the command was probably given in a player-only command line that was deleted.')
-
-@bot.command(name='clear_actor', help='Admin-only: de-initialise an actor (player or shop).')
-@commands.has_role('gm')
-async def clear_actor_command(ctx, actor_id : str):
-    report = await actors.clear_actor(guild, actor_id)
-    try:
-        await ctx.send(report)
-    except discord.errors.NotFound:
-        print(f'Cleared actor {actor_id}. Could not send report because channel is missing – '
-            +'the command was probably given in a player-only command line that was deleted.')
-    
-
-@bot.command(name='init_all_players', help='Admin-only: initialise all current members of the server as players.')
-@commands.has_role('gm')
-async def init_all_players_command(ctx):
-    await players.initialise_all_users(guild)
-    await ctx.send('Done.')
-
-@bot.command(name='ping', help='Admin-only function to test user-player-channel mappings')
-@commands.has_role('gm')
-async def ping_command(ctx, handle_id : str):
-    channel = players.get_cmd_line_channel_for_handle(handle)
-    if channel != None:
-        await channel.send(f'Testing ping for {handle_id}')
-    else:
-        await ctx.send(f'Error: could not find the command line channel for {handle_id}')
-
+# TODO: create GM-only cog
 
 @bot.command(name='add_known_handle', help='Admin-only function to add a known handle, before the player joins the server.')
 @commands.has_role('gm')

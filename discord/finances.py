@@ -27,7 +27,8 @@ class FinancesCog(commands.Cog, name='finances'):
     @commands.command(
         name='create_money',
         brief='Admin-only.',
-        help='Admin-only. Use \".create_money <handle> <amount>\" to create new money.'
+        help='Admin-only. Use \".create_money <handle> <amount>\" to create new money.',
+        hidden=True
         )
     @commands.has_role('gm')
     async def create_money_command(self, ctx, handle_id : str=None, amount : int=0):
@@ -51,7 +52,8 @@ class FinancesCog(commands.Cog, name='finances'):
     @commands.command(
         name='set_money',
         brief='Admin-only.',
-        help='Admin-only. Use \".set_money <handle> <amount>\" to set the balance of an account.'
+        help='Admin-only. Use \".set_money <handle> <amount>\" to set the balance of an account.',
+        hidden=True
         )
     @commands.has_role('gm')
     async def set_money_command(self, ctx, handle_id : str=None, amount : int=-1):
