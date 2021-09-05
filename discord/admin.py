@@ -132,7 +132,7 @@ class AdminCog(commands.Cog, name='admin'):
 		help='Admin-only. Add a member to a group.',
 		hidden=True)
 	@commands.has_role('gm')
-	async def add_member_command(ctx, handle_id : str=None, group_id : str=None):
+	async def add_member_command(self, ctx, handle_id : str=None, group_id : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
 			await swallow(ctx.message);
 			return
@@ -145,7 +145,7 @@ class AdminCog(commands.Cog, name='admin'):
 		help='Admin-only. Create a group with yourself as initial member.',
 		hidden=True)
 	@commands.has_role('gm')
-	async def create_group_command(ctx, group_name : str=None):
+	async def create_group_command(self, ctx, group_name : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
 			await swallow(ctx.message);
 			return
@@ -158,7 +158,7 @@ class AdminCog(commands.Cog, name='admin'):
 		help='Admin-only. Delete all groups.',
 		hidden=True)
 	@commands.has_role('gm')
-	async def clear_all_groups_command(ctx):
+	async def clear_all_groups_command(self, ctx):
 		if not channels.is_cmd_line(ctx.channel.name):
 			await swallow(ctx.message);
 			return
