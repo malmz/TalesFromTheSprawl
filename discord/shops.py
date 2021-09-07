@@ -302,7 +302,7 @@ class EmployeeCog(commands.Cog, name='employee'):
 		if product_name is not None:
 			report = await post_catalogue_item(str(ctx.message.author.id), product_name, shop_name)
 		else:
-			report = await post_catalogue(str(ctx.message.author.id), shop_name)
+			report = await update_storefront(str(ctx.message.author.id), shop_name)
 		if report is not None:
 			await ctx.send(report)
 
@@ -757,6 +757,7 @@ def clear_catalogue(shop_name : str):
 
 storefront_suffix = '_storefront.conf'
 msg_mapping_index = '___storefront_msg_mappings'
+delivery_choice_msg_index = '___del_choice_msg'
 
 def get_storefront(shop_name : str):
 	shop_id = shop_name.lower()
@@ -782,7 +783,6 @@ def read_storefront_msg_mapping(shop_name : str, msg_id : str):
 		if msg_id in storefront[msg_mapping_index]:
 			return StorefrontAction.from_string(storefront[msg_mapping_index][msg_id])
 
-
 def delete_storefront_msg_mappings_for_shop(shop_name : str):
 	if shop_exists(shop_name):
 		storefront = get_storefront(shop_name)
@@ -790,11 +790,26 @@ def delete_storefront_msg_mappings_for_shop(shop_name : str):
 			del storefront[msg_mapping_index][msg_id]
 		storefront.write()
 
+def get_delivery_choice_message(shop_name : str):
+	if shop_exists(shop_name):
+		storefront = get_storefront(shop_name)
+		if delivery_choice_msg_index in storefront:
+			return storefront[delivery_choice_msg_index]
+
+def store_delivery_choice_message(shop_name : str, msg_id : str):
+	if shop_exists(shop_name):
+		storefront = get_storefront(shop_name)
+		storefront[delivery_choice_msg_index] = msg_id
+		action = StorefrontAction(StorefrontActionTypes.SetDeliveryOption)
+		storefront[msg_mapping_index][msg_id] = action.to_string()
+		storefront.write()
 
 def clear_storefront(shop_name : str):
 	if shop_exists(shop_name):
 		storefront = get_storefront(shop_name)
 		storefront[msg_mapping_index] = {}
+		if delivery_choice_msg_index in storefront:
+			del storefront[delivery_choice_msg_index]
 		storefront.write()
 
 
@@ -1314,17 +1329,22 @@ def edit_product(shop : Shop, product_name : str, key : str, value : str):
 
 
 
-### The menu/catalogue: product information messages where players can order by pressing reactions
+### The storefront: by reacting to the messages in this channel,
+#   customers can perform actions at the shop (e.g. order products)
 
-async def post_catalogue(user_id : str, shop_name : str):
-	print(f'Trying to post catalogue')
+async def update_storefront(user_id : str, shop_name : str):
 	result : FindShopResult = find_shop_for_command(user_id, shop_name)
 	if result.error_report is not None or result.shop is None:
 		return result.error_report
 	shop : Shop = result.shop
-	print(f'Trying to post catalogue for {shop.to_string()}')
 
 	channel = channels.get_discord_channel(shop.storefront_channel_id)
+
+	msg_id = await update_storefront_delivery_choice_message(shop, channel)
+	if msg_id is None:
+		raise RuntimeError(f'Error: failed to find the delivery choice message in storefront, dump: {shop.to_string()}')
+	else:
+		store_delivery_choice_message(shop.shop_id, msg_id)
 
 	for product in get_all_products(shop.shop_id):
 		msg_id = await update_catalogue_item_message(shop, channel, product)
@@ -1340,6 +1360,47 @@ async def post_catalogue(user_id : str, shop_name : str):
 		product.storefront_msg_id = msg_id
 		store_product(shop.shop_id, product)
 	return 'Done.'
+
+
+# Delivery choice message: a welcome message that allows customers to choose where to get their order delivered
+
+table_number_emojis = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟']
+
+
+async def update_storefront_delivery_choice_message(shop : Shop, channel):
+	# TODO: track whether this shop is actually a restaurant, and otherwise edit this message
+	content = (
+		f'Welcome to {shop.name}!\n' +
+		f'Please select your table using the buttons {table_number_emojis[0]}–{table_number_emojis[max_table_number]} below.\n' +
+		f'You can also select 🍸 (serve at the bar) or 📣 (call out my handle when the order is ready).\n'
+		f'To order, press the buttons on the menu items below!'
+		)
+	previous_message_exists = False
+	prev_msg_id = get_delivery_choice_message(shop.shop_id)
+	if prev_msg_id is not None:
+		try:
+			message = await channel.fetch_message(prev_msg_id)
+			await message.edit(content=content)
+			await message.clear_reactions()
+			previous_message_exists = True
+		except discord.errors.NotFound:
+			# Reference to a message in storefront that is no longer available
+			# Doesn't matter since the product should not be available anyway
+			pass
+
+	if not previous_message_exists:
+		await channel.purge()
+		message = await channel.send(content)
+	await add_delivery_choice_reactions(message, max_table_number)
+	return str(message.id)
+
+async def add_delivery_choice_reactions(message, max_tables : int):
+	for e in table_number_emojis[:(max_tables+1)]:
+		await message.add_reaction(e)
+	await message.add_reaction('🍸')
+	await message.add_reaction('📣')
+
+### The menu/catalogue: product information messages where players can order by pressing reactions
 
 async def post_catalogue_item(user_id : str, product_name : str, shop_name : str):
 	result : FindShopResult = find_shop_for_command(user_id, shop_name)
@@ -1421,6 +1482,10 @@ def generate_catalogue_item_message(product):
 	return post
 
 
+
+
+
+
 ### Reactions:
 
 ### Reaction in storefront: will order a product
@@ -1460,20 +1525,6 @@ async def process_reaction_in_storefront(message, user_id : str, emoji : str):
 		result.error_report = f'Error: unsupported operation {action.action_type}.'
 		return result
 
-# TODO: a message in the storefront, where you can react with these to set your table:
-# 🍸
-# 0️⃣
-# 1️⃣
-# 2️⃣
-# 3️⃣
-# 4️⃣
-# 5️⃣
-# 6️⃣
-# 7️⃣
-# 8️⃣
-# 9️⃣
-# 🔟
-# 📣
 # TODO: a message in storefront, where you can use reactions to tip the servers
 
 ### Reaction in order_flow: will update orders
