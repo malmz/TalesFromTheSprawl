@@ -70,7 +70,8 @@ async def delete_all_actor_roles(guild, spare_used : bool):
 
 async def delete_if_actor_role(role, spare_used : bool):
 	if await is_actor_role(role.name):
-		if not spare_used or len(role.members) == 0:
+		in_use = actor_index_in_use(role.name) or len(role.members) > 0
+		if not in_use or not spare_used:
 			await role.delete()
 
 async def is_actor_role(name :str):
@@ -97,6 +98,12 @@ def get_all_actor_ids():
 def actor_exists(actor_id : str):
 	actors = get_actors_confobj()
 	return actor_id in actors
+
+def actor_index_in_use(actor_index : str):
+	for actor in get_all_actors():
+		if actor.actor_index == actor_index:
+			return True
+	return False
 
 def store_actor(actor : Actor):
 	actors = get_actors_confobj()

@@ -1,5 +1,6 @@
 import discord
 import asyncio
+from typing import List
 
 from common import system_role_name, admin_role_name, all_players_role_name, gm_role_name
 
@@ -65,6 +66,14 @@ async def remove_role_from_member(member, role):
 	new_roles = [r for r in member.roles if r.name != role.name]
 	await member.edit(roles=new_roles)
 
+def check_member_has_role(member, role_names : List[str]):
+	if member is not None:
+		print(f'Checking if {role_names} is present in {[r.name for r in member.roles]}')
+		for role_name in role_names:
+			if role_name in [r.name for r in member.roles]:
+				return True
+	return False
+
 def get_all_players_role():
 	return all_players_role
 
@@ -97,7 +106,6 @@ async def get_member_from_nick(nick : str):
 
 async def get_all_channels():
 	return await guild.fetch_channels()
-
 
 async def swallow(message, alert=True):
 	await message.delete()

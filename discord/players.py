@@ -7,7 +7,8 @@ import actors
 import shops
 import groups
 
-from common import coin, highest_ever_index, player_personal_role_start
+from common import coin, highest_ever_index, player_personal_role_start, admin_role_name, gm_role_name
+
 from custom_types import PlayerData, Handle
 
 import discord
@@ -226,6 +227,9 @@ def get_cmd_line_channel(player_id : str):
 	if data is not None:
 		return channels.get_discord_channel(data.cmd_line_channel_id)
 
+
+# Shops
+
 def add_shop(player_id : str, shop_id : str):
 	player : PlayerData = read_player_data(player_id)
 	if shop_id not in player.shops:
@@ -242,7 +246,7 @@ def get_shops(player_id : str):
 	return read_player_data(player_id).shops
 
 
-# TODO: remove player from group data when player is deleted
+# Groups
 
 def add_group(player_id : str, group_id : str):
 	player : PlayerData = read_player_data(player_id)
@@ -257,3 +261,21 @@ def remove_group(player_id : str, group_id : str):
 	if player is not None and group_id in player.groups:
 		player.groups = [g for g in player.groups if g != group_id]
 		store_player_data(player)
+
+
+
+async def is_gm(player_id : str):
+	if player_exists(player_id):
+		member = await server.get_member_from_nick(player_id)
+		return server.check_member_has_role(member, [gm_role_name])
+
+async def is_admin(player_id : str):
+	if player_exists(player_id):
+		member = await server.get_member_from_nick(player_id)
+		return server.check_member_has_role(member, [admin_role_name])
+
+async def is_gm_or_admin(player_id : str):
+	if player_exists(player_id):
+		member = await server.get_member_from_nick(player_id)
+		print(f'Checking if {player_id} is gm or admin')
+		return server.check_member_has_role(member, [gm_role_name, admin_role_name])

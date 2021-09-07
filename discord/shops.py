@@ -193,7 +193,7 @@ class EmployeeCog(commands.Cog, name='employee'):
 		if not channels.is_cmd_line(ctx.channel.name):
 			await server.swallow(ctx.message);
 			return
-		report = add_product(str(ctx.message.author.id), product_name, description, price, symbol, shop_name)
+		report = await add_product(str(ctx.message.author.id), product_name, description, price, symbol, shop_name)
 		if report is not None:
 			await ctx.send(report)
 
@@ -224,7 +224,7 @@ class EmployeeCog(commands.Cog, name='employee'):
 		if not channels.is_cmd_line(ctx.channel.name):
 			await server.swallow(ctx.message);
 			return
-		report = edit_product_from_command(str(ctx.message.author.id), product_name, key, value, shop_name)
+		report = await edit_product_from_command(str(ctx.message.author.id), product_name, key, value, shop_name)
 		if report is not None:
 			await ctx.send(report)
 
@@ -621,13 +621,12 @@ async def delete_all_shop_roles(guild, spare_used : bool):
 
 async def delete_if_shop_role(role, spare_used : bool):
 	if common.is_shop_role(role.name):
-		if not spare_used or len(role.members) == 0:
-			print(f'Deleting unused role with name {role.name}')
+		in_use = actors.actor_index_in_use(role.name) or len(role.members) > 0
+		if not in_use or not spare_used:
 			await role.delete()
 
-
 async def reinitialize(user_id : str, shop_name : str):
-	result : FindShopResult = find_shop_for_command(user_id, shop_name, must_be_owner=True)
+	result : FindShopResult = await find_shop_for_command(user_id, shop_name, must_be_owner=True)
 	if result.error_report is not None or result.shop is None:
 		return result.error_report
 	shop : Shop = result.shop
@@ -1060,7 +1059,7 @@ async def create_shop(guild, shop_name : str, handle_id : str, is_owner : bool=F
 	return result
 
 
-def find_shop_for_command(user_id : str, shop_name : str, must_be_owner : bool=False):
+async def find_shop_for_command(user_id : str, shop_name : str, must_be_owner : bool=False):
 	if user_id is None:
 		raise RuntimeError('Tried to find a shop, but the action initiator user_id was not found.')
 
@@ -1070,26 +1069,30 @@ def find_shop_for_command(user_id : str, shop_name : str, must_be_owner : bool=F
 		return result
 
 	player_id = players.get_player_id(user_id)
-	shops_of_player = players.get_shops(player_id)
-	if len(shops_of_player) == 0:
-		result.error_report = f'Error: player {player_id} does not have access to any shops'
-		return result
 
+	is_gm_or_admin = await players.is_gm_or_admin(player_id)
+
+	shops_of_player = players.get_shops(player_id)
 	if shop_name is None:
 		# If no shop given, assume the player wants us to use their first one
 		# If a player works at more than one shop, they will have to use the
 		# full syntax of specifying which shop they mean
+		if len(shops_of_player) == 0:
+			if is_gm_or_admin:
+				result.error_report = f'Error: no shop listed for {player_id}. Since you are GM/admin, you can edit any shop but you mus specify which shop you mean.'
+			else:
+				result.error_report = f'Error: player {player_id} does not have access to any shops'
+			return result
 		shop_name = shops_of_player[0]
 		if not shop_exists(shop_name):
 			result.error_report = f'Error: there is no shop named {shop_name}.'
 			return result
-	elif shop_name.lower() not in shops_of_player:
+	elif shop_name.lower() not in shops_of_player and not is_gm_or_admin:
 		result.error_report = f'Error: player {player_id} does not have access to shop {shop_name}.'
 		return result
 
-
 	shop : Shop = read_shop(shop_name)
-	if must_be_owner and shop.owner_id != player_id:
+	if must_be_owner and shop.owner_id != player_id and not is_gm_or_admin:
 		result.error_report = f'Error: this action is only permitted for shop owner, which is {shop.owner_id}.'
 		return result
 
@@ -1104,6 +1107,8 @@ async def employ(guild, handle : Handle, shop : Shop, is_owner : bool=False):
 	result = ActionResult()
 	player_id = handle.actor_id
 
+
+	# TODO: encapsulate this in a "make player member of shop" method in players.py
 	member = await server.get_member_from_nick(player_id)
 	if not players.player_exists(player_id) or member is None:
 		result.report = f'Error: handle {handle.handle_id} is not owned by a person, or they don\'t conform to the server nick scheme.'
@@ -1116,6 +1121,8 @@ async def employ(guild, handle : Handle, shop : Shop, is_owner : bool=False):
 	role = actors.get_actor_role(guild, shop.shop_id)
 	await server.give_member_role(member, role)
 
+
+
 	players.add_shop(player_id, shop.shop_id)
 	shop.employees.append(player_id)
 	if is_owner:
@@ -1127,7 +1134,7 @@ async def employ(guild, handle : Handle, shop : Shop, is_owner : bool=False):
 	return result
 
 async def process_employ_command(user_id : str, guild, handle_id : str, shop_name : str):
-	result : FindShopResult = find_shop_for_command(user_id, shop_name)
+	result : FindShopResult = await find_shop_for_command(user_id, shop_name)
 	if result.error_report is not None or result.shop is None:
 		return result.error_report
 	shop : Shop = result.shop
@@ -1191,7 +1198,7 @@ async def remove_employee(shop : Shop, player_id : str, handle_id : str=None):
 		+ 'They no longer have access to the shop\'s finances, chat or order channels, and can no longer edit the product catalogue.')
 
 async def process_fire_command(user_id : str, handle_id : str, shop_name : str):
-	result : FindShopResult = find_shop_for_command(user_id, shop_name, must_be_owner=True)
+	result : FindShopResult = await find_shop_for_command(user_id, shop_name, must_be_owner=True)
 	if result.error_report is not None or result.shop is None:
 		return result.error_report
 	shop : Shop = result.shop
@@ -1224,8 +1231,8 @@ def get_emoji_for_new_product(symbol : str):
 		return symbol
 
 
-def add_product(user_id : str, product_name : str, description : str, price : int, symbol : str, shop_name : str):
-	result : FindShopResult = find_shop_for_command(user_id, shop_name)
+async def add_product(user_id : str, product_name : str, description : str, price : int, symbol : str, shop_name : str):
+	result : FindShopResult = await find_shop_for_command(user_id, shop_name)
 	if result.error_report is not None or result.shop is None:
 		return result.error_report
 	shop : Shop = result.shop
@@ -1253,7 +1260,7 @@ def add_product(user_id : str, product_name : str, description : str, price : in
 
 
 async def remove_product(user_id : str, product_name : str, shop_name : str):
-	result : FindShopResult = find_shop_for_command(user_id, shop_name)
+	result : FindShopResult = await find_shop_for_command(user_id, shop_name)
 	if result.error_report is not None or result.shop is None:
 		return result.error_report
 	shop : Shop = result.shop
@@ -1278,8 +1285,8 @@ async def remove_product(user_id : str, product_name : str, shop_name : str):
 	return (f'Removed product {product.name} from {shop.shop_id}.')
 
 
-def edit_product_from_command(user_id : str, product_name : str, key : str, value : str, shop_name : str):
-	result : FindShopResult = find_shop_for_command(user_id, shop_name)
+async def edit_product_from_command(user_id : str, product_name : str, key : str, value : str, shop_name : str):
+	result : FindShopResult = await find_shop_for_command(user_id, shop_name)
 	if result.error_report is not None or result.shop is None:
 		return result.error_report
 	shop : Shop = result.shop
@@ -1341,7 +1348,7 @@ def edit_product(shop : Shop, product_name : str, key : str, value : str):
 #   customers can perform actions at the shop (e.g. order products)
 
 async def update_storefront(user_id : str, shop_name : str):
-	result : FindShopResult = find_shop_for_command(user_id, shop_name)
+	result : FindShopResult = await find_shop_for_command(user_id, shop_name)
 	if result.error_report is not None or result.shop is None:
 		return result.error_report
 	shop : Shop = result.shop
@@ -1416,7 +1423,7 @@ async def add_delivery_choice_reactions(message, max_tables : int):
 ### The menu/catalogue: product information messages where players can order by pressing reactions
 
 async def post_catalogue_item(user_id : str, product_name : str, shop_name : str):
-	result : FindShopResult = find_shop_for_command(user_id, shop_name)
+	result : FindShopResult = await find_shop_for_command(user_id, shop_name)
 	if result.error_report is not None or result.shop is None:
 		return result.error_report
 	shop : Shop = result.shop
