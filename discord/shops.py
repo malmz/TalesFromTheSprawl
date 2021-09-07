@@ -522,6 +522,37 @@ class MsgOrderMapping(object):
 
 
 
+# Used to represent an action that can be taken from the storefront:
+# - Ordering a product
+# - Choosing a delivery option TODO
+# - Tipping a server TODO
+# - Starting a chat with the shop TODO
+class StorefrontActionTypes(str, Enum):
+	Order = 'o'
+	SetDeliveryOption = 'sdo'
+	Tip = 't'
+	Chat = 'c'
+
+class StorefrontAction(object):
+	def __init__(
+		self,
+		action_type : StorefrontActionTypes,
+		data : str=None # for orders: product id
+		):
+		self.action_type = action_type
+		self.data = data
+
+	@staticmethod
+	def from_string(string : str):
+		obj = StorefrontAction(StorefrontActionTypes.Order)
+		obj.__dict__ = simplejson.loads(string)
+		return obj
+
+	def to_string(self):
+		return simplejson.dumps(self.__dict__)
+
+
+
 # "Missing" class: ChannelMapping
 # Used to store mapping from channel to shop
 # No class necessary; just use shop_id : str as the "pointer", indexed by channel ID
@@ -732,10 +763,10 @@ def get_storefront(shop_name : str):
 	storefront_file_name = f'{shop_id}{storefront_suffix}'
 	return ConfigObj(f'{shops_conf_dir}/{storefront_file_name}')
 
-def store_storefront_msg_mapping(shop_name : str, msg_id : str, product_id : str):
+def store_storefront_msg_mapping(shop_name : str, msg_id : str, action : StorefrontAction):
 	if shop_exists(shop_name):
 		storefront = get_storefront(shop_name)
-		storefront[msg_mapping_index][msg_id] = product_id
+		storefront[msg_mapping_index][msg_id] = action.to_string()
 		storefront.write()
 
 def delete_storefront_msg_mapping(shop_name : str, msg_id : str):
@@ -749,7 +780,7 @@ def read_storefront_msg_mapping(shop_name : str, msg_id : str):
 	if shop_exists(shop_name):
 		storefront = get_storefront(shop_name)
 		if msg_id in storefront[msg_mapping_index]:
-			return storefront[msg_mapping_index][msg_id]
+			return StorefrontAction.from_string(storefront[msg_mapping_index][msg_id])
 
 
 def delete_storefront_msg_mappings_for_shop(shop_name : str):
@@ -1304,7 +1335,8 @@ async def post_catalogue(user_id : str, shop_name : str):
 				# Listing has been removed for non-available item, no issue here
 				pass
 		else:
-			store_storefront_msg_mapping(shop.shop_id, msg_id, product.product_id)
+			action = StorefrontAction(StorefrontActionTypes.Order, data=product.product_id)
+			store_storefront_msg_mapping(shop.shop_id, msg_id, action)
 		product.storefront_msg_id = msg_id
 		store_product(shop.shop_id, product)
 	return 'Done.'
@@ -1328,7 +1360,8 @@ async def post_catalogue_item(user_id : str, product_name : str, shop_name : str
 			# Listing has been removed for non-available item, no issue here
 			pass
 	else:
-		store_storefront_msg_mapping(shop.shop_id, msg_id, product.product_id)
+		action = StorefrontAction(StorefrontActionTypes.Order, data=product.product_id)
+		store_storefront_msg_mapping(shop.shop_id, msg_id, action)
 
 
 async def update_catalogue_item_message(shop : Shop, channel, product : Product):
@@ -1392,7 +1425,6 @@ def generate_catalogue_item_message(product):
 
 ### Reaction in storefront: will order a product
 
-# TODO: add a reaction an employee can use to mark an item as out of stock
 
 async def process_reaction_in_storefront(message, user_id : str, emoji : str):
 	result = ActionResult()
@@ -1404,23 +1436,29 @@ async def process_reaction_in_storefront(message, user_id : str, emoji : str):
 	if shop is None:
 		result.report = f'Error: tried to order {emoji} from shop but could not find shop.'
 		return result
-	product_id : str = read_storefront_msg_mapping(shop.shop_id, str(message.id))
-	if product_id is None:
-		result.report = f'Error: tried to order {emoji} from {shop.name} but could not map the message to a product.'
-		return result
-	product : Product = read_product(shop_id, product_id)
-	if product is None:
-		result.report = f'Error: cannot find product {product_id} at shop {shop.name}.'
-		return result
-	if product.emoji != emoji:
-		# Wrong reaction -- silently ignore it.
-		return result
+	action : StorefrontAction = read_storefront_msg_mapping(shop.shop_id, str(message.id))
+	if action.action_type == StorefrontActionTypes.Order:
+		product_id = action.data
+		if product_id is None:
+			result.report = f'Error: tried to order {emoji} from {shop.name} but could not map the message to a product.'
+			return result
+		product : Product = read_product(shop_id, product_id)
+		if product is None:
+			result.report = f'Error: cannot find product {product_id} at shop {shop.name}.'
+			return result
+		if product.emoji != emoji:
+			# TODO: add a reaction an employee can use to mark an item as out of stock
+			# Wrong reaction -- silently ignore it.
+			return result
 
-	player_id = players.get_player_id(user_id, expect_to_find=True)
-	buyer_handle : Handle = handles.get_active_handle(player_id)
+		player_id = players.get_player_id(user_id, expect_to_find=True)
+		buyer_handle : Handle = handles.get_active_handle(player_id)
 
-	result = await order_product(shop, product, buyer_handle)
-	return result
+		result = await order_product(shop, product, buyer_handle)
+		return result
+	else: # TODO: implement other action types
+		result.error_report = f'Error: unsupported operation {action.action_type}.'
+		return result
 
 # TODO: a message in the storefront, where you can react with these to set your table:
 # 🍸
