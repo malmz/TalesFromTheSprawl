@@ -271,21 +271,6 @@ class EmployeeCog(commands.Cog, name='employee'):
 		if report is not None:
 			await ctx.send(report)
 
-	@commands.command(
-		name='clear_orders',
-		brief='Shop owner only: clear your shop\'s orders.',
-		help=(
-			'Remove all orders (both fulfilled and pending), and publish all product updates to the menu.\n' +
-			'Note: all orders that are pre-paid will still be paid, and there will be no easy way to refund them!\n' +
-			'Note 2: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
-			)
-		)
-	async def clear_orders_command(self, ctx, shop_name : str=None):
-		if not channels.is_cmd_line(ctx.channel.name):
-			await server.swallow(ctx.message);
-			return
-		await reinitialize(str(ctx.message.author.id), shop_name)
-		await publish_menu_command(ctx, shop_name=shop_name)
 
 	@commands.command(
 		name='publish_menu',
@@ -313,6 +298,22 @@ class EmployeeCog(commands.Cog, name='employee'):
 		)
 	async def pm_command(self, ctx, product_name : str=None, shop_name : str=None):
 		await self.publish_menu_command(ctx, product_name, shop_name)
+
+	@commands.command(
+		name='clear_orders',
+		brief='Shop owner only: clear your shop\'s orders.',
+		help=(
+			'Remove all orders (both fulfilled and pending), and publish all product updates to the menu.\n' +
+			'Note: all orders that are pre-paid will still be paid, and there will be no easy way to refund them!\n' +
+			'Note 2: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
+			)
+		)
+	async def clear_orders_command(self, ctx, shop_name : str=None):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await server.swallow(ctx.message);
+			return
+		await reinitialize(str(ctx.message.author.id), shop_name)
+		await self.publish_menu_command(ctx, shop_name=shop_name)
 
 	@commands.command(
 		name='clear_all_shops',
@@ -1392,7 +1393,10 @@ async def update_storefront_delivery_choice_message(shop : Shop, channel):
 	if not previous_message_exists:
 		await channel.purge()
 		message = await channel.send(content)
-		await channel.send('Use the buttons below to order! If you make a mistake, you can cancel the order from your **finance** channel (if you\'re fast enough).')
+		await channel.send(
+			f'{common.hard_space}\n' +
+			'Use the buttons below to order! If you make a mistake, you can cancel the order from your **finance** channel (if you\'re fast enough).\n' +
+			f'{common.hard_space}')
 	await add_delivery_choice_reactions(message, max_table_number)
 	return str(message.id)
 

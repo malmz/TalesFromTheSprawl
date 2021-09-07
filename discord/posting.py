@@ -1,6 +1,6 @@
 import channels
 import handles
-from common import forbidden_content
+from common import forbidden_content, hard_space
 from custom_types import PostTimestamp
 import players
 
@@ -15,7 +15,7 @@ import asyncio
 # by deleting all messages and reposting them with custom
 # handles.
 
-hard_space = '⠀'
+
 double_hard_space = hard_space + hard_space
 
 post_header_regex = re.compile(f'^[*][*](.*)[*][*]{double_hard_space}')

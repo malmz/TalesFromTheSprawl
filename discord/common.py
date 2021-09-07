@@ -18,6 +18,7 @@ transaction_collector = '___collector'
 transaction_collected = '___collected'
 
 coin = '¥'
+hard_space = '⠀'
 
 # good-to-have emojis:
 # ✅
