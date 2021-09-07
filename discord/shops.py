@@ -1365,15 +1365,16 @@ async def update_storefront(user_id : str, shop_name : str):
 # Delivery choice message: a welcome message that allows customers to choose where to get their order delivered
 
 table_number_emojis = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟']
-
+bar_emoji = '🍸'
+call_emoji = '📣'
 
 async def update_storefront_delivery_choice_message(shop : Shop, channel):
 	# TODO: track whether this shop is actually a restaurant, and otherwise edit this message
 	content = (
-		f'Welcome to {shop.name}!\n' +
-		f'Please select your table using the buttons {table_number_emojis[0]}–{table_number_emojis[max_table_number]} below.\n' +
-		f'You can also select 🍸 (serve at the bar) or 📣 (call out my handle when the order is ready).\n'
-		f'To order, press the buttons on the menu items below!'
+		f'Please select your table using the buttons:\n' +
+		f'{table_number_emojis[0]}–{table_number_emojis[max_table_number]}: serve at this table number\n' +
+		f'{bar_emoji}: serve at the bar\n' +
+		f'{call_emoji}: call out my current handle when the order is ready (note: you need to click this again if you switch handle)'
 		)
 	previous_message_exists = False
 	prev_msg_id = get_delivery_choice_message(shop.shop_id)
@@ -1391,14 +1392,15 @@ async def update_storefront_delivery_choice_message(shop : Shop, channel):
 	if not previous_message_exists:
 		await channel.purge()
 		message = await channel.send(content)
+		await channel.send('Use the buttons below to order! If you make a mistake, you can cancel the order from your **finance** channel (if you\'re fast enough).')
 	await add_delivery_choice_reactions(message, max_table_number)
 	return str(message.id)
 
 async def add_delivery_choice_reactions(message, max_tables : int):
 	for e in table_number_emojis[:(max_tables+1)]:
 		await message.add_reaction(e)
-	await message.add_reaction('🍸')
-	await message.add_reaction('📣')
+	await message.add_reaction(bar_emoji)
+	await message.add_reaction(call_emoji)
 
 ### The menu/catalogue: product information messages where players can order by pressing reactions
 
@@ -1488,8 +1490,7 @@ def generate_catalogue_item_message(product):
 
 ### Reactions:
 
-### Reaction in storefront: will order a product
-
+### Reaction in storefront: select table, order a product (other functionality to be implemented)
 
 async def process_reaction_in_storefront(message, user_id : str, emoji : str):
 	result = ActionResult()
@@ -1501,6 +1502,7 @@ async def process_reaction_in_storefront(message, user_id : str, emoji : str):
 	if shop is None:
 		result.report = f'Error: tried to order {emoji} from shop but could not find shop.'
 		return result
+
 	action : StorefrontAction = read_storefront_msg_mapping(shop.shop_id, str(message.id))
 	if action.action_type == StorefrontActionTypes.Order:
 		product_id = action.data
@@ -1520,12 +1522,16 @@ async def process_reaction_in_storefront(message, user_id : str, emoji : str):
 		buyer_handle : Handle = handles.get_active_handle(player_id)
 
 		result = await order_product(shop, product, buyer_handle)
-		return result
+	elif action.action_type == StorefrontActionTypes.SetDeliveryOption:
+		player_id = players.get_player_id(user_id, expect_to_find=True)		
+		result = set_delivery_table_from_reaction(shop, player_id, emoji)
 	else: # TODO: implement other action types
-		result.error_report = f'Error: unsupported operation {action.action_type}.'
-		return result
+		result.report = f'Error: unsupported operation {action.action_type}.'
+	return result
 
 # TODO: a message in storefront, where you can use reactions to tip the servers
+
+
 
 ### Reaction in order_flow: will update orders
 
@@ -1977,12 +1983,33 @@ def set_delivery_id_from_command(user_id : str, delivery_id :str, shop_name : st
 
 
 # A special version of set_delivery_id 
+
+
 def set_delivery_table_from_command(user_id : str, option :str, shop_name : str):
 	report = check_delivery_id_input(option, shop_name)
 	if report is not None:
 		return report
 
 	player_id = players.get_player_id(user_id, expect_to_find=True)
+	action : ActionResult = set_delivery_table(player_id, option, shop_name)
+	return action.report
+
+def set_delivery_table_from_reaction(shop : Shop, player_id : str, emoji : str):
+	result = ActionResult()
+	if emoji in table_number_emojis:
+		e_dict = dict(zip(table_number_emojis, range(len(table_number_emojis))))
+		option = str(e_dict[emoji])
+	elif emoji == bar_emoji:
+		option = 'bar'
+	elif emoji == call_emoji:
+		option = 'call'
+	else:
+		result.report = f'Error: {emoji} does not correspond to a valid delivery option.'
+		return result
+	return set_delivery_table(player_id, option, shop.name)
+
+def set_delivery_table(player_id : str, option :str, shop_name : str):
+	result = ActionResult()
 	if option == 'bar':
 		delivery_id = 'the bar'
 		delivery_str = f'served at the **bar**'
@@ -1990,18 +2017,28 @@ def set_delivery_table_from_command(user_id : str, option :str, shop_name : str)
 		# Call out the order for their current handle
 		handle_id = handles.get_active_handle_id(player_id)
 		if handle_id is None:
-			return f'Error: Tried to set delivery option to \"call out my name\", but could not determine your current handle!'
+			result.report = f'Error: Tried to set delivery option to \"call out my name\", but could not determine your current handle!'
+			return result
 		delivery_id = f'{handle_id} (call out)'
 		delivery_str = f'called out to **{handle_id}**'
 	else:
 		try:
 			table_number = int(option)
 			if table_number < 0 or table_number > max_table_number:
-				return f'Error: there is no table {option} at {shop_name}'
+				result.report = f'Error: there is no table {option} at {shop_name}.'
+				return result
 			delivery_id = f'Table {table_number}'
 			delivery_str = f'delivered to **{delivery_id}**'
 		except ValueError:
-			return f'Error: \"{option}\" is not a valid table number (0–{max_table_number}) or delivery option.'
+			result.report = f'Error: \"{option}\" is not a valid table number (0–{max_table_number}) or delivery option.'
+			return result
 
 	store_delivery_id(shop_name, player_id, delivery_id)
-	return f'Done. All orders made by {player_id} (using any handle!) at {shop_name} will be {delivery_str}.'
+	result.report = f'Done. All orders made by {player_id} (using any handle!) at {shop_name} will be {delivery_str}.'
+	result.success = True
+	return result
+
+
+
+
+
