@@ -33,7 +33,9 @@ load_dotenv()
 main_shop = os.getenv('MAIN_SHOP_NAME')
 
 
-# TODO: for some reason the confobj is not correctly refreshed after moving to cogs
+# TODO: add role check: GMs can do anything to any shop
+# TODO: change so that a shop does not have to have an owner to function
+
 
 class ShoppingCog(commands.Cog, name='shopping'):
 	"""Commands related to buying and ordering at stores and restaurants.
@@ -566,9 +568,7 @@ async def init(guild, clear_all=False):
 			for player_id in shop.employees:
 				players.remove_shop(player_id, shop.shop_id)
 			await actors.clear_actor(guild, shop_id)
-			clear_catalogue(shop_id)
-			clear_delivery_data(shop_id)
-			await clear_order_data(shop_id)
+			await clear_shop_contents(shop_id)
 			del shops[shop_data_index][shop_id]
 		for channel in shops[storefront_channel_map_index]:
 			del shops[storefront_channel_map_index][channel]
@@ -607,7 +607,7 @@ async def reinitialize(user_id : str, shop_name : str):
 		for c
 		in [order_flow_channel.purge(), storefront_channel.purge()]]
 		)
-	delete_catalogue_item_mappings_for_shop(shop.shop_id)
+	delete_storefront_msg_mappings_for_shop(shop.shop_id)
 	await clear_order_data(shop.shop_id)
 	shop.highest_order = 1
 	store_shop(shop)
@@ -678,7 +678,6 @@ def read_order_flow_channel_mapping(channel_id : str):
 
 catalogue_suffix = '_catalogue.conf'
 product_entries_index = '___products'
-msg_mapping_index = '___storefront_msg_mappings'
 
 def get_catalogue(shop_name : str):
 	shop_id = shop_name.lower()
@@ -717,41 +716,56 @@ def read_product_from_cat(catalogue, product_name : str):
 	if product_id in catalogue[product_entries_index]:
 		return Product.from_string(catalogue[product_entries_index][product_id])
 
-
-def store_catalogue_item_mapping(shop_name : str, msg_id : str, product_id : str):
-	if shop_exists(shop_name):
-		catalogue = get_catalogue(shop_name)
-		catalogue[msg_mapping_index][msg_id] = product_id
-		catalogue.write()
-
-def delete_catalogue_item_mapping(shop_name : str, msg_id : str):
-	if shop_exists(shop_name):
-		catalogue = get_catalogue(shop_name)
-		if msg_id in catalogue[msg_mapping_index]:
-			del catalogue[msg_mapping_index][msg_id]
-			catalogue.write()
-
-def read_catalogue_item_mapping(shop_name : str, msg_id : str):
-	if shop_exists(shop_name):
-		catalogue = get_catalogue(shop_name)
-		if msg_id in catalogue[msg_mapping_index]:
-			return catalogue[msg_mapping_index][msg_id]
-
-
-def delete_catalogue_item_mappings_for_shop(shop_name : str):
-	if shop_exists(shop_name):
-		catalogue = get_catalogue(shop_name)
-		for msg_id in catalogue[msg_mapping_index]:
-			del catalogue[msg_mapping_index][msg_id]
-		catalogue.write()
-
-
 def clear_catalogue(shop_name : str):
 	if shop_exists(shop_name):
 		catalogue = get_catalogue(shop_name)
 		catalogue[product_entries_index] = {}
 		catalogue[msg_mapping_index] = {}
 		catalogue.write()
+
+
+storefront_suffix = '_storefront.conf'
+msg_mapping_index = '___storefront_msg_mappings'
+
+def get_storefront(shop_name : str):
+	shop_id = shop_name.lower()
+	storefront_file_name = f'{shop_id}{storefront_suffix}'
+	return ConfigObj(f'{shops_conf_dir}/{storefront_file_name}')
+
+def store_storefront_msg_mapping(shop_name : str, msg_id : str, product_id : str):
+	if shop_exists(shop_name):
+		storefront = get_storefront(shop_name)
+		storefront[msg_mapping_index][msg_id] = product_id
+		storefront.write()
+
+def delete_storefront_msg_mapping(shop_name : str, msg_id : str):
+	if shop_exists(shop_name):
+		storefront = get_storefront(shop_name)
+		if msg_id in storefront[msg_mapping_index]:
+			del storefront[msg_mapping_index][msg_id]
+			storefront.write()
+
+def read_storefront_msg_mapping(shop_name : str, msg_id : str):
+	if shop_exists(shop_name):
+		storefront = get_storefront(shop_name)
+		if msg_id in storefront[msg_mapping_index]:
+			return storefront[msg_mapping_index][msg_id]
+
+
+def delete_storefront_msg_mappings_for_shop(shop_name : str):
+	if shop_exists(shop_name):
+		storefront = get_storefront(shop_name)
+		for msg_id in storefront[msg_mapping_index]:
+			del storefront[msg_mapping_index][msg_id]
+		storefront.write()
+
+
+def clear_storefront(shop_name : str):
+	if shop_exists(shop_name):
+		storefront = get_storefront(shop_name)
+		storefront[msg_mapping_index] = {}
+		storefront.write()
+
 
 
 # The delivery ID of each player/actor is stored in a simple database
@@ -800,6 +814,13 @@ def delete_delivery_ids_for_actor(actor_id : str):
 		delete_delivery_id(shop_id, actor_id)
 
 
+
+async def clear_shop_contents(shop_name : str):
+	clear_catalogue(shop_name)
+	clear_delivery_data(shop_name)
+	clear_storefront(shop_name)
+	await clear_order_data(shop_name)
+
 # The active orders are stored indexed on delivery ID, since there can only be
 # one active order for each
 
@@ -824,8 +845,6 @@ def store_active_order(shop_name : str, order : Order):
 		msg_mapping = MsgOrderMapping(order.delivery_id, OrderStatus.Active)
 		order_data[msg_to_order_mapping_index][msg_id] = msg_mapping.to_string()
 		order_data[active_orders_index][order.delivery_id] = order.to_string()
-		# TODO: also store the mapping from order_flow_msg_id to this order
-		# (needed to process reactions on the orders themselves, to mark as locked or completed)
 		order_data.write()
 
 def delete_active_order(shop_name : str, delivery_id : str):
@@ -980,9 +999,7 @@ async def create_shop(guild, shop_name : str, owner_handle_id : str):
 	# TODO: send welcome message in order_flow_channel
 	shop = Shop(shop_name, actor.actor_id, owner_player_id, storefront_channel_id, order_flow_channel_id)
 	store_shop(shop)
-	clear_catalogue(shop.shop_id)
-	clear_delivery_data(shop.shop_id)
-	await clear_order_data(shop.shop_id)
+	await clear_shop_contents(shop.shop_id)
 	report = f'Created shop **{shop.name}**, run by {handle.handle_id} (player ID {handle.actor_id})'
 
 	result = await employ(guild, handle, shop)
@@ -1287,7 +1304,7 @@ async def post_catalogue(user_id : str, shop_name : str):
 				# Listing has been removed for non-available item, no issue here
 				pass
 		else:
-			store_catalogue_item_mapping(shop.shop_id, msg_id, product.product_id)
+			store_storefront_msg_mapping(shop.shop_id, msg_id, product.product_id)
 		product.storefront_msg_id = msg_id
 		store_product(shop.shop_id, product)
 	return 'Done.'
@@ -1311,13 +1328,13 @@ async def post_catalogue_item(user_id : str, product_name : str, shop_name : str
 			# Listing has been removed for non-available item, no issue here
 			pass
 	else:
-		store_catalogue_item_mapping(shop.shop_id, msg_id, product.product_id)
+		store_storefront_msg_mapping(shop.shop_id, msg_id, product.product_id)
 
 
 async def update_catalogue_item_message(shop : Shop, channel, product : Product):
 	if not product.available:
 		if product.storefront_msg_id is not None:
-			delete_catalogue_item_mapping(shop.shop_id, product.storefront_msg_id)
+			delete_storefront_msg_mapping(shop.shop_id, product.storefront_msg_id)
 			try:
 				message = await channel.fetch_message(product.storefront_msg_id)
 				await message.delete()
@@ -1333,7 +1350,7 @@ async def update_catalogue_item_message(shop : Shop, channel, product : Product)
 	previous_msg = product.storefront_msg_id
 	if previous_msg is not None:
 		# Instead of sending a new message, update the existing one
-		delete_catalogue_item_mapping(shop.shop_id, product.storefront_msg_id)
+		delete_storefront_msg_mapping(shop.shop_id, product.storefront_msg_id)
 		try:
 			message = await channel.fetch_message(product.storefront_msg_id)
 			await asyncio.gather(
@@ -1387,7 +1404,7 @@ async def process_reaction_in_storefront(message, user_id : str, emoji : str):
 	if shop is None:
 		result.report = f'Error: tried to order {emoji} from shop but could not find shop.'
 		return result
-	product_id : str = read_catalogue_item_mapping(shop.shop_id, str(message.id))
+	product_id : str = read_storefront_msg_mapping(shop.shop_id, str(message.id))
 	if product_id is None:
 		result.report = f'Error: tried to order {emoji} from {shop.name} but could not map the message to a product.'
 		return result
@@ -1419,7 +1436,7 @@ async def process_reaction_in_storefront(message, user_id : str, emoji : str):
 # 9️⃣
 # 🔟
 # 📣
-
+# TODO: a message in storefront, where you can use reactions to tip the servers
 
 ### Reaction in order_flow: will update orders
 

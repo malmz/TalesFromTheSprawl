@@ -134,7 +134,6 @@ def return_reaction_semaphore(user_id : str, sem_value :str):
 	global reactions_semaphores
 	if user_id in reactions_semaphores:
 		if reactions_semaphores[user_id] == sem_value:
-			print(f'Returned semaphore for {user_id} for process {reactions_semaphores[user_id]}')
 			del reactions_semaphores[user_id]
 		else:
 			print(f'Semaphore error: Tried to return semaphore for {user_id} but it was taken by another process.')
