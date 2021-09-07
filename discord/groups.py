@@ -178,7 +178,7 @@ async def add_member_from_handle(guild, group_id : str, handle_id : str):
 		return f'Error: could not find group {group_id}.'
 
 	if handle.actor_id in group.members:
-		return f'Error: player {handle.actor_id} (owner of handle {handle.handle_id}) is already a member of {group.group_id}.'
+		return f'Player {handle.actor_id} (owner of handle {handle.handle_id}) is already a member of {group.group_id}.'
 
 	error_report = await add_member(guild, group, member, handle.actor_id)
 	if error_report is None:
@@ -199,7 +199,7 @@ async def add_member_from_player_id(guild, group_id : str, player_id : str):
 		return f'Error: could not find group {group_id}.'
 
 	if player_id in group.members:
-		return f'Error: player {player_id} is already a member of {group.group_id}.'
+		return f'Player {player_id} is already a member of {group.group_id}.'
 
 	error_report = await add_member(guild, group, member, player_id)
 	if error_report is None:

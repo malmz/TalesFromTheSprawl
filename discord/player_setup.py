@@ -20,7 +20,7 @@ from common import coin
 
 # Known_handles is meant to be read-only during the event
 # It can be edited manually
-known_handles = ConfigObj('known_handles.conf')
+
 
 class PlayerSetupInfo(object):
 	def __init__(
@@ -52,6 +52,7 @@ def remove_examples(entries : List[str]):
 			yield entry
 
 def add_known_handle(handle_id : str):
+	known_handles = ConfigObj('known_handles.conf')
 	if handle_id not in known_handles:
 		known_handles[handle_id] = PlayerSetupInfo(handle_id).to_string()
 		known_handles.write()
@@ -59,18 +60,13 @@ def add_known_handle(handle_id : str):
 		print(f'Trying to edit player setup info for a handle that is already in the database. Please edit the file manually instead.')
 
 def read_player_setup_info(handle_id : str):
+	known_handles = ConfigObj('known_handles.conf')
 	if handle_id in known_handles:
 		return PlayerSetupInfo.from_string(known_handles[handle_id])
 
 
-def reload_known_handles():
-	global known_handles
-	known_handles = ConfigObj('known_handles.conf')
-
-
 async def player_setup_for_new_handle(handle : Handle):
 	info = read_player_setup_info(handle.handle_id)
-	reload_known_handles()
 	if info is None:
 		return None
 	report = f'Loading known data for **{handle.handle_id}**...\n\n'
@@ -137,10 +133,8 @@ async def setup_groups(handle : Handle, group_names : List[str]):
 	return report
 
 async def setup_group_for_new_member(guild, group_name : str, actor_id : str):
-	print('Entered setup_group_for_new_member')
 	if groups.group_exists(group_name):
 		report = await groups.add_member_from_player_id(guild, group_name, actor_id)
-		print(report)
 	else:
 		await groups.create_new_group(guild, group_name, [actor_id])
 
@@ -152,11 +146,11 @@ async def setup_owned_shops(handle : Handle, shop_names : List[str]):
 	any_found = False
 	guild = server.get_guild()
 	for shop_name in remove_examples(shop_names):
-		shop : Shop = await setup_new_shop_for_owner(guild, shop_name, handle)
+		shop : Shop = await setup_shop_for_member(guild, shop_name, handle, True)
 		if shop is None:
 			report += f'- Failed to connect to shop **{shop_name}**. Most likely the player data entry for {handle.actor_id} is corrupt.\n\n'
 		elif shop.owner_id != handle.actor_id:
-			report += f'- Connected to shop **{shop_name}**. Failed to set {handle.actor_id} as owner because the shop already existed.\n\n'
+			report += f'- Connected to shop **{shop_name}**. Failed to set {handle.actor_id} as owner.\n\n'
 		else:
 			any_found = True
 			report += f'- Connected to shop **{shop.name}** owned by {handle.actor_id}.\n'
@@ -171,13 +165,13 @@ async def setup_owned_shops(handle : Handle, shop_names : List[str]):
 	return report
 
 
-async def setup_new_shop_for_owner(guild, shop_name : str, handle : Handle):
+async def setup_shop_for_member(guild, shop_name : str, handle : Handle, is_owner : bool):
 	if shops.shop_exists(shop_name):
 		shop : Shop = shops.read_shop(shop_name)
-		await shops.employ(guild, handle, shop)
+		await shops.employ(guild, handle, shop, is_owner=is_owner)
 		return shop
 	else:
-		result : ActionResult = await shops.create_shop(guild, shop_name, handle.actor_id)
+		result : ActionResult = await shops.create_shop(guild, shop_name, handle.actor_id, is_owner=is_owner)
 		if result.success:
 			return shops.read_shop(shop_name)
 		else:
@@ -189,9 +183,9 @@ async def setup_employed_shops(handle : Handle, shop_names : List[str]):
 	guild = server.get_guild()
 	for shop_name in remove_examples(shop_names):
 		any_found = True
-		shop : Shop = await setup_shop_for_new_member(guild, shop_name, handle)
+		shop : Shop = await setup_shop_for_member(guild, shop_name, handle, False)
 		if shop is None:
-			report += f'- Failed to connect to shop **{shop_name}**. Please ask shop owner for assistance once they have finished their setup.'
+			report += f'- Failed to connect to shop **{shop_name}**. Please ask admin for assistance.'
 		else:
 			report += f'- Connected to shop **{shop.name}** as an employee.\n'
 			report += f'  Public storefront: {channels.clickable_channel_id_ref(shop.storefront_channel_id)}.\n'
@@ -202,12 +196,3 @@ async def setup_employed_shops(handle : Handle, shop_names : List[str]):
 	if any_found:
 		report += '  Keep in mind that you can access your shops using all your handles.\n\n'
 	return report
-
-
-async def setup_shop_for_new_member(guild, shop_name : str, handle : Handle):
-	if shops.shop_exists(shop_name):
-		shop : Shop = shops.read_shop(shop_name)
-		await shops.employ(guild, handle, shop)
-		return shop
-
-

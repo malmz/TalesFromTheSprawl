@@ -136,7 +136,7 @@ class EmployeeCog(commands.Cog, name='employee'):
 		if not channels.is_cmd_line(ctx.channel.name):
 			await server.swallow(ctx.message);
 			return
-		result = ActionResult = await create_shop(ctx.guild, shop_name, player_id)
+		result : ActionResult = await create_shop(ctx.guild, shop_name, player_id, is_owner=True)
 		if result.report is not None:
 			await ctx.send(result.report)
 
@@ -382,10 +382,10 @@ class Shop(object):
 		self,
 		name : str,
 		actor_id : str,
-		owner_id : str,
 		storefront_channel_id : str,
 		order_flow_channel_id : str,
-		employees : List[str] = None):
+		employees : List[str] = None,
+		owner_id : str = None):
 		self.name = name
 		self.owner_id = owner_id
 		self.shop_id = actor_id
@@ -397,7 +397,7 @@ class Shop(object):
 
 	@staticmethod
 	def from_string(string : str):
-		obj = Shop(None, None, None, None, None)
+		obj = Shop(None, None, None, None)
 		obj.__dict__ = simplejson.loads(string)
 		return obj
 
@@ -1003,25 +1003,12 @@ async def clear_order_data(shop_name : str):
 
 ### Creating a new shop:
 
-async def create_shop(guild, shop_name : str, owner_handle_id : str):
+async def create_shop(guild, shop_name : str, handle_id : str, is_owner : bool=False):
 	result = ActionResult()
 	if shop_name is None:
 		result.report = 'Error: must give a shop name.'
 		return result
-	if owner_handle_id is None:
-		result.report = f'Error: must give the handle or player_id of owner; use \".create_shop {shop_name} <owner>\".'
-		return result
 
-	handle : Handle = handles.get_handle(owner_handle_id)
-	if handle.handle_type == HandleTypes.Unused:
-		result.report = f'Error: handle {owner_handle_id} does not exist.'
-		return result
-	owner_player_id = handle.actor_id
-
-	member = await server.get_member_from_nick(owner_player_id)
-	if not players.player_exists(owner_player_id) or member is None:
-		result.report = f'Error: handle {owner_handle_id} is not owned by a player, or the player does not conform to the server nick scheme.'
-		return result
 	if shop_exists(shop_name):
 		existing_shop = read_shop(shop_name)
 		if existing_shop.name == shop_name:
@@ -1044,14 +1031,32 @@ async def create_shop(guild, shop_name : str, owner_handle_id : str):
 	store_order_flow_channel_mapping(order_flow_channel_id, shop_name)
 
 	# TODO: send welcome message in order_flow_channel
-	shop = Shop(shop_name, actor.actor_id, owner_player_id, storefront_channel_id, order_flow_channel_id)
+
+	if handle_id is None:
+		player_id = None
+	else:
+		handle : Handle = handles.get_handle(handle_id)
+		if handle.handle_type == HandleTypes.Unused:
+			result.report = f'Error: handle {handle_id} does not exist.'
+			return result
+		player_id = handle.actor_id
+
+	shop = Shop(shop_name, actor.actor_id, storefront_channel_id, order_flow_channel_id)
 	store_shop(shop)
 	await clear_shop_contents(shop.shop_id)
-	report = f'Created shop **{shop.name}**, run by {handle.handle_id} (player ID {handle.actor_id})'
 
-	result = await employ(guild, handle, shop)
-	if result.success:
-		result.report = report + '\n' + result.report
+	if player_id is not None:
+		if is_owner:
+			report = f'Created shop **{shop.name}**, run by {handle.handle_id} (player ID {handle.actor_id}).'
+		else:
+			report = f'Created shop **{shop.name}**, currently has no owner.'
+		result = await employ(guild, handle, shop, is_owner=is_owner)
+		if result.success:
+			result.report = report + '\n' + result.report
+	else:
+		result.report = f'Created shop **{shop.name}**, currently with no owner and no employees.'
+		result.success = True
+
 	return result
 
 
@@ -1095,7 +1100,7 @@ def find_shop_for_command(user_id : str, shop_name : str, must_be_owner : bool=F
 
 # Employees:
 
-async def employ(guild, handle : Handle, shop : Shop):
+async def employ(guild, handle : Handle, shop : Shop, is_owner : bool=False):
 	result = ActionResult()
 	player_id = handle.actor_id
 
@@ -1113,6 +1118,8 @@ async def employ(guild, handle : Handle, shop : Shop):
 
 	players.add_shop(player_id, shop.shop_id)
 	shop.employees.append(player_id)
+	if is_owner:
+		shop.owner_id = player_id
 	store_shop(shop)
 	result.report = (f'Added {handle.handle_id} as an employee at {shop.name}. '
 		+ 'They now have access to the shop\'s finances, chat and order channels, and can edit the product catalogue.')
