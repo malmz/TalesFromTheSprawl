@@ -161,7 +161,9 @@ async def setup_owned_shops(handle : Handle, shop_names : List[str]):
 			report += f'  Business chat hub: {channels.clickable_channel_id_ref(shop_actor.chat_channel_id)}.\n'
 	if any_found:
 		report += ('  As owner of a shop, you may need to grant your employees access:\n'
-			+ '> .employ <handle>\n\n')
+			+ '> .employ <handle>\n'
+			+ f'  Note: you will be seen as {handle.handle_id} by customers unless you change it with \".set_tips\"!\n\n'
+			)
 	return report
 
 
@@ -194,5 +196,6 @@ async def setup_employed_shops(handle : Handle, shop_names : List[str]):
 			report += f'  Financial status: {channels.clickable_channel_id_ref(shop_actor.finance_channel_id)}.\n'
 			report += f'  Business chat hub: {channels.clickable_channel_id_ref(shop_actor.chat_channel_id)}.\n'
 	if any_found:
-		report += '  Keep in mind that you can access your shops using all your handles.\n\n'
+		report += '  Keep in mind that you can access your shops using all your handles.\n'
+		report += f'  Note: you will be seen as {handle.handle_id} by customers unless you change it with \".set_tips\"!\n\n'
 	return report

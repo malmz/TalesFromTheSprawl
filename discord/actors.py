@@ -300,6 +300,7 @@ async def write_financial_record(transaction : Transaction, payer_record : str=N
 
 
 async def send_financial_record_for_actor(actor_id : str, record : str, last_in_sequence):
+	print(f'Executing send_record_task for {actor_id}, record= \"{record}\", last_in_sequence= {last_in_sequence}')
 	if record is not None:
 		actor = read_actor(actor_id)
 		if actor is None:

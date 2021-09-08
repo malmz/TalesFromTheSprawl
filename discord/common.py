@@ -1,8 +1,10 @@
 import re
+import emoji
 
 highest_ever_index = '___highest_ever'
 system_role_name = 'system'
 admin_role_name = 'admin'
+
 
 
 
@@ -38,6 +40,12 @@ emoji_alert = '❗'
 emoji_unavail = '🚫'
 emoji_unread = '💬'
 
+number_emojis = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟']
+
+def letter_emoji(letter : str):
+	initial = letter.lower()[0]
+	string = f':regional_indicator_{initial}:'
+	return emoji.emojize(string, use_aliases=True)
 
 
 # channels

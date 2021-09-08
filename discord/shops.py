@@ -23,7 +23,7 @@ import actors
 import finances
 import server
 
-from common import coin, emoji_unavail, shop_role_start, highest_ever_index, emoji_alert, emoji_accept
+from common import coin, emoji_unavail, shop_role_start, highest_ever_index, emoji_alert, emoji_accept, number_emojis
 from custom_types import Transaction, TransTypes, ActionResult, Handle, HandleTypes, PostTimestamp
 
 
@@ -46,7 +46,6 @@ class ShoppingCog(commands.Cog, name='shopping'):
 
 	# Commands related to ordering
 	# These only work in cmd_line channels
-
 
 	@commands.command(
 		name='order',
@@ -113,6 +112,18 @@ class ShoppingCog(commands.Cog, name='shopping'):
 		if report is not None:
 			await ctx.send(report)
 
+	@commands.command(
+		name='clear_all_shops',
+		help='Admin-only: delete all shops.',
+		hidden=True)
+	@commands.has_role('gm')
+	async def clear_shops_command(self, ctx):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await server.swallow(ctx.message);
+			return
+		await init(ctx.guild, clear_all=True)
+		await ctx.send('Done.')
+
 
 
 class EmployeeCog(commands.Cog, name='employee'):
@@ -125,7 +136,6 @@ class EmployeeCog(commands.Cog, name='employee'):
 
 	# Commands related to managing a shop
 	# These only work in cmd_line channels
-
 
 	@commands.command(
 		name='create_shop',
@@ -316,16 +326,20 @@ class EmployeeCog(commands.Cog, name='employee'):
 		await self.publish_menu_command(ctx, shop_name=shop_name)
 
 	@commands.command(
-		name='clear_all_shops',
-		help='Admin-only: delete all shops.',
-		hidden=True)
-	@commands.has_role('gm')
-	async def clear_shops_command(self, ctx):
+		name='set_tips',
+		help=(
+			'Set the handle that is shown in the storefront and gets your tips.\n' +
+			'If you just do \".set_tips\" without any handle, you will not be shown in the storefront at all.\n' +
+			'Note: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
+			)
+		)
+	async def set_tips_command(self, ctx, handle_id : str=None, shop_name : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
 			await server.swallow(ctx.message);
 			return
-		await init(ctx.guild, clear_all=True)
-		await ctx.send('Done.')
+		report = await set_tips_for_user(str(ctx.message.author.id), handle_id, shop_name)
+		if report is not None:
+			await ctx.send(report)
 
 def setup(bot):
 	bot.add_cog(ShoppingCog(bot))
@@ -377,6 +391,25 @@ max_table_number = 10
 
 ### Classes, init and utilities:
 
+class Employee(object):
+	def __init__(
+		self,
+		player_id : str,
+		handle_for_tips : str = None,
+		emoji : str = None):
+		self.player_id = player_id
+		self.handle_for_tips = handle_for_tips
+		self.emoji = emoji
+
+	@staticmethod
+	def from_string(string : str):
+		obj = Employee(None)
+		obj.__dict__ = simplejson.loads(string)
+		return obj
+
+	def to_string(self):
+		return simplejson.dumps(self.__dict__)
+
 class Shop(object):
 	def __init__(
 		self,
@@ -384,7 +417,7 @@ class Shop(object):
 		actor_id : str,
 		storefront_channel_id : str,
 		order_flow_channel_id : str,
-		employees : List[str] = None,
+		employees : List[Employee] = None,
 		owner_id : str = None):
 		self.name = name
 		self.owner_id = owner_id
@@ -398,17 +431,71 @@ class Shop(object):
 	@staticmethod
 	def from_string(string : str):
 		obj = Shop(None, None, None, None)
-		obj.__dict__ = simplejson.loads(string)
+		loaded_dict = simplejson.loads(string)
+		obj.__dict__ = loaded_dict
+		for i, employee_str in enumerate(loaded_dict['employees']):
+			obj.employees[i] = Employee.from_string(employee_str)
 		return obj
 
 	def to_string(self):
-		return simplejson.dumps(self.__dict__)
+		dict_to_save = deepcopy(self.__dict__)
+		list_of_employees = [step.to_string() for step in dict_to_save['employees']]
+		dict_to_save['employees'] = list_of_employees
+		return simplejson.dumps(dict_to_save)
+
+	def get_employee_ids(self):
+		for employee in self.employees:
+			yield employee.player_id
+
+	def edit_tips_handle(self, player_id : str, handle_id : str):
+		# Note: handle_id can be None, it is valid
+		for employee in self.employees:
+			if employee.player_id == player_id:
+				employee.handle_for_tips = handle_id
+				return True
+		return False
+
+	# TODO: store the mapping separately for the shop
+	# TODO: store the shop.to_string() in a separate file for each shop
+	def generate_tips_list(self):
+		initials = []
+		# Loop to check for initialism duplicates
+		use_initials = True
+		for employee in self.employees:
+			if employee.handle_for_tips is not None:
+				initial = employee.handle_for_tips[0]
+				if initial in initials:
+					use_initials = False
+				initials.append(initial)
+		# second loop to actually allocate emojis and construct the map
+		tips_tuples = []
+		index = 1
+		for employee in self.employees:
+			if employee.handle_for_tips is not None:
+				emoji = (
+					common.letter_emoji(employee.handle_for_tips)
+					if use_initials
+					else number_emojis[index]
+					)
+				tips_tuples.append((employee.handle_for_tips, emoji))
+				employee.emoji = emoji
+				if not use_initials:
+					index += 1
+					if index == len(number_emojis):
+						print(
+							f'Warning: shop {self.name} has too many employees, ' +
+							f'all cannot be showed in the tipping menu. Including the first {index}.'
+							)
+						break
+		store_shop(self)
+		return tips_tuples
+
+
 
 class FindShopResult(object):
 	def __init__(self, shop : Shop=None, error_report : str=None):
 		self.shop = shop
 		self.error_report = error_report
-
 
 class Product(object):
 	def __init__(
@@ -597,7 +684,7 @@ async def init(guild, clear_all=False):
 	if clear_all:
 		for shop_id in get_all_shop_ids():
 			shop : Shop = read_shop(shop_id)
-			for player_id in shop.employees:
+			for player_id in shop.get_employee_ids():
 				players.remove_shop(player_id, shop.shop_id)
 			await actors.clear_actor(guild, shop_id)
 			await clear_shop_contents(shop_id)
@@ -645,6 +732,8 @@ async def reinitialize(user_id : str, shop_name : str):
 	clear_order_semaphores_for_shop(shop.shop_id)
 	return 'Done.'
 
+
+# TODO: move all this into class Shop
 
 def get_next_shop_actor_index():
 	shops = get_shops_configobj()
@@ -758,6 +847,7 @@ def clear_catalogue(shop_name : str):
 storefront_suffix = '_storefront.conf'
 msg_mapping_index = '___storefront_msg_mappings'
 delivery_choice_msg_index = '___del_choice_msg'
+tipping_msg_index = '___tipping_msg'
 
 def get_storefront(shop_name : str):
 	shop_id = shop_name.lower()
@@ -804,12 +894,28 @@ def store_delivery_choice_message(shop_name : str, msg_id : str):
 		storefront[msg_mapping_index][msg_id] = action.to_string()
 		storefront.write()
 
+def get_tipping_message(shop_name : str):
+	if shop_exists(shop_name):
+		storefront = get_storefront(shop_name)
+		if tipping_msg_index in storefront:
+			return storefront[tipping_msg_index]
+
+def store_tipping_message(shop_name : str, msg_id : str):
+	if shop_exists(shop_name):
+		storefront = get_storefront(shop_name)
+		storefront[tipping_msg_index] = msg_id
+		action = StorefrontAction(StorefrontActionTypes.Tip)
+		storefront[msg_mapping_index][msg_id] = action.to_string()
+		storefront.write()
+
 def clear_storefront(shop_name : str):
 	if shop_exists(shop_name):
 		storefront = get_storefront(shop_name)
 		storefront[msg_mapping_index] = {}
 		if delivery_choice_msg_index in storefront:
 			del storefront[delivery_choice_msg_index]
+		if tipping_msg_index in storefront:
+			del storefront[tipping_msg_index]
 		storefront.write()
 
 
@@ -1107,24 +1213,21 @@ async def employ(guild, handle : Handle, shop : Shop, is_owner : bool=False):
 	result = ActionResult()
 	player_id = handle.actor_id
 
-
 	# TODO: encapsulate this in a "make player member of shop" method in players.py
 	member = await server.get_member_from_nick(player_id)
 	if not players.player_exists(player_id) or member is None:
 		result.report = f'Error: handle {handle.handle_id} is not owned by a person, or they don\'t conform to the server nick scheme.'
 		return result
 
-	if player_id in shop.employees:
+	if player_id in shop.get_employee_ids():
 		result.report = f'Error: {handle.handle_id} is controlled by {player_id} who already works at {shop.shop_id}.'
 		return result
 
 	role = actors.get_actor_role(guild, shop.shop_id)
 	await server.give_member_role(member, role)
 
-
-
 	players.add_shop(player_id, shop.shop_id)
-	shop.employees.append(player_id)
+	shop.employees.append(Employee(player_id, handle_for_tips=handle.handle_id))
 	if is_owner:
 		shop.owner_id = player_id
 	store_shop(shop)
@@ -1173,7 +1276,7 @@ async def remove_employee(shop : Shop, player_id : str, handle_id : str=None):
 		else:
 			return f'Error: handle {handle_id} is not owned by a person, or they don\'t conform to the server nick scheme.'
 
-	if player_id not in shop.employees:
+	if player_id not in shop.get_employee_ids():
 		initiator_id = handle_id if handle_id is not None else player_id
 		return f'Error: {initiator_id} does not work at {shop.name}.'
 	if player_id == shop.owner_id:
@@ -1189,7 +1292,7 @@ async def remove_employee(shop : Shop, player_id : str, handle_id : str=None):
 	# Update the shop's record:
 	players.remove_shop(player_id, shop.shop_id)
 	# Update the player's record:
-	shop.employees = [e for e in shop.employees if e != player_id]
+	shop.employees = [e for e in shop.employees if e.player_id != player_id]
 
 	store_shop(shop)
 
@@ -1216,6 +1319,30 @@ async def remove_employee_player(player_id : str, shop_name : str):
 		return
 	shop : Shop = read_shop(shop_name)
 	await remove_employee(shop, player_id)
+
+
+async def set_tips_for_user(user_id : str, handle_id : str, shop_name : str):
+	result : FindShopResult = await find_shop_for_command(user_id, shop_name)
+	if result.error_report is not None or result.shop is None:
+		return result.error_report
+	shop : Shop = result.shop
+
+	player_id = players.get_player_id(user_id)
+
+	if handle_id is not None:
+		handle : Handle = handles.get_handle(handle_id)
+		if handle.handle_type == HandleTypes.Unused:
+			return f'Error: handle {handle_id} does not exist.'
+		if player_id != handle.actor_id:
+			return f'Error: you do not control handle {handle_id}.'
+
+	if shop.edit_tips_handle(player_id, handle_id):
+		store_shop(shop)
+		return f'Done.'
+	else:
+		return f'Error: could not update tip handle for {player_id} because they do not work at {shop.name}.'
+
+
 
 
 ## Adding and editing products for a shop
@@ -1275,9 +1402,7 @@ async def remove_product(user_id : str, product_name : str, shop_name : str):
 	product.available = False
 	product.in_stock = False
 	channel = channels.get_discord_channel(shop.storefront_channel_id)
-	msg_id = await update_catalogue_item_message(shop, channel, product)
-	if msg_id is not None:
-		raise RuntimeError(f'Error: tried to remove product but it was still published, dump: {product.to_string()}')
+	await update_catalogue_item_message(shop, channel, product)
 
 	# Then, remove it completely from database:
 	delete_product(shop.shop_id, product.product_id)
@@ -1355,31 +1480,18 @@ async def update_storefront(user_id : str, shop_name : str):
 
 	channel = channels.get_discord_channel(shop.storefront_channel_id)
 
-	msg_id = await update_storefront_delivery_choice_message(shop, channel)
-	if msg_id is None:
-		raise RuntimeError(f'Error: failed to find the delivery choice message in storefront, dump: {shop.to_string()}')
-	else:
-		store_delivery_choice_message(shop.shop_id, msg_id)
+	await update_storefront_delivery_choice_message(shop, channel)
 
 	for product in get_all_products(shop.shop_id):
-		msg_id = await update_catalogue_item_message(shop, channel, product)
-		if msg_id is None:
-			if product.available:
-				raise RuntimeError(f'Error: failed to publish product, dump: {product.to_string()}')
-			else:
-				# Listing has been removed for non-available item, no issue here
-				pass
-		else:
-			action = StorefrontAction(StorefrontActionTypes.Order, data=product.product_id)
-			store_storefront_msg_mapping(shop.shop_id, msg_id, action)
-		product.storefront_msg_id = msg_id
-		store_product(shop.shop_id, product)
+		await update_catalogue_item_message(shop, channel, product)
+
+	await update_storefront_tipping_message(shop, channel)
+
 	return 'Done.'
 
 
 # Delivery choice message: a welcome message that allows customers to choose where to get their order delivered
 
-table_number_emojis = ['0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟']
 bar_emoji = '🍸'
 call_emoji = '📣'
 
@@ -1387,7 +1499,7 @@ async def update_storefront_delivery_choice_message(shop : Shop, channel):
 	# TODO: track whether this shop is actually a restaurant, and otherwise edit this message
 	content = (
 		f'Please select your table using the buttons:\n' +
-		f'{table_number_emojis[0]}–{table_number_emojis[max_table_number]}: serve at this table number\n' +
+		f'{number_emojis[0]}–{number_emojis[max_table_number]}: serve at this table number\n' +
 		f'{bar_emoji}: serve at the bar\n' +
 		f'{call_emoji}: call out my current handle when the order is ready (note: you need to click this again if you switch handle)'
 		)
@@ -1411,11 +1523,14 @@ async def update_storefront_delivery_choice_message(shop : Shop, channel):
 			f'{common.hard_space}\n' +
 			'Use the buttons below to order! If you make a mistake, you can cancel the order from your **finance** channel (if you\'re fast enough).\n' +
 			f'{common.hard_space}')
-	await add_delivery_choice_reactions(message, max_table_number)
-	return str(message.id)
+	if message is None:
+		raise RuntimeError(f'Error: failed to find the delivery choice message in storefront, dump: {shop.to_string()}')
+	else:
+		await add_delivery_choice_reactions(message, max_table_number)
+		store_delivery_choice_message(shop.shop_id, str(message.id))
 
 async def add_delivery_choice_reactions(message, max_tables : int):
-	for e in table_number_emojis[:(max_tables+1)]:
+	for e in number_emojis[:(max_tables+1)]:
 		await message.add_reaction(e)
 	await message.add_reaction(bar_emoji)
 	await message.add_reaction(call_emoji)
@@ -1433,16 +1548,7 @@ async def post_catalogue_item(user_id : str, product_name : str, shop_name : str
 		return f'Error: there is no product called {product_name} at {shop.shop_id}'
 
 	channel = channels.get_discord_channel(shop.storefront_channel_id)
-	msg_id = await update_catalogue_item_message(shop, channel, product)
-	if msg_id is None:
-		if product.available:
-			raise RuntimeError(f'Error: failed to publish product, dump: {product.to_string()}')
-		else:
-			# Listing has been removed for non-available item, no issue here
-			pass
-	else:
-		action = StorefrontAction(StorefrontActionTypes.Order, data=product.product_id)
-		store_storefront_msg_mapping(shop.shop_id, msg_id, action)
+	await update_catalogue_item_message(shop, channel, product)
 
 
 async def update_catalogue_item_message(shop : Shop, channel, product : Product):
@@ -1456,10 +1562,10 @@ async def update_catalogue_item_message(shop : Shop, channel, product : Product)
 				# Reference to a message in storefront that is no longer available
 				# Doesn't matter since the product should not be available anyway
 				pass
-		return None
+		return
 
-	# Since product is set to available, we need to either post the message or
-	# edit the existing one to updated description
+	# If we get here, the product is set to available, so we need to
+	# either post the message or edit the existing one to updated description
 	content = generate_catalogue_item_message(product)
 	previous_msg = product.storefront_msg_id
 	if previous_msg is not None:
@@ -1480,9 +1586,16 @@ async def update_catalogue_item_message(shop : Shop, channel, product : Product)
 		# There is no previous message to update so we must send a new one
 		message = await channel.send(content)
 
-	if product.in_stock:
-		await message.add_reaction(product.emoji)
-	return str(message.id)
+	if message is not None:
+		product.storefront_msg_id = str(message.id)
+		if product.in_stock:
+			await message.add_reaction(product.emoji)
+		action = StorefrontAction(StorefrontActionTypes.Order, data=product.product_id)
+		store_storefront_msg_mapping(shop.shop_id, product.storefront_msg_id, action)
+		store_product(shop.shop_id, product)
+	else:
+		raise RuntimeError(f'Error: failed to publish product, dump: {product.to_string()}')
+
 
 async def edit_catalogue_item_message(channel, product):
 	content = generate_catalogue_item_message(product)
@@ -1502,13 +1615,50 @@ def generate_catalogue_item_message(product):
 	return post
 
 
+# The tipping message: reactions here will transfer some money to the staff
+
+async def update_storefront_tipping_message(shop : Shop, channel):
+	prev_msg_id = get_tipping_message(shop.shop_id)
+	# The tipping message is at the bottom of the channel, so it needs to be re-posted every time to ensure the correct order
+	#if msg_id is not None: #If there is no tipping data recorded, no need to do anything.
+	#	store_tipping_message(shop.shop_id, msg_id)
+	if prev_msg_id is not None:
+		# Delete the previous message
+		delete_storefront_msg_mapping(shop.shop_id, prev_msg_id)
+		try:
+			message = await channel.fetch_message(prev_msg_id)
+			await message.delete()
+		except discord.errors.NotFound:
+			pass
+
+	tipping_tuples = shop.generate_tips_list()
+	if len(tipping_tuples) > 0:
+		content = 'Don\'t forget to tip the servers and staff! Working right now:\n'
+		for (handle_id, emoji) in tipping_tuples:
+			content += f'{emoji}: **{handle_id}**\n'
+		content += f'One reaction = **{coin} 1**!'
+		message = await channel.send(content)
+		if message is not None:
+			store_tipping_message(shop.shop_id, str(message.id))
+			for (_, emoji) in tipping_tuples:
+				print(f'Adding reaction: {emoji}')
+				await message.add_reaction(emoji)
+		else:
+			raise RuntimeError(f'Failed to post tipping message for shop, dump: {shop.to_string()}')
+	else:
+		# No employees with valid tipping handles -> no action
+		pass
+
+
+	
+
 
 
 
 
 ### Reactions:
 
-### Reaction in storefront: select table, order a product (other functionality to be implemented)
+### Reaction in storefront: select table, order a product, give a tip
 
 async def process_reaction_in_storefront(message, user_id : str, emoji : str):
 	result = ActionResult()
@@ -1522,7 +1672,9 @@ async def process_reaction_in_storefront(message, user_id : str, emoji : str):
 		return result
 
 	action : StorefrontAction = read_storefront_msg_mapping(shop.shop_id, str(message.id))
-	if action.action_type == StorefrontActionTypes.Order:
+	if action is None:
+		result.report = f'Error: tried to process {emoji} but could not map message id {message.id} to any action.'
+	elif action.action_type == StorefrontActionTypes.Order:
 		product_id = action.data
 		if product_id is None:
 			result.report = f'Error: tried to order {emoji} from {shop.name} but could not map the message to a product.'
@@ -1532,7 +1684,7 @@ async def process_reaction_in_storefront(message, user_id : str, emoji : str):
 			result.report = f'Error: cannot find product {product_id} at shop {shop.name}.'
 			return result
 		if product.emoji != emoji:
-			# TODO: add a reaction an employee can use to mark an item as out of stock
+			# TODO: add a reaction an employee can use to mark an item as out qof stock
 			# Wrong reaction -- silently ignore it.
 			return result
 
@@ -1541,14 +1693,14 @@ async def process_reaction_in_storefront(message, user_id : str, emoji : str):
 
 		result = await order_product(shop, product, buyer_handle)
 	elif action.action_type == StorefrontActionTypes.SetDeliveryOption:
-		player_id = players.get_player_id(user_id, expect_to_find=True)		
+		player_id = players.get_player_id(user_id, expect_to_find=True)
 		result = set_delivery_table_from_reaction(shop, player_id, emoji)
+	elif action.action_type == StorefrontActionTypes.Tip:
+		player_id = players.get_player_id(user_id, expect_to_find=True)
+		result = await tip_staff_from_reaction(shop, player_id, emoji)
 	else: # TODO: implement other action types
 		result.report = f'Error: unsupported operation {action.action_type}.'
 	return result
-
-# TODO: a message in storefront, where you can use reactions to tip the servers
-
 
 
 ### Reaction in order_flow: will update orders
@@ -1977,7 +2129,27 @@ async def execute_refund_in_order_flow(shop : Shop, refund : Transaction, order 
 		store_active_order(shop.shop_id, order)
 
 
+### Tipping staff
 
+async def tip_staff_from_reaction(shop : Shop, player_id : str, emoji : str):
+	result = ActionResult()
+
+	for employee in shop.employees:
+		if employee.emoji == emoji:
+			transaction = await finances.try_to_pay_from_actor(
+				player_id,
+				employee.handle_for_tips,
+				amount=1,
+				from_reaction=True
+				)
+			result.success = transaction.success
+			if transaction.report != None:
+				result.report = transaction.report
+			break
+	# If we do not find the employee, we just fail silently.
+	# Most likely reason is that someone has added a reaction that does not correspond to any employee,
+	# and we don't want any alerts from that.
+	return result
 
 
 ### Delivery IDs -- where a player's order is to be delivered e.g. a table number
@@ -2014,8 +2186,8 @@ def set_delivery_table_from_command(user_id : str, option :str, shop_name : str)
 
 def set_delivery_table_from_reaction(shop : Shop, player_id : str, emoji : str):
 	result = ActionResult()
-	if emoji in table_number_emojis:
-		e_dict = dict(zip(table_number_emojis, range(len(table_number_emojis))))
+	if emoji in number_emojis:
+		e_dict = dict(zip(number_emojis, range(len(number_emojis))))
 		option = str(e_dict[emoji])
 	elif emoji == bar_emoji:
 		option = 'bar'
