@@ -25,12 +25,91 @@ import players
 import handles
 
 from common import emoji_alert, emoji_accept, group_role_start, highest_ever_index
-from custom_types import ActionResult, Group, Handle, HandleTypes
+from custom_types import ActionResult, Handle, HandleTypes
+
 
 
 groups_conf_dir = 'groups'
-groups = ConfigObj(f'{groups_conf_dir}/groups.conf')
-groups_input = ConfigObj('groups_input.conf')
+groups_file_name = groups_conf_dir + '/groups.conf'
+
+class Group(object):
+	def __init__(
+		self,
+		group_index : str,
+		group_id : str,
+		main_channel_id : str,
+		members : List[str] = None # player_ids
+		):
+		self.group_index = group_index
+		self.group_id = group_id
+		self.members = [] if members is None else members
+		self.main_channel_id = main_channel_id
+
+	@staticmethod
+	def from_string(string : str):
+		obj = Group(None, None, None)
+		obj.__dict__ = simplejson.loads(string)
+		return obj
+
+	def to_string(self):
+		return simplejson.dumps(self.__dict__)
+
+	def store(self):
+		groups = ConfigObj(groups_file_name)
+		groups[self.group_id] = self.to_string()
+		groups.write()
+
+	async def add_member(self, member, player_id : str):
+		self.members.append(player_id)
+		self.store()
+
+		players.add_group(player_id, self.group_id)
+
+		role = self.get_role()
+		if role is not None:
+			await server.give_member_role(member, role)
+		else:
+			print(f'Error: could not find the role belonging to group {self.group_id}')
+
+	async def remove_member(self, player_id : str):
+		self.members = [m for m in self.members if m != player_id]
+		self.store()
+
+		member = await server.get_member_from_nick(player_id)
+		if member is None:
+			return f'Error: actor {player_id} is not a player, or does not follow the server nick scheme.'
+
+		
+		role = self.get_role()
+		await server.remove_role_from_member(member, role)
+
+	def get_role(self):
+		guild = server.get_guild()
+		return discord.utils.find(lambda role: role.name == self.group_index, guild.roles)
+
+	@staticmethod
+	def exists(group_name : str):
+		if group_name is not None:
+			groups = ConfigObj(groups_file_name)
+			return group_name.lower() in groups
+
+	@staticmethod
+	def read(group_name : str):
+		if group_name is not None:
+			group_id = group_name.lower()
+			if group_id in get_all_group_ids():
+				groups = ConfigObj(groups_file_name)
+				return Group.from_string(groups[group_id])
+
+	@staticmethod
+	def get_next_index():
+		groups = ConfigObj(groups_file_name)
+		prev_highest = int(groups[highest_ever_index])
+		group_index = str(prev_highest + 1)
+		groups[highest_ever_index] = group_index
+		groups.write()
+		return group_index
+
 
 # Init and utils
 
@@ -43,16 +122,18 @@ async def init(guild, clear_all=False):
 		for group in get_all_groups():
 			# TODO: re-map stuff?
 			pass
+	groups = ConfigObj(groups_file_name)
 	if highest_ever_index not in groups or clear_all:
 		groups[highest_ever_index] = str(group_role_start)		
 		groups.write()	
 	await delete_all_group_roles(guild, spare_used=(not clear_all))
 
 async def clear_group(guild, group_id : str):
-	if group_exists(group_id):
-		group = read_group(group_id)
+	if Group.exists(group_id):
+		group = Group.read(group_id)
 		for player_id in group.members:
 			players.remove_group(player_id, group.group_id)
+		groups = ConfigObj(groups_file_name)
 		del groups[group_id]
 		groups.write()
 		await delete_all_group_roles(guild, spare_used=True)
@@ -72,46 +153,26 @@ async def delete_if_group_role(role, spare_used : bool):
 async def is_group_role(name :str):
 	return common.is_group_role(name)
 
-def get_group_role(guild, group_id : str):
-	group = read_group(group_id)
+def get_group_role(group_id : str):
+	group = Group.read(group_id)
 	if group is not None:
-		return discord.utils.find(lambda role: role.name == group.group_index, guild.roles)
+		return group.get_role()
 
 
 def get_all_groups():
 	for group_id in get_all_group_ids():
-		yield read_group(group_id)
+		yield Group.read(group_id)
 
 def get_all_group_ids():
+	groups = ConfigObj(groups_file_name)
 	for group_id in groups:
 		if group_id != highest_ever_index:
 			yield group_id
 
-def group_exists(group_name : str):
-	if group_name is not None:
-		return group_name.lower() in groups
-
-def store_group(group : Group):
-	groups[group.group_id] = group.to_string()
-	groups.write()
-
-def read_group(group_name : str):
-	if group_name is not None:
-		group_id = group_name.lower()
-		if group_id in get_all_group_ids():
-			return Group.from_string(groups[group_id])
-
-def get_next_group_index():
-	prev_highest = int(groups[highest_ever_index])
-	group_index = str(prev_highest + 1)
-	groups[highest_ever_index] = group_index
-	groups.write()
-	return group_index
-
 def get_main_channel(group_name : str):
 	if group_name is not None:
 		group_id = group_name.lower()
-		group : Group = read_group(group_id)
+		group : Group = Group.read(group_id)
 		if group is not None:
 			return channels.get_discord_channel(group.main_channel_id)
 
@@ -130,20 +191,25 @@ async def create_group_from_command(ctx, group_name : str):
 	else:
 		members = []
 		members_report = ''
-	if group_exists(group_name):
+	if Group.exists(group_name):
 		return f'Error: group {group_name} already exists, or its internal ID ({group_name.lower()}) would clash with existing group.'
 	group = await create_new_group(ctx.guild, group_name, initial_members=members)
 	return f'Created group \"{group.group_id}\".' + members_report
 
-async def create_new_group(guild, group_name : str, initial_members : List[str] = None):
+async def create_new_group(guild, group_name : str, initial_members : List[str] = None, has_channel : bool=True):
 	initial_members = [] if initial_members is None else initial_members
 	print(f'Creating new group {group_name} with players {initial_members}')
 	group_id = group_name.lower()
-	group_index = get_next_group_index()
+	group_index = Group.get_next_index()
 
 	# Create role for this group:
 	role = await guild.create_role(name=group_index)
-	channel = await channels.create_group_channel(guild, role, group_id)
+
+	# Create channel for the group:
+	channel_id = None
+	if has_channel:
+		channel = await channels.create_group_channel(guild, role, group_id)
+		channel_id = str(channel.id)
 
 	for player_id in initial_members:
 		players.add_group(player_id, group_id)
@@ -154,9 +220,9 @@ async def create_new_group(guild, group_name : str, initial_members : List[str] 
 	group = Group(
 		group_index=group_index,
 		group_id=group_id,
-		main_channel_id=str(channel.id),
+		main_channel_id=channel_id,
 		members=initial_members)
-	store_group(group)
+	group.store()
 	return group
 
 
@@ -173,20 +239,20 @@ async def add_member_from_handle(guild, group_id : str, handle_id : str):
 		return f'Error: actor {handle.actor_id} is not a player, or does not follow the server nick scheme.'
 	if group_id is None:
 		return f'Error: you must give a group name. Use \".add_member {handle_id} <group>\"'
-	group : Group = read_group(group_id)
+	group : Group = Group.read(group_id)
 	if group is None:
 		return f'Error: could not find group {group_id}.'
 
 	if handle.actor_id in group.members:
 		return f'Player {handle.actor_id} (owner of handle {handle.handle_id}) is already a member of {group.group_id}.'
 
-	error_report = await add_member(guild, group, member, handle.actor_id)
+	error_report = await group.add_member(member, handle.actor_id)
 	if error_report is None:
 		return f'Added {handle.handle_id} to group {group.group_id}.'
 	else:
 		return error_report
 
-async def add_member_from_player_id(guild, group_id : str, player_id : str):
+async def add_member_from_player_id(group_id : str, player_id : str):
 	if player_id is None:
 		return f'Error: you must give a player ID.'
 	member = await server.get_member_from_nick(player_id)
@@ -194,52 +260,31 @@ async def add_member_from_player_id(guild, group_id : str, player_id : str):
 		return f'Error: actor {player_id} is not a player, or does not follow the server nick scheme.'
 	if group_id is None:
 		return f'Error: you must give a group name.'
-	group : Group = read_group(group_id)
+	group : Group = Group.read(group_id)
 	if group is None:
 		return f'Error: could not find group {group_id}.'
 
 	if player_id in group.members:
 		return f'Player {player_id} is already a member of {group.group_id}.'
 
-	error_report = await add_member(guild, group, member, player_id)
+	error_report = await group.add_member(member, player_id)
 	if error_report is None:
 		return f'Added {player_id} to group {group.group_id}.'
 	else:
 		return error_report
 
-async def add_member(guild, group, member, player_id : str):
-	print(f'Adding {player_id} to {group.group_id}')
-	group.members.append(player_id)
-	store_group(group)
 
-	players.add_group(player_id, group.group_id)
-
-	role = get_group_role(guild, group.group_id)
-	if role is not None:
-		await server.give_member_role(member, role)
-	else:
-		print(f'Error: could not find the role belonging to group {group.group_id}')
-
-async def remove_member(group_id : str, player_id : str):
-	print(f'Trying to remove {player_id} from {group_id}')
-	group : Group = read_group(group_id)
+async def remove_member_from_player_id(group_id : str, player_id : str):
+	group : Group = Group.read(group_id)
 	if group is None:
 		return f'Error: could not find group {group_id}.'
-	group.members = [m for m in group.members if m != player_id]
-	store_group(group)
+	await group.remove_member(player_id)
 
-	member = await server.get_member_from_nick(player_id)
-	if member is None:
-		return f'Error: actor {player_id} is not a player, or does not follow the server nick scheme.'
-
-	guild = server.get_guild()
-	role = get_group_role(guild, group_id)
-	await server.remove_role_from_member(member, role)
 
 # Use groups
 
-async def give_group_access(guild, channel, group_id : str):
-	role = get_group_role(guild, group_id)
+async def give_group_access(channel, group_id : str):
+	role = get_group_role(group_id)
 	await server.give_role_access(channel, role)
 
 

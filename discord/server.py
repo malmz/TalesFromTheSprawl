@@ -56,7 +56,8 @@ async def give_role_access(channel, role):
 
 async def give_member_role(member, role):
 	new_roles = member.roles
-	new_roles.append(role)
+	if role not in member.roles:
+		new_roles.append(role)
 	await member.edit(roles=new_roles)
 
 async def remove_role_from_member(member, role):

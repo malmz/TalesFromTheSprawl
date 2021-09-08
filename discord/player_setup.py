@@ -11,6 +11,7 @@ import channels
 import server
 import finances
 import groups
+from groups import Group
 import shops
 import actors
 from shops import Shop
@@ -133,8 +134,8 @@ async def setup_groups(handle : Handle, group_names : List[str]):
 	return report
 
 async def setup_group_for_new_member(guild, group_name : str, actor_id : str):
-	if groups.group_exists(group_name):
-		report = await groups.add_member_from_player_id(guild, group_name, actor_id)
+	if Group.exists(group_name):
+		report = await groups.add_member_from_player_id(group_name, actor_id)
 	else:
 		await groups.create_new_group(guild, group_name, [actor_id])
 
