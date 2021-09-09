@@ -59,8 +59,6 @@ async def find_reaction_recipient_and_message(message_id : int, channel):
 	return result
 
 async def process_reaction_for_tipping(message_id : int, user_id : int, channel, emoji):
-	player_id = players.get_player_id(str(user_id))
-
 	# Currently only one use case for reading reactions, and that is for paying money
 	payment_amount = 0
 	emoji_str = str(emoji)
@@ -71,6 +69,7 @@ async def process_reaction_for_tipping(message_id : int, user_id : int, channel,
 		# If other reactions are implemented, perhaps this search will be relevant for all of them
 		search_result : ReactionRecipientSearchResult = await find_reaction_recipient_and_message(message_id, channel)
 
+		player_id = players.get_player_id(str(user_id))
 		transaction : custom_types.Transaction = await finances.try_to_pay_from_actor(
 			player_id,
 			search_result.recipient,
@@ -79,23 +78,26 @@ async def process_reaction_for_tipping(message_id : int, user_id : int, channel,
 		)
 		if not transaction.success:
 			await remove_reaction(search_result.message, emoji, user_id)
-		if transaction.report != None:
-			cmd_line_channel = players.get_cmd_line_channel(player_id)
-			await cmd_line_channel.send(transaction.report)
+		await send_report_to_cmd_line(str(user_id), transaction.report)
 
 async def process_reaction_in_chat_hub(message_id : int, user_id : int, channel, emoji):
 	message = await channel.fetch_message(message_id)
-	await chats.process_reaction_in_chat_hub(message, str(emoji))
+	report = await chats.process_reaction_in_chat_hub(message, str(emoji))
+	await send_report_to_cmd_line(str(user_id), report)
 
 async def process_reaction_in_storefront(message_id : int, user_id : int, channel, emoji):
 	message = await channel.fetch_message(message_id)
 	result : ActionResult = await shops.process_reaction_in_storefront(message, str(user_id), str(emoji))
-	if not result.success and result.report != None:
-		player_id = players.get_player_id(str(user_id))
-		cmd_line_channel = players.get_cmd_line_channel(player_id)
-		if cmd_line_channel is not None:
-			await cmd_line_channel.send(result.report)
+	if not result.success:
+		await send_report_to_cmd_line(str(user_id), result.report)
 
+async def send_report_to_cmd_line(user_id : str, report : str):
+	if report is not None:
+		player_id = players.get_player_id(str(user_id), expect_to_find=False)
+		if player_id is not None:
+			cmd_line_channel = players.get_cmd_line_channel(player_id)
+			if cmd_line_channel is not None:
+				await cmd_line_channel.send(report)	
 
 
 async def process_reaction_in_finance_channel(message_id : int, user_id : int, channel, emoji):

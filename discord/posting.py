@@ -47,13 +47,16 @@ def create_header(timestamp, sender : str, recip : str=None):
     timestamp_str = f'({post_timestamp.pretty_print(second=timestamp.second)})'
     return sender_info + double_hard_space + timestamp_str + ':\n'
 
-def create_post(message, sender : str, recip : str=None):
+def create_post(message, sender : str, recip : str=None, attachments_supported : bool =True):
     post = sanitize_bold(message.content)
-    if sender == None:
-        return post
-    else:
+    content = post
+    if sender is not None:
         header = create_header(message.created_at, sender, recip)
-        return header + post
+        content = header + content
+    if not attachments_supported and len(message.attachments) > 0:
+        for attachment in message.attachments:
+            content += f'\n*[unavailable file: {attachment.filename}]*'
+    return content
 
 # TODO: pass in "full_post : bool" instead of checking sender == None
 async def repost_message_to_channel(channel, message, sender : str, recip : str=None):

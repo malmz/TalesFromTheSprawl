@@ -312,8 +312,6 @@ def store_chat_connection_for_channel(channel_id : str, chat_connection : ChatCo
 	init_chats_confobj()
 	chats[chat_channel_data_index][channel_id] = chat_connection.to_string()
 	chats.write()
-	for entry in chats[chat_channel_data_index]:
-		print(f'Storing, entry= {entry}')
 
 def clear_channel_connection_mappings(channel_id):
 	init_chats_confobj()
@@ -540,10 +538,8 @@ async def create_2party_chat(my_handle : Handle, partner_handle_id : str):
 		report = (f'Created chat {chat_name}, but it is currently closed since you have too many chat sessions open. '
 			+ f'You can access the chat from {clickable_chat_hub}, if you close another chat first.')
 		return report
-	print(f'Created chat for me: {my_ui.chat_name}, {my_ui.channel.id}')
 	my_clickable_ref = channels.clickable_channel_ref(my_ui.channel)
 	partner_clickable_ref = channels.clickable_channel_ref(partner_ui.channel) if partner_ui.channel is not None else None
-	print(f'Created chat for partner: {partner_ui.chat_name}, {partner_ui.session_status}')
 
 	if not newly_created_chat:
 		report = f'Re-opened chat between {my_handle.handle_id} and {partner_handle.handle_id}: {my_clickable_ref}'
@@ -795,16 +791,14 @@ async def add_initial_reaction_chat_hub_msg(message, session_status : str):
 	await message.add_reaction(initial_emoji)
 
 async def process_reaction_in_chat_hub(message, emoji : str):
-	print(f'Got reaction: {message.id}, {message.content}, {emoji}')
-
 	await message.clear_reaction(emoji)
 
 	message_id = str(message.id)
 
 	chat_connection : ChatConnectionMapping = read_chat_connection_from_hub_msg(message_id)
 	if chat_connection == None:
-		print('Error: reacted to old message in chat hub, not connected to any active chat.')
-		return
+		# Error: reacted to old message in chat hub, not connected to any active chat.
+		return f'Error: reacted on msg {message_id} chat hub, but it was not connected to any existing chat.'
 
 	chat_state = get_chat_state(chat_connection.chat_name)
 	participant : ChatParticipant = read_participant(chat_state, chat_connection.handle)
@@ -822,6 +816,7 @@ async def process_reaction_in_chat_hub(message, emoji : str):
 		if not success:
 			warning = f'Cannot open {chat_connection.chat_name} -- you have too many open chats! Close one before opening another.'
 			await message.channel.send(content = warning, delete_after=6)
+	return None
 
 
 ### Closing chats
@@ -1024,7 +1019,6 @@ async def process_message(message):
 	sender_channel = message.channel
 	chat_channel_data : ChatConnectionMapping = read_chat_connection_from_channel(str(sender_channel.id))
 	if chat_channel_data is None:
-		print(f'Could not find channel mapping for channel {sender_channel.id}.')
 		return
 	poster_id = chat_channel_data.handle
 	chat_name = chat_channel_data.chat_name
@@ -1040,7 +1034,7 @@ async def process_message(message):
 	# Write to the persistent log:
 	# TODO: also add header if it is the first message after someone disconnected
 	poster_id = poster_id if full_post else None
-	post = posting.create_post(message, poster_id)
+	post = posting.create_post(message, poster_id, attachments_supported=False)
 	entry = ChatLogEntry(post, full_post)
 	chat_state = get_chat_state(chat_name)
 	write_new_chat_log_entry(chat_name, entry)

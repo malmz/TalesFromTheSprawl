@@ -232,7 +232,6 @@ def get_current_balance(handle : Handle):
 def get_current_balance_handle_id(handle_id : str):
     file_name = f'{finances_conf_dir}/{handle_id}.conf'
     finances_conf = ConfigObj(file_name)
-    print(f'Trying to get balance for {handle_id}')
     return int(finances_conf[balance_index])
 
 def set_current_balance(handle : Handle, balance : int):
@@ -246,7 +245,6 @@ def set_current_balance_handle_id(handle_id : str, balance : int):
 
 
 def add_internal_record(handle_id : str, record : InternalTransRecord):
-    print(f'Trying to add record for {handle_id}')
     file_name = f'{finances_conf_dir}/{handle_id}.conf'
     finances_conf = ConfigObj(file_name)
     prev_highest = int(finances_conf[transactions_index][highest_transaction_index])
@@ -363,7 +361,6 @@ async def collect_all_funds(actor_id : str):
         cause=TransTypes.Collect)
     balance_on_current = 0
     for handle in handles.get_handles_for_actor(actor_id, include_npc=False):
-        print(f'Collecting from {handle.handle_id}')
         collected = get_current_balance(handle)
         if collected > 0:
             total += collected
@@ -374,7 +371,6 @@ async def collect_all_funds(actor_id : str):
                 transaction.amount = collected
                 transaction.payer = handle.handle_id
                 transaction.last_in_sequence = False
-                print(f'Recording for {handle.handle_id}')
                 await record_transaction(transaction)
     set_current_balance(current_handle, total)
     transaction.payer_actor = None
@@ -383,7 +379,6 @@ async def collect_all_funds(actor_id : str):
     transaction.payer = transaction_collected
     transaction.recip = current_handle.handle_id
     transaction.last_in_sequence = True
-    print(f'Recording for {current_handle.handle_id}')
     await record_transaction(transaction)
     return 'Done.'
 
@@ -450,7 +445,6 @@ async def try_to_pay(transaction : Transaction, from_reaction : bool=False):
         return transaction
 
     if transaction.amount < 0:
-        print(f'Got a negative transaction!')
         # Negative transaction: flip it around
         recip = transaction.payer
         transaction.payer = transaction.recip
@@ -528,32 +522,23 @@ async def generate_internal_record_for_payer(transaction : Transaction):
 
 
 async def generate_record_for_payer(transaction : Transaction):
-    print('1')
     if transaction.payer_actor is None:
         return None
-    print('2')
     if transaction.payer_actor == transaction.recip_actor:
-        print('3')
         if transaction.cause == TransTypes.Burn:
             # Will be generated for the recipient
             return None
         else:
-            print('4')
             return generate_record_self_transfer(transaction)
-    print('5')
     if transaction.cause == TransTypes.Transfer:
         return generate_record_payer(transaction)
-    print('6')
     if transaction.cause == TransTypes.ChatReact:
         # TODO
         return generate_record_payer(transaction)
-    print('7')
     if transaction.cause == TransTypes.Collect:
         return generate_record_collected(transaction)
-    print('8')
     if transaction.cause == TransTypes.ShopOrder:
         return generate_record_buyer(transaction)
-    print('9')
     if transaction.cause == TransTypes.ShopRefund:
         # Will not be recorded -- the original transaction will just vanish instead
         await actors.refresh_financial_statement(transaction.payer_actor)
