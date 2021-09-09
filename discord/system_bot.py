@@ -3,6 +3,7 @@ import os
 import random
 import discord
 import asyncio
+import re
 
 from configobj import ConfigObj
 
@@ -74,6 +75,7 @@ async def on_ready():
     await groups.init(guild, clear_all=clear_all)
     reactions.init()
     artifacts.init(clear_all=clear_all)
+    game.init()
     print('Initialization complete.')
     report = game.start_game()
 
@@ -109,8 +111,18 @@ async def on_message(message):
         or channels.is_chat_hub(message.channel.name)
         ):
         await bot.process_commands(message)
-        return        
+        return
+    elif has_any_command(message):
+        await server.swallow(message, alert=True)
+        return
 
+    alert_checking = asyncio.create_task(game.check_alerts(message.content, message.channel, str(message.author.id)))
+    processing = asyncio.create_task(process_message(message))
+    await asyncio.gather(alert_checking, processing)
+
+
+
+async def process_message(message):
     if channels.is_anonymous_channel(message.channel):
         await posting.process_open_message(message, True)
         return
@@ -119,9 +131,13 @@ async def on_message(message):
         await posting.process_open_message(message)
 
     if channels.is_chat_channel(message.channel):
-        await chats.process_message(message)
+        await chats.process_message(message)   
 
 
+def has_any_command(message):
+    alphanumeric_regex = re.compile(f'^\.[a-z]+')
+    matches = re.search(alphanumeric_regex, message.content)
+    return matches is not None
 
 # General reaction handling
 

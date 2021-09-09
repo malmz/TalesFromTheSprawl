@@ -1806,7 +1806,7 @@ async def order_product_for_buyer(shop_name : str, product_name : str, buyer_han
 
 	if buyer_handle is None:
 		return 'Error: no payer ID supplied.'
-	if not handles.is_active_handle_type(buyer_handle.handle_type):
+	if not buyer_handle.is_active_handle_type():
 		return f'Error: cannot find buyer handle {buyer_handle.handle_id}.'
 
 	shop : Shop = read_shop(shop_name)

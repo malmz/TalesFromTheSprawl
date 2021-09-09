@@ -404,11 +404,11 @@ def store_chat_log_entry(chat_name : str, index : int, entry : ChatLogEntry):
 	chat_state[chat_content_index][str(index)] = entry.to_string()
 	chat_state.write()
 
-def remove_entry_from_chat_log(chat_state, chat_name : str, index : int):
+def remove_entry_from_chat_log(chat_name : str, index : int):
+	# Re-read the log (minimize time between read and write)
+	chat_state = get_chat_state(chat_name)
 	index_str = str(index)
 	if index_str in chat_state[chat_content_index]:
-		# Re-read the log (minimize time between read and write)
-		chat_state = get_chat_state(chat_name)
 		del chat_state[chat_content_index][index_str]
 		chat_state.write()
 
@@ -476,7 +476,7 @@ async def create_chat_from_command(ctx, partner_handle_id : str):
 	creator_user_id = str(ctx.message.author.id)
 	creator_actor_id = players.get_player_id(creator_user_id, expect_to_find=True)
 	creator_handle = handles.get_active_handle(creator_actor_id)
-	if not handles.is_active_handle_type(creator_handle.handle_type):
+	if not creator_handle.is_active():
 		return f'Error: tried to open chat but could not find active handle for initiator {creator_actor_id}.'
 	report = await create_2party_chat(creator_handle, partner_handle_id)
 	if report != None:
@@ -484,7 +484,7 @@ async def create_chat_from_command(ctx, partner_handle_id : str):
 
 async def create_2party_chat_from_handle_id(my_handle_id : str, partner_handle_id : str):
 	my_handle : Handle = handles.get_handle(my_handle_id)
-	if not handles.is_active_handle_type(my_handle.handle_type):
+	if not my_handle.is_active():
 		return f'Tried to open chat but initiator handle {my_handle_id} does not exist.'
 	return await create_2party_chat(my_handle, partner_handle_id)
 
@@ -494,7 +494,7 @@ async def create_2party_chat(my_handle : Handle, partner_handle_id : str):
 		return f'Error: {partner_handle_id} is your current handle – cannot open chat with yourself.'
 
 	partner_handle : Handle = handles.get_handle(partner_handle_id)
-	if not handles.is_active_handle_type(partner_handle.handle_type):
+	if not partner_handle.is_active():
 		return f'Error: could not open chat with {partner_handle_id}; recipient does not exist.'
 
 	# data common to both participants:
@@ -831,7 +831,7 @@ async def close_chat_session_from_command(ctx, partner_handle_id : str):
 
 async def close_2party_chat_session_from_handle_id(my_handle_id : str, partner_handle_id : str):
 	my_handle : Handle = handles.get_handle(my_handle_id)
-	if not handles.is_active_handle_type(my_handle.handle_type):
+	if not my_handle.is_active():
 		return f'Error: Tried to close chat but initiator handle {my_handle_id} does not exist.'
 	return await close_2party_chat_session(my_handle, partner_handle_id)
 
@@ -841,7 +841,7 @@ async def close_2party_chat_session(my_handle : Handle, partner_handle_id : str)
 		return f'Error: {partner_handle_id} is your current handle – there is no chat.'
 
 	partner_handle : Handle = handles.get_handle(partner_handle_id)
-	if not handles.is_active_handle_type(partner_handle.handle_type):
+	if not partner_handle.is_active():
 		return f'Error: no chat with {partner_handle.handle_id} found; recipient does not exist. Check the spelling.'
 
 	chat_name = create_2party_chat_name(my_handle, partner_handle)
@@ -1106,5 +1106,5 @@ async def repost_message_history(channel, chat_state, participant : ChatParticip
 	# TODO: chat_log_length_at_last_close could also be tracked on a participant level
 	# would probably be cleaner
 	if index_to_remove != -1:
-		remove_entry_from_chat_log(chat_state, participant.chat_name, index_to_remove)
+		remove_entry_from_chat_log(participant.chat_name, index_to_remove)
 		

@@ -194,6 +194,8 @@ class PlayerData(object):
 
 class HandleTypes(str, Enum):
 	Unused = 'unused'
+	Invalid = 'invalid'
+	Reserved = 'reserved'
 	Regular = 'regular'
 	Burner = 'burner'
 	Burnt = 'burnt'
@@ -218,3 +220,11 @@ class Handle(object):
 
 	def to_string(self):
 		return simplejson.dumps(self.__dict__)
+
+	def is_active(self):
+		return Handle.is_active_handle_type(self.handle_type)
+
+	@staticmethod
+	def is_active_handle_type(handle_type : HandleTypes):
+		return handle_type not in [HandleTypes.Burnt, HandleTypes.Unused, HandleTypes.Invalid, HandleTypes.Reserved]
+

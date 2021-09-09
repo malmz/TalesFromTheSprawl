@@ -45,12 +45,37 @@ class PlayerSetupInfo(object):
 	def to_string(self):
 		return simplejson.dumps(self.__dict__)
 
+	def get_all_reserved(self):
+		for handle_id in only_firsts_no_examples(self.other_handles):
+			yield handle_id
+		for handle_id in only_firsts_no_examples(self.npc_handles):
+			yield handle_id
+		for handle_id in only_firsts_no_examples(self.burners):
+			yield handle_id
+		for group_name in remove_examples(self.groups):
+			yield group_name
+		for shop_name in remove_examples(self.shops_owner):
+			yield shop_name
+		for shop_name in remove_examples(self.shops_employee):
+			yield shop_name
+
+
 double_underscore = '__'
 
 def remove_examples(entries : List[str]):
 	for entry in entries:
 		if double_underscore not in entry:
 			yield entry
+
+def remove_examples_from_firsts(entries : List):
+	for (a, b) in entries:
+		if double_underscore not in a:
+			yield (a, b)
+
+def only_firsts_no_examples(entries):
+	for (first, second) in entries:
+		if double_underscore not in first:
+			yield first
 
 def add_known_handle(handle_id : str):
 	known_handles = ConfigObj('known_handles.conf')
@@ -60,10 +85,21 @@ def add_known_handle(handle_id : str):
 	else:
 		print(f'Trying to edit player setup info for a handle that is already in the database. Please edit the file manually instead.')
 
+def get_known_handles_configobj():
+	return ConfigObj('known_handles.conf')
+
 def read_player_setup_info(handle_id : str):
-	known_handles = ConfigObj('known_handles.conf')
+	known_handles = get_known_handles_configobj()
 	if handle_id in known_handles:
 		return PlayerSetupInfo.from_string(known_handles[handle_id])
+
+
+def get_all_reserved():
+	known_handles = get_known_handles_configobj()
+	for handle_id in known_handles:
+		info = PlayerSetupInfo.from_string(known_handles[handle_id])
+		for entry in info.get_all_reserved():
+			yield entry
 
 
 async def player_setup_for_new_handle(handle : Handle):
@@ -91,15 +127,20 @@ async def player_setup_for_new_handle(handle : Handle):
 async def setup_alternate_handles(main_handle, aliases, alias_type : HandleTypes):
 	report = ''
 	any_found = False
-	for (other_handle_id, amount) in aliases:
+	for (other_handle_id, amount) in remove_examples_from_firsts(aliases):
 		# TODO: check if handle already exists and throw error
-		other_handle = await handles.create_handle(main_handle.actor_id, other_handle_id, alias_type)
+		other_handle = await handles.create_handle(
+			main_handle.actor_id,
+			other_handle_id,
+			alias_type,
+			force_reserved=True
+			)
 		if other_handle.handle_type != HandleTypes.Unused:
 			report += get_connected_alias_report(other_handle_id, alias_type, int(amount))
 			await finances.add_funds(other_handle, int(amount))
 			any_found = True
 	if any_found:
-		report += get_all_connected_aliases_of_type_report(alias_type)
+		report += get_all_connected_aliases_of_type_report(alias_type, other_handle_id)
 	return report
 
 def get_connected_alias_report(handle_id : str, handle_type : HandleTypes, amount : int):
@@ -111,11 +152,12 @@ def get_connected_alias_report(handle_id : str, handle_type : HandleTypes, amoun
 	elif handle_type == HandleTypes.NPC:
 		return f'  [OFF: added **{handle_id}** as an NPC handle{ending}.]\n'
 
-def get_all_connected_aliases_of_type_report(handle_type : HandleTypes):
+def get_all_connected_aliases_of_type_report(handle_type : HandleTypes, last_example : str=None):
 	if handle_type == HandleTypes.Regular:
 		return '\n'
 	elif handle_type == HandleTypes.Burner:
-		return '  (Use \".burn <burner_name>\" to destroy a burner and erase its tracks)\n\n'
+		example_burner = 'burner_name' if last_example is None else last_example
+		return f'  (Use for example \".burn {example_burner}\" to destroy a burner and erase its tracks)\n\n'
 	elif handle_type == HandleTypes.NPC:
 		return '  [OFF: NPC handles let you act as someone else, and cannot be traced to your other handles.]\n\n'
 

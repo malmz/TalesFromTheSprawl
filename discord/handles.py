@@ -5,12 +5,14 @@ import chats
 import server
 import player_setup
 import channels
+import game
 from common import forbidden_content, forbidden_content_print, coin
 from custom_types import Handle, HandleTypes
 
 from discord.ext import commands
 from configobj import ConfigObj
 from typing import List
+from enum import Enum
 import re
 
 ### Module handles.py
@@ -109,14 +111,22 @@ def get_handles_confobj():
 alphanumeric_regex = re.compile(f'^[a-zA-Z0-9][a-zA-Z0-9_]*[a-zA-Z0-9]$')
 double_underscore = '__'
 
+class HandleAllowedResult(str, Enum):
+    Allowed = 'a'
+    Invalid = 'i'
+    Reserved = 'r'
+
 def is_forbidden_handle(new_handle : str):
-    matches = re.search(alphanumeric_regex, new_handle)
+    handle_to_check = new_handle.lower()
+    matches = re.search(alphanumeric_regex, handle_to_check)
     if matches is None:
-        return True
-    elif double_underscore in new_handle:
-        return True
+        return HandleAllowedResult.Invalid
+    elif double_underscore in handle_to_check:
+        return HandleAllowedResult.Invalid
+    elif game.is_handle_reserved(handle_to_check):
+        return HandleAllowedResult.Reserved
     else:
-        return False
+        return HandleAllowedResult.Allowed
 
 
 async def init(clear_all : bool=False):
@@ -174,13 +184,20 @@ def store_handle(handle : Handle):
     actor_handles_conf.write()
 
 
-async def create_handle(actor_id : str, handle_id : str, handle_type : HandleTypes):
+async def create_handle(actor_id : str, handle_id : str, handle_type : HandleTypes, force_reserved : bool=False):
     handle = Handle(handle_id, handle_type = handle_type, actor_id = actor_id)
-    if is_forbidden_handle(handle_id):
-        handle.handle_type = HandleTypes.Unused
-    else:
+    result : HandleAllowedResult = is_forbidden_handle(handle_id)
+    if result == HandleAllowedResult.Allowed:
         store_handle(handle)
         finances.init_finances_for_handle(handle)
+    elif result == HandleAllowedResult.Reserved:
+        if force_reserved:
+            store_handle(handle)
+            finances.init_finances_for_handle(handle)
+        else:
+            handle.handle_type = HandleTypes.Reserved
+    else:
+        handle.handle_type = HandleTypes.Invalid
     return handle
 
 
@@ -242,12 +259,6 @@ def get_handle(handle_name : str):
             if handle.handle_id == handle_id:
                 return handle
     return Handle(handle_id, handle_type=HandleTypes.Unused)
-
-
-
-def is_active_handle_type(handle_type : HandleTypes):
-    return handle_type not in [HandleTypes.Burnt, HandleTypes.Unused]
-
 
 def switch_to_handle(handle : Handle):
     file_name = f'{handles_conf_dir}/{handle.actor_id}.conf'
@@ -318,7 +329,14 @@ def switch_to_own_existing_handle(actor_id : str, handle : Handle, expected_type
 
 async def create_handle_and_switch(actor_id : str, new_handle_id : str, handle_type : HandleTypes):
     handle : Handle = await create_handle(actor_id, new_handle_id, handle_type)
-    if handle.handle_type == handle_type and handle.handle_type != HandleTypes.Unused:
+    if handle.handle_type == HandleTypes.Invalid:
+        response = (f'Error: cannot create handle {handle.handle_id}. '
+            + 'Handles can only contain letters a-z, numbers 0-9, and \_ (underscore). '
+            + 'May not start or end with \_, may not have more than one \_ in a row.')
+    elif handle.handle_type == HandleTypes.Reserved:
+        response = (f'Error: cannot create handle {handle.handle_id}. '
+            + 'That name is used by the system or reserved for a user who has not connected their main handle yet.')
+    elif handle.handle_type == handle_type and handle.is_active():
         switch_to_handle(handle)
         response = await player_setup.player_setup_for_new_handle(handle)
         if response is not None:
@@ -334,9 +352,7 @@ async def create_handle_and_switch(actor_id : str, new_handle_id : str, handle_t
         else:
             response = f'Switched to new handle **{handle.handle_id}** (created now).'
     else:
-        response = (f'Error: cannot create handle {handle.handle_id}. '
-            + 'Handles can only contain letters a-z, numbers 0-9, and \_ (underscore). '
-            + 'May not start or end with \_, may not have more than one \_ in a row.')
+        response = (f'Error: failed to create {handle.handle_id}; reason unknown.')
     return response
 
 async def process_handle_command(ctx, new_handle_id : str=None, burner : bool=False, npc : bool=False):
@@ -401,7 +417,7 @@ async def process_burn_command(ctx, burner_id : str=None):
     else:
         actor_id = players.get_player_id(str(ctx.message.author.id))
         burner : Handle = get_handle(burner_id)
-        if not is_active_handle_type(burner.handle_type):
+        if not burner.is_active():
             response = f'Error: the handle {burner_id} does not exist.'
         elif burner.actor_id != actor_id:
             response = f'Error: you do not have access to {burner_id}.'

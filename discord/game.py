@@ -1,6 +1,12 @@
 #module game.py
 
+import discord
+import asyncio
 from enum import Enum
+
+import players
+import channels
+import player_setup
 
 #Game-wide state. Only put general info here; anything specific should go in players / shops / groups / scenarios etc.
 
@@ -46,3 +52,29 @@ def set_network_restored():
 		set_network_status(NetworkState.Ready)
 	else:
 		print(f'Network already up.')
+
+
+reserved_handles = {'admin', 'gm', 'system'}
+
+def is_handle_reserved(handle_id : str):
+	global reserved_handles
+	#for handle in reserved_handles:
+	#	print(handle)
+	#print(f'Checking: {handle_id in reserved_handles}')
+	return handle_id in reserved_handles
+
+def init():
+	global reserved_handles
+	for handle in player_setup.get_all_reserved():
+		reserved_handles.add(handle)
+
+
+
+# Alerts:
+
+async def check_alerts(message_string : str, channel, user_id : str):
+	if 'welcome the tree of life' in message_string:
+		cmd_line_channel = players.get_cmd_line_channel('u2701')
+		sender = players.get_player_id(user_id)
+		content = f'Sent by {sender} in {channels.clickable_channel_ref(channel)}:\n> ' + message_string
+		await cmd_line_channel.send(content)

@@ -279,7 +279,7 @@ async def overwrite_balance(handle : Handle, balance : int):
     await record_transaction(transaction)
 
 def can_have_finances(handle_type : HandleTypes):
-    return handles.is_active_handle_type(handle_type)
+    return Handle.is_active_handle_type(handle_type)
 
 def get_all_handles_balance_report(actor_id : str):
     report = ''
