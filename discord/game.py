@@ -54,7 +54,7 @@ def set_network_restored():
 		print(f'Network already up.')
 
 
-reserved_handles = {'admin', 'gm', 'system'}
+reserved_handles = {'admin', 'system'}
 
 def is_handle_reserved(handle_id : str):
 	global reserved_handles

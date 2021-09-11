@@ -54,16 +54,19 @@ class HandlesCog(commands.Cog, name='handles'):
 
     async def handle_command_internal(self, ctx, new_handle : str=None, burner : bool=False):
         response = await process_handle_command(ctx, new_handle, burner=burner)
-        if channels.is_cmd_line(ctx.channel.name):
-            await ctx.send(response)
-        elif channels.is_chat_hub(ctx.channel.name):
-            # TODO: perform the action, but do not send the report
-            await ctx.send(response)
+        await self.send_command_response(ctx, response)
 
     @commands.command(name='burn', help='Destroy a burner account forever.')
     async def burn_command(self, ctx, burner_name : str=None):
         response = await process_burn_command(ctx, burner_name)
-        await ctx.send(response)
+        await self.send_command_response(ctx, response)
+
+    async def send_command_response(self, ctx, response : str):
+        if channels.is_cmd_line(ctx.channel.name):
+            await ctx.send(response)
+        elif channels.is_chat_hub(ctx.channel.name):
+            await ctx.send(response, delete_after=10)
+            await server.swallow(ctx.message, alert=False);
 
     @commands.command(
         name='clear_all_handles',
@@ -73,6 +76,9 @@ class HandlesCog(commands.Cog, name='handles'):
         hidden=True
         )
     async def clear_handles_command(self, ctx):
+        if not channels.is_cmd_line(ctx.channel.name):
+            await server.swallow(ctx.message);
+            return
         await clear_all_handles()
         await actors.init(ctx.guild, clear_all=False)
         await ctx.send('Done.')

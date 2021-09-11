@@ -735,13 +735,13 @@ async def reinitialize(user_id : str, shop_name : str):
 
 # TODO: move all this into class Shop
 
-def get_next_shop_actor_index():
+def get_next_shop_index():
 	shops = get_shops_configobj()
 	prev_highest = int(shops[shop_data_index][highest_ever_index])
-	shop_actor_id = str(prev_highest + 1)
+	shop_index = str(prev_highest + 1)
 	shops[shop_data_index][highest_ever_index] = shop_actor_id
 	shops.write()
-	return shop_actor_id
+	return shop_index
 
 def shop_exists(shop_name : str):
 	if shop_name is None:
@@ -1123,8 +1123,8 @@ async def create_shop(guild, shop_name : str, handle_id : str, is_owner : bool=F
 				+ f'({shop_name.lower()}) clashes with existing shop **{existing_shop.name}**.)')
 		return result
 
-	shop_actor_index = get_next_shop_actor_index()
-	actor : actors.Actor = await actors.create_new_actor(guild, actor_index=shop_actor_index, actor_id=shop_name.lower())
+	shop_index = get_next_shop_index()
+	actor : actors.Actor = await actors.create_new_actor(guild, actor_index=shop_index, actor_id=shop_name.lower())
 
 	storefront_channel = await channels.create_shop_channel(guild, shop_name)
 	storefront_channel_id = str(storefront_channel.id)

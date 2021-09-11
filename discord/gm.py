@@ -6,18 +6,23 @@ import scenarios
 import artifacts
 import channels
 import server
+import handles
 
 from discord.ext import commands
+from dotenv import load_dotenv
 import discord
 import asyncio
+import os
+
 
 ### Module gm.py
-# This module holds the gm cog, which is used to set up in-game content
+# This module holds the gm cog, which is used to set up in-game content and track resources shared by all GMs
 
-# TODO: grab the name of the GM role from env file
+load_dotenv()
+gm_role_name = os.getenv('GM_ROLE_NAME')
+gm_actor_id = gm_role_name
 
-
-class GmCog(commands.Cog, name='admin'):
+class GmCog(commands.Cog, name=gm_role_name):
 	"""GM-only commands, hidden by default. To view documentation, use \"help <command>\". The commands are:
 	add_known_handle, create_scenario, run_scenario, create_artifact"""
 	def __init__(self, bot):
@@ -36,7 +41,7 @@ class GmCog(commands.Cog, name='admin'):
 			),
 		hidden=True
 		)
-	@commands.has_role('gm')
+	@commands.has_role(gm_role_name)
 	async def add_known_handle_command(self, ctx, handle_id : str):
 		if handle_id is None:
 			await ctx.send('Error: provide a handle')
@@ -50,7 +55,7 @@ class GmCog(commands.Cog, name='admin'):
 		name='run_scenario',
 		help='GM-only. Run a scenario.',
 		hidden=True)
-	@commands.has_role('gm')
+	@commands.has_role(gm_role_name)
 	async def run_scenario_command(self, ctx, name : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
 			await server.swallow(ctx.message);
@@ -63,7 +68,7 @@ class GmCog(commands.Cog, name='admin'):
 		name='create_scenario',
 		help='GM-only. Create a basic scenario.',
 		hidden=True)
-	@commands.has_role('gm')
+	@commands.has_role(gm_role_name)
 	async def create_scenario_command(self, ctx, name : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
 			await server.swallow(ctx.message);
@@ -85,7 +90,7 @@ class GmCog(commands.Cog, name='admin'):
 			),
 		hidden=True
 		)
-	@commands.has_role('gm')
+	@commands.has_role(gm_role_name)
 	async def create_artifact_command(self, ctx, name : str=None, content : str=None):
 		if not channels.is_cmd_line(ctx.channel.name):
 			await server.swallow(ctx.message);
@@ -98,3 +103,20 @@ class GmCog(commands.Cog, name='admin'):
 
 def setup(bot):
 	bot.add_cog(GmCog(bot))
+
+async def init(clear_all : bool=False):
+	exists = actors.actor_exists(gm_actor_id)
+	if exists and clear_all:
+		await actors.clear_actor(server.get_guild(), gm_actor_id)
+	if not exists or clear_all:
+		await create_gm_actor()
+
+async def create_gm_actor():
+	actor : actors.Actor = await actors.create_gm_actor(
+		server.get_guild(),
+		role_name=gm_role_name,
+		actor_id=gm_actor_id)
+	handle = handles.get_active_handle(gm_actor_id)
+	response = await player_setup.player_setup_for_new_handle(handle)
+	if response:
+		print(response)

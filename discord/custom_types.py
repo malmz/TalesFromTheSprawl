@@ -142,12 +142,13 @@ class ChannelIdentifier(object):
 class Actor(object):
 	def __init__(
 		self,
-		actor_index : str,
+		role_name : str,
 		actor_id : str,
 		finance_channel_id : int,
 		finance_stmt_msg_id : int,
 		chat_channel_id : int):
-		self.actor_index = actor_index
+		self.role_name = role_name
+		self.role_name = role_name
 		self.actor_id = actor_id
 		self.finance_channel_id = finance_channel_id
 		self.finance_stmt_msg_id = finance_stmt_msg_id

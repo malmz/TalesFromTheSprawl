@@ -78,7 +78,6 @@ class Group(object):
 		member = await server.get_member_from_nick(player_id)
 		if member is None:
 			return f'Error: actor {player_id} is not a player, or does not follow the server nick scheme.'
-
 		
 		role = self.get_role()
 		await server.remove_role_from_member(member, role)

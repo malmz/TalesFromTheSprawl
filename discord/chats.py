@@ -46,14 +46,22 @@ class ChatsCog(commands.Cog, name='chats'):
 		)
 		)
 	async def chat_command(self, ctx, handle : str=None):
+		response = None
 		if handle is None:
-			await ctx.send(f'Error: you must say who you want to chat with. Example: \".chat shadow_weaver\"')
-			return
-		handle = handle.lower()
-		if not channels.is_cmd_line(ctx.channel.name):
-			await server.swallow(ctx.message);
-			return
-		await create_chat_from_command(ctx, handle)
+			response = await ctx.send(f'Error: you must say who you want to chat with. Example: \".chat shadow_weaver\"')
+		else:
+			handle = handle.lower()
+			response = await create_chat_from_command(str(ctx.message.author.id), handle)
+		if response is not None:
+			await self.send_command_response(ctx, response)
+
+	async def send_command_response(self, ctx, response : str):
+		if channels.is_cmd_line(ctx.channel.name):
+			await ctx.send(response)
+		elif channels.is_chat_hub(ctx.channel.name):
+			await ctx.send(response, delete_after=10)
+			await server.swallow(ctx.message, alert=False);
+
 
 	@commands.command(
 		name='chat_other',
@@ -472,15 +480,12 @@ def decrease_num_active_chats(actor_id : str):
 
 ### Creating a new chat
 
-async def create_chat_from_command(ctx, partner_handle_id : str):
-	creator_user_id = str(ctx.message.author.id)
-	creator_actor_id = players.get_player_id(creator_user_id, expect_to_find=True)
+async def create_chat_from_command(user_id : str, partner_handle_id : str):
+	creator_actor_id = players.get_player_id(user_id, expect_to_find=True)
 	creator_handle = handles.get_active_handle(creator_actor_id)
 	if not creator_handle.is_active():
 		return f'Error: tried to open chat but could not find active handle for initiator {creator_actor_id}.'
-	report = await create_2party_chat(creator_handle, partner_handle_id)
-	if report != None:
-		await ctx.send(report)
+	return await create_2party_chat(creator_handle, partner_handle_id)
 
 async def create_2party_chat_from_handle_id(my_handle_id : str, partner_handle_id : str):
 	my_handle : Handle = handles.get_handle(my_handle_id)

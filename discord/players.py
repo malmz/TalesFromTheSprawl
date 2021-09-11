@@ -5,7 +5,7 @@ import common
 import server
 import actors
 import shops
-import groups
+from groups import Group
 
 from common import coin, highest_ever_index, player_personal_role_start, admin_role_name, gm_role_name
 
@@ -61,7 +61,9 @@ async def clear_player(guild, player_id : str):
 		await shops.remove_employee_player(shop_id, player_id)
 	print(f'Removing {player_id} from all groups: {player.groups}')
 	for group_id in player.groups:
-		await groups.remove_member(group_id, player_id)
+		group = Group.read(group_id)
+		if group is not None:
+			await group.remove_member(player_id)
 
 async def initialise_all_users():
 	guild = server.get_guild()
@@ -101,13 +103,13 @@ def get_player_id(user_id : str, expect_to_find=True):
 	return players[user_id_mappings_index][user_id];
 
 
-def get_next_player_actor_index():
+def get_next_player_index():
 	players = get_players_confobj()
 	prev_highest = int(players[user_id_mappings_index][highest_ever_index])
-	actor_index = str(prev_highest + 1)
-	players[user_id_mappings_index][highest_ever_index] = actor_index
+	player_index = str(prev_highest + 1)
+	players[user_id_mappings_index][highest_ever_index] = player_index
 	players.write()
-	return actor_index
+	return player_index
 
 async def create_player(member):
 	user_id = str(member.id)
@@ -115,7 +117,7 @@ async def create_player(member):
 	if existing_player_id is not None:
 		return f'Error: Could not create player for member {user_id}, since they already have player_id {existing_player_id}.'
 
-	new_player_index = get_next_player_actor_index()
+	new_player_index = get_next_player_index()
 	new_player_id = 'u' + new_player_index
 
 	# A player is a type of actor, so we start by creating an actor for this member/user

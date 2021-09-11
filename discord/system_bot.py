@@ -26,6 +26,7 @@ import player_setup
 import scenarios
 import game
 import artifacts
+import gm
 from common import coin
 
 
@@ -75,6 +76,7 @@ async def on_ready():
     await groups.init(guild, clear_all=clear_all)
     reactions.init()
     artifacts.init(clear_all=clear_all)
+    await gm.init(clear_all=True)
     game.init()
     print('Initialization complete.')
     report = game.start_game()
@@ -107,12 +109,23 @@ async def on_message(message):
         await server.swallow(message, alert=False)
         return
 
-    if (channels.is_cmd_line(message.channel.name)
-        or channels.is_chat_hub(message.channel.name)
-        ):
+    if channels.is_cmd_line(message.channel.name):
         await bot.process_commands(message)
         return
-    elif has_any_command(message):
+
+    if channels.is_chat_hub(message.channel.name):
+        # TODO: fix custom help command to avoid this hack
+        # The .help command does not discern between channels, so we must check for it specifically since
+        # we want it to work in cmd_line but not in chat_hub
+        if has_help_command(message):
+            await server.swallow(message, alert=True)
+        else:
+            # All our commands know if they are usable in chat hub or not, and will handle the message accordingly
+            await bot.process_commands(message)
+        return
+
+    # Trying a command in any other channel gets it swallowed:
+    if has_any_command(message):
         await server.swallow(message, alert=True)
         return
 
@@ -136,6 +149,11 @@ async def process_message(message):
 
 def has_any_command(message):
     alphanumeric_regex = re.compile(f'^\.[a-z]+')
+    matches = re.search(alphanumeric_regex, message.content)
+    return matches is not None
+
+def has_help_command(message):
+    help_regex = re.compile(f'^\.help')
     matches = re.search(alphanumeric_regex, message.content)
     return matches is not None
 

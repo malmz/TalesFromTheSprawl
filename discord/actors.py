@@ -80,7 +80,7 @@ async def is_actor_role(name :str):
 def get_actor_role(guild, actor_id : str):
 	actor = read_actor(actor_id)
 	if actor is not None:
-		return discord.utils.find(lambda role: role.name == actor.actor_index, guild.roles)
+		return discord.utils.find(lambda role: role.name == actor.role_name, guild.roles)
 
 
 
@@ -101,7 +101,7 @@ def actor_exists(actor_id : str):
 
 def actor_index_in_use(actor_index : str):
 	for actor in get_all_actors():
-		if actor.actor_index == actor_index:
+		if actor.role_name == actor_index:
 			return True
 	return False
 
@@ -173,10 +173,20 @@ async def give_actor_access(guild, channel, actor_id : str):
 	role = get_actor_role(guild, actor_id)
 	await server.give_role_access(channel, role)
 
-async def create_new_actor(guild, actor_index : str, actor_id : str):
-	# Create role for this actor:
-	role = await guild.create_role(name=actor_index)
+async def create_new_actor(guild, actor_index : str, actor_id : str, existing_role_name : str=None):
+	if existing_role_name is None:
+		# Create role for this actor:
+		role = await guild.create_role(name=actor_index)
+	else:
+		role = discord.utils.find(lambda role: role.name == existing_role_name, guild.roles)
 
+	return await create_new_actor_with_role(guild, role, actor_id)
+
+async def create_gm_actor(guild, role_name : str, actor_id : str):
+	role = discord.utils.find(lambda role: role.name == role_name, guild.roles)
+	return await create_new_actor_with_role(guild, role, actor_id)
+
+async def create_new_actor_with_role(guild, role, actor_id : str):
 	# Create personal channels for user:
 	chat_hub_creation = asyncio.create_task(channels.create_personal_channel(
 		guild,
@@ -202,7 +212,7 @@ async def create_new_actor(guild, actor_index : str, actor_id : str):
 	await asyncio.gather(chat_hub_welcome, finance_welcome, init_handles)
 
 	actor = Actor(
-		actor_index=actor_index,
+		role_name=role.name,
 		actor_id=actor_id,
 		finance_channel_id=finances_channel.id,
 		finance_stmt_msg_id=0,

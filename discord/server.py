@@ -112,5 +112,5 @@ async def swallow(message, alert=True):
 	await message.delete()
 	if alert:
 		await message.channel.send(
-			'```You cannot use commands here. Use your #cmd_line instead.```',
+			'```You cannot use that command here. Use your #cmd_line instead.```',
 			delete_after=5)
