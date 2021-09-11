@@ -120,3 +120,7 @@ async def create_gm_actor():
 	response = await player_setup.player_setup_for_new_handle(handle)
 	if response:
 		print(response)
+
+def get_gm_active_handle():
+	handle = handles.get_active_handle(gm_actor_id)
+	return handle.handle_id

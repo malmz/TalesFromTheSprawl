@@ -11,6 +11,7 @@ import handles
 import channels
 import server
 import posting
+import gm
 from common import emoji_cancel, emoji_open, emoji_green, emoji_red, emoji_green_book, emoji_red_book, emoji_unread
 from custom_types import Handle, HandleTypes, PostTimestamp
 
@@ -65,10 +66,39 @@ class ChatsCog(commands.Cog, name='chats'):
 
 	@commands.command(
 		name='chat_other',
-		help='Admin-only. Open a chat session for someone else.',
+		help='Admin only. Open a chat session for someone else.',
 		hidden=True)
-	async def chat_other_command(self, ctx,  my_handle : str, other_handle : str):
+	@commands.has_role('gm')
+	async def chat_other_command(self, ctx,  my_handle : str=None, other_handle : str=None):
+		if my_handle is None:
+			await ctx.send('Error: you must give two handles to start a chat.')
+			return
+		elif other_handle is None:
+			report = f'Error: you must give the second handle that should chat with {my_handle}.'
+			await ctx.send(report)
+			return
+
 		my_handle = my_handle.lower()
+		other_handle = other_handle.lower()
+		if not channels.is_cmd_line(ctx.channel.name):
+			await server.swallow(ctx.message);
+			return
+		report = await create_2party_chat_from_handle_id(my_handle, other_handle)
+		if report != None:
+			await ctx.send(report)
+
+	@commands.command(
+		name='gm_chat',
+		help='GM only. Open a chat session from the shared GM account.',
+		hidden=True)
+	@commands.has_role('gm')
+	async def gm_chat_command(self, ctx,  other_handle : str=None):
+		if other_handle is None:
+			report = f'Error: you must give the handle to chat with.'
+			await ctx.send(report)
+			return
+
+		my_handle = gm.get_gm_active_handle()
 		other_handle = other_handle.lower()
 		if not channels.is_cmd_line(ctx.channel.name):
 			await server.swallow(ctx.message);
@@ -127,8 +157,6 @@ def setup(bot):
 	global chats
 	bot.add_cog(ChatsCog(bot))
 	chats = ConfigObj(f'{chats_dir}/chats.conf')
-
-chat_channel_budget = ConfigObj(f'{chats_dir}/channel_budget.conf')
 
 channel_limit_per_actor = 6
 
@@ -255,6 +283,9 @@ def init_chats_confobj():
 		chats[chats_with_logs_index] = {}
 	chats.write()
 
+def get_channel_budget():
+	return ConfigObj(f'{chats_dir}/channel_budget.conf')
+
 
 def dump():
 	for cat in chats:
@@ -294,6 +325,8 @@ async def init(clear_all : bool=False):
 
 	# Any left-over channels after this should be deleted
 	await channels.delete_all_chats()
+
+	chat_channel_budget = get_channel_budget()
 	for actor_id in chat_channel_budget:
 		del chat_channel_budget[actor_id]
 		chat_channel_budget.write()
@@ -454,6 +487,7 @@ def get_chat_log_length(chat_name):
 ### The channel budget
 
 def try_to_add_active_chat(actor_id : str):
+	chat_channel_budget = get_channel_budget()
 	if actor_id in chat_channel_budget:
 		prev_number = int(chat_channel_budget[actor_id])
 		if prev_number < channel_limit_per_actor:
@@ -468,6 +502,7 @@ def try_to_add_active_chat(actor_id : str):
 		return True
 
 def decrease_num_active_chats(actor_id : str):
+	chat_channel_budget = get_channel_budget()
 	if actor_id in chat_channel_budget:
 		prev_number = int(chat_channel_budget[actor_id])
 		if prev_number > 0:

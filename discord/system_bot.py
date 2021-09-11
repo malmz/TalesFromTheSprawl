@@ -76,7 +76,7 @@ async def on_ready():
     await groups.init(guild, clear_all=clear_all)
     reactions.init()
     artifacts.init(clear_all=clear_all)
-    await gm.init(clear_all=True)
+    await gm.init(clear_all=clear_all)
     game.init()
     print('Initialization complete.')
     report = game.start_game()
