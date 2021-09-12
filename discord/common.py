@@ -57,7 +57,8 @@ off_category_name = 'offline'
 public_open_category_name = 'public_network'
 shadowlands_category_name = 'shadowlands'
 groups_category_name = 'private_networks'
-
+announcements_category_name = 'announcements'
+gm_announcements_name = 'gm_alerts'
 
 # Roles
 all_players_role_name = '251'

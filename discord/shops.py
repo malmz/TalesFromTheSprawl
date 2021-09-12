@@ -739,7 +739,7 @@ def get_next_shop_index():
 	shops = get_shops_configobj()
 	prev_highest = int(shops[shop_data_index][highest_ever_index])
 	shop_index = str(prev_highest + 1)
-	shops[shop_data_index][highest_ever_index] = shop_actor_id
+	shops[shop_data_index][highest_ever_index] = shop_index
 	shops.write()
 	return shop_index
 
@@ -1806,7 +1806,7 @@ async def order_product_for_buyer(shop_name : str, product_name : str, buyer_han
 
 	if buyer_handle is None:
 		return 'Error: no payer ID supplied.'
-	if not buyer_handle.is_active_handle_type():
+	if not buyer_handle.is_active():
 		return f'Error: cannot find buyer handle {buyer_handle.handle_id}.'
 
 	shop : Shop = read_shop(shop_name)

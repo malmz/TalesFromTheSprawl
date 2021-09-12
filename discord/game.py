@@ -7,6 +7,9 @@ from enum import Enum
 import players
 import channels
 import player_setup
+import server
+import handles
+from common import gm_announcements_name
 
 #Game-wide state. Only put general info here; anything specific should go in players / shops / groups / scenarios etc.
 
@@ -58,9 +61,6 @@ reserved_handles = {'admin', 'system'}
 
 def is_handle_reserved(handle_id : str):
 	global reserved_handles
-	#for handle in reserved_handles:
-	#	print(handle)
-	#print(f'Checking: {handle_id in reserved_handles}')
 	return handle_id in reserved_handles
 
 def init():
@@ -73,8 +73,13 @@ def init():
 # Alerts:
 
 async def check_alerts(message_string : str, channel, user_id : str):
-	if 'welcome the tree of life' in message_string:
-		cmd_line_channel = players.get_cmd_line_channel('u2701')
+	if 'welcome the tree of light' in message_string:
+		guild = server.get_guild()
+		alerts_channel = channels.get_discord_channel_from_name(guild, gm_announcements_name)
 		sender = players.get_player_id(user_id)
-		content = f'Sent by {sender} in {channels.clickable_channel_ref(channel)}:\n> ' + message_string
-		await cmd_line_channel.send(content)
+		handle = handles.get_active_handle_id(sender)
+		if handle is None:
+			content = f'Sent by {sender} in {channels.clickable_channel_ref(channel)}:\n> ' + message_string
+		else:
+			content = f'Sent by {handle} ({sender}) in {channels.clickable_channel_ref(channel)}:\n> ' + message_string
+		await alerts_channel.send(content)

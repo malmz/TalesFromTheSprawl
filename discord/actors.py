@@ -167,8 +167,6 @@ def clear_trans_memory(actor_id : str):
 
 
 
-
-
 async def give_actor_access(guild, channel, actor_id : str):
 	role = get_actor_role(guild, actor_id)
 	await server.give_role_access(channel, role)

@@ -3,7 +3,7 @@ import datetime
 import discord
 
 from custom_types import PostTimestamp, ChannelIdentifier
-from common import personal_category_name, shops_category_name, chats_category_name, off_category_name, public_open_category_name, shadowlands_category_name, groups_category_name
+from common import personal_category_name, shops_category_name, chats_category_name, off_category_name, public_open_category_name, shadowlands_category_name, groups_category_name, announcements_category_name, gm_announcements_name
 
 import actors
 import server
@@ -45,6 +45,12 @@ def is_public_channel(discord_channel):
         return False
     else:
         return discord_channel.category.name == public_open_category_name
+
+def is_announcement_channel(discord_channel):
+    if discord_channel.category == None:
+        return False
+    else:
+        return discord_channel.category.name == announcements_category_name
 
 def is_chat_channel(discord_channel):
     if discord_channel.category == None:
@@ -124,13 +130,19 @@ async def init_discord_channel(discord_channel):
 
     if discord_channel.category != None:
         if discord_channel.category.name == personal_category_name:
-            await init_personal_channel(discord_channel)
+            await init_private_channel(discord_channel)
         elif discord_channel.category.name == public_open_category_name:
             await init_public_open_channel(discord_channel)
         elif discord_channel.category.name == shops_category_name:
-            await init_public_read_only_channel(discord_channel)
+            await init_common_read_only_channel(discord_channel)
         elif discord_channel.category.name == groups_category_name:
             await init_group_channel(discord_channel)
+        elif discord_channel.category.name == announcements_category_name:
+            if discord_channel.name == gm_announcements_name:
+                await init_private_channel(discord_channel, gm_extra_access=True)
+            else:
+                await init_common_read_only_channel(discord_channel)
+
 
     else:
         print(f'Will not create channel state for channel {discord_channel.name} which has no category')
@@ -152,16 +164,19 @@ async def init_channel_state(discord_channel):
     ident = ChannelIdentifier(discord_channel_id=discord_channel.id)
     set_channel_id(discord_channel.name, ident)    
 
-async def set_base_permissions(discord_channel, private : bool, read_only : bool):
+async def set_base_permissions(discord_channel, private : bool, read_only : bool, gm_extra_access : bool=False):
     add_roles_tasks = (
-        [asyncio.create_task(discord_channel.set_permissions(role, overwrite=overwrites))
+        [foobar(discord_channel, role, overwrites)
         for (role, overwrites)
-        in server.generate_base_overwrites(private, read_only).items()])
+        in server.generate_base_overwrites(private, read_only, gm_extra_access).items()])
     await asyncio.gather(*add_roles_tasks)
 
+def foobar(discord_channel, role, overwrites):
+    return asyncio.create_task(discord_channel.set_permissions(role, overwrite=overwrites))
 
-async def init_public_read_only_channel(discord_channel):
-    await set_base_permissions(discord_channel, private=False, read_only=True)
+
+async def init_common_read_only_channel(discord_channel, gm_only : bool=False):
+    await set_base_permissions(discord_channel, private=gm_only, read_only=True, gm_extra_access=gm_only)
     await init_channel_state(discord_channel)
     init_pseudonymous_channel(discord_channel.name)
 
@@ -170,13 +185,13 @@ async def init_public_open_channel(discord_channel):
     await init_channel_state(discord_channel)
     init_pseudonymous_channel(discord_channel.name)
 
-async def init_personal_channel(discord_channel):
-    read_only = is_read_only_private_channel(discord_channel.name)
-    await set_base_permissions(discord_channel, private=True, read_only=read_only)
+async def init_private_channel(discord_channel, gm_extra_access : bool=False):
+    read_only = is_read_only_private_channel(discord_channel)
+    await set_base_permissions(discord_channel, private=True, read_only=read_only, gm_extra_access=gm_extra_access)
     await init_channel_state(discord_channel)
 
 async def init_group_channel(discord_channel):
-    await set_base_permissions(discord_channel, private=True, read_only=False)
+    await set_base_permissions(discord_channel, private=True, read_only=False, gm_extra_access=True)
     await init_channel_state(discord_channel)
     init_pseudonymous_channel(discord_channel.name)
 
@@ -272,6 +287,7 @@ finance_base = 'finance_'
 daemon_base = 'daemon_'
 chat_hub_base = 'chat_hub_'
 order_flow_base = 'orders_'
+
 # TODO: some sort of dictionary for these, with an enum type
 
 async def delete_all_personal_channels(channel_suffix : str=None):
@@ -331,11 +347,12 @@ def get_order_flow_name(shop_name : str):
 def is_order_flow(channel_name : str):
     return channel_name.startswith(order_flow_base)
 
+def is_announcement(channel_name : str):
+    return channel_name.endswith(order_flow_base)
 
-# Currently, the only read-only private channels are the finance channels
-def is_read_only_private_channel(channel_name : str):
-    return is_finance(channel_name) or is_order_flow(channel_name)
-
+# Some of the private channels (not available to all players) are read-only
+def is_read_only_private_channel(channel):
+    return is_finance(channel.name) or is_order_flow(channel.name) or is_announcement_channel(channel)
 
 
 ### Group channels:

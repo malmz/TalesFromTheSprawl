@@ -23,6 +23,7 @@ from custom_types import ActionResult
 # 🔥
 
 reactions_worth_money = {'💴' : 1, '💸' : 1, '💰' : 1, '🍺' : 1, '💯' : 100, '🪙' : 1}
+chat_reactions = ['📧', '💬', '🗨️', '❔', '❓', '❕', '❗']
 
 def init():
 	clear_reaction_semaphores()
@@ -58,27 +59,29 @@ async def find_reaction_recipient_and_message(message_id : int, channel):
 			break
 	return result
 
-async def process_reaction_for_tipping(message_id : int, user_id : int, channel, emoji):
+async def process_reaction_on_other_handle(message_id : int, user_id : int, channel, emoji):
+	search_result : ReactionRecipientSearchResult = await find_reaction_recipient_and_message(message_id, channel)
+	if search_result.recipient is None:
+		print(f'Error! Could not find recipient for message in channel {channel.name}.')
+		return
+
 	# Currently only one use case for reading reactions, and that is for paying money
-	payment_amount = 0
 	emoji_str = str(emoji)
 	if emoji_str in reactions_worth_money:
 		payment_amount = reactions_worth_money[emoji_str]
+		if payment_amount > 0:
+			player_id = players.get_player_id(str(user_id))
+			transaction : custom_types.Transaction = await finances.try_to_pay_from_actor(
+				player_id,
+				search_result.recipient,
+				payment_amount,
+				from_reaction=True
+			)
+			if not transaction.success:
+				await remove_reaction(search_result.message, emoji, user_id)
+			await send_report_to_cmd_line(str(user_id), transaction.report)
+	#elif emoji_str in chat_reactions:
 
-	if payment_amount > 0:
-		# If other reactions are implemented, perhaps this search will be relevant for all of them
-		search_result : ReactionRecipientSearchResult = await find_reaction_recipient_and_message(message_id, channel)
-
-		player_id = players.get_player_id(str(user_id))
-		transaction : custom_types.Transaction = await finances.try_to_pay_from_actor(
-			player_id,
-			search_result.recipient,
-			payment_amount,
-			from_reaction=True
-		)
-		if not transaction.success:
-			await remove_reaction(search_result.message, emoji, user_id)
-		await send_report_to_cmd_line(str(user_id), transaction.report)
 
 async def process_reaction_in_chat_hub(message_id : int, user_id : int, channel, emoji):
 	message = await channel.fetch_message(message_id)
@@ -177,7 +180,7 @@ async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
 			elif channels.is_order_flow(channel.name):
 				await process_reaction_in_order_flow(message_id, user_id, channel, emoji)
 			else:
-				await process_reaction_for_tipping(message_id, user_id, channel, emoji)
+				await process_reaction_on_other_handle(message_id, user_id, channel, emoji)
 				should_remove_reaction = False # Reaction should stay unless removed by above function
 		except discord.errors.NotFound:
 			# If the message has already been removed, processing will fail and we just move on

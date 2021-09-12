@@ -34,6 +34,7 @@ class HandlesCog(commands.Cog, name='handles'):
     # TODO: admin-only command to remove a handle completely (for mistakes)
 
     # TODO: .handle should be able to return a full handle report (similar to .balance)
+    # TODO: alt: .handles should return same output as .balance
 
     @commands.command(
         name='handle',
@@ -87,6 +88,8 @@ def setup(bot):
     bot.add_cog(HandlesCog(bot))
 
 
+# TODO: might need a semaphore for editing handles?
+# or object-oriented with the cog
 
 # 'handles' is the config object holding each user's current handles.
 handles_conf_dir = 'handles'
@@ -175,7 +178,7 @@ async def init_handles_for_actor(actor_id : str, first_handle : str=None, overwr
             del actor_handles_conf[entry]
         actor_handles_conf[handles_index] = {}
         actor_handles_conf.write()
-        handle : Handle = await create_handle(actor_id, first_handle, HandleTypes.Regular)
+        handle : Handle = await create_handle(actor_id, first_handle, HandleTypes.Regular, force_reserved=True)
         switch_to_handle(handle)
 
 def store_handle(handle : Handle):

@@ -28,6 +28,7 @@ from common import emoji_alert, emoji_accept, group_role_start, highest_ever_ind
 from custom_types import ActionResult, Handle, HandleTypes
 
 
+# TODO: show members?
 
 groups_conf_dir = 'groups'
 groups_file_name = groups_conf_dir + '/groups.conf'

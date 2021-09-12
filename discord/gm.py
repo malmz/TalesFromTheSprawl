@@ -77,8 +77,6 @@ class GmCog(commands.Cog, name=gm_role_name):
 		if report is not None:
 			await ctx.send(report)
 
-
-
 	@commands.command(
 		name='create_artifact',
 		brief='GM-only. Create an artifact.',
@@ -98,6 +96,18 @@ class GmCog(commands.Cog, name=gm_role_name):
 		report = artifacts.create_artifact(name, content)
 		if report is not None:
 			await ctx.send(report)
+
+	@commands.command(
+		name='init_gm',
+		brief='GM-only. Reinitialise the GM context and handles.',
+		hidden=True
+		)
+	@commands.has_role(gm_role_name)
+	async def init_gm_command(self, ctx):
+		if not channels.is_cmd_line(ctx.channel.name):
+			await server.swallow(ctx.message);
+			return
+		await init(clear_all=True)
 
 
 

@@ -69,7 +69,6 @@ async def remove_role_from_member(member, role):
 
 def check_member_has_role(member, role_names : List[str]):
 	if member is not None:
-		print(f'Checking if {role_names} is present in {[r.name for r in member.roles]}')
 		for role_name in role_names:
 			if role_name in [r.name for r in member.roles]:
 				return True
@@ -81,23 +80,23 @@ def get_all_players_role():
 def generate_overwrites_own_private_channel(player_role):
 	return {player_role: normal_access}
 
-def generate_overwrites_own_new_private_channel(player_role, read_only : bool=False):
+def generate_overwrites_own_new_private_channel(player_role, read_only : bool=False, gm_extra_access : bool=False):
 	return (
-		{**generate_base_overwrites(private=True, read_only=read_only),
+		{**generate_base_overwrites(private=True, read_only=read_only, gm_extra_access=gm_extra_access),
 		**generate_overwrites_own_private_channel(player_role)
 		})
 
-def generate_base_overwrites(private : bool, read_only : bool):
+def generate_base_overwrites(private : bool, read_only : bool, gm_extra_access : bool=False):
 	if private:
 		access_level = private_read_only_base if read_only else private_normal_base
 	else:
-		access_level = public_read_only_base if read_only else public_normal_base		
+		access_level = public_read_only_base if read_only else public_normal_base	
 	return (
 		{guild.default_role: no_access,
 		all_players_role: access_level,
 		system_role: super_access,
 		admin_role: super_access,
-		gm_role : normal_access if not private else no_access
+		gm_role : normal_access if (gm_extra_access or not private) else no_access
 		})
 
 async def get_member_from_nick(nick : str):

@@ -154,7 +154,7 @@ def has_any_command(message):
 
 def has_help_command(message):
     help_regex = re.compile(f'^\.help')
-    matches = re.search(alphanumeric_regex, message.content)
+    matches = re.search(help_regex, message.content)
     return matches is not None
 
 # General reaction handling
