@@ -80,6 +80,31 @@ class AdminCog(commands.Cog, name='admin'):
 				report = "Done."
 			await ctx.send(report)
 
+	# This command ONLY works in the landing page channel.
+	# Note: no other commands work in the landing page channel!
+	@commands.command(
+		name='join',
+		help='Claim a handle and join the game. Only for players who have not yet joined.',
+		hidden=True)
+	async def join_command(self, ctx, handle_id : str=None):
+		if channels.is_landing_page(ctx.channel.name):
+			member = await ctx.guild.fetch_member(ctx.message.author.id)
+			if member is None:
+				await self.send_response_in_landing_page(ctx, 'Failed: member not found.')
+			elif handle_id is None:
+				await self.send_response_in_landing_page(ctx, 'You must say which handle is yours! Example: \".join shadow_weaver\"')
+			else:
+				await players.create_player(member, handle_id)
+				await server.swallow(ctx.message, alert=False);
+		else:
+			await server.swallow(ctx.message, alert=False);
+
+	async def send_response_in_landing_page(self, ctx, response : str):
+		await ctx.send(response, delete_after=10)
+		await server.swallow(ctx.message, alert=False);
+
+
+
 	@commands.command(
 		name='clear_all_players',
 		help='Admin-only. De-initialise all players.',

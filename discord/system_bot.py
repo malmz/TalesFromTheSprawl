@@ -113,14 +113,16 @@ async def on_message(message):
         await bot.process_commands(message)
         return
 
-    if channels.is_chat_hub(message.channel.name):
+    if channels.is_chat_hub(message.channel.name) or channels.is_landing_page(message.channel.name):
         # TODO: fix custom help command to avoid this hack
         # The .help command does not discern between channels, so we must check for it specifically since
         # we want it to work in cmd_line but not in chat_hub
         if has_help_command(message):
-            await server.swallow(message, alert=True)
+            should_alert = not channels.is_landing_page(message.channel.name)
+            await server.swallow(message, alert=should_alert)
         else:
             # All our commands know if they are usable in chat hub or not, and will handle the message accordingly
+            # TODO: not all commands actually know this
             await bot.process_commands(message)
         return
 
@@ -177,8 +179,8 @@ async def on_raw_reaction_add(payload):
 @bot.event
 async def on_member_join(member):
     # TODO: put the player in a special setup area, and force them to join (claim a handle) before they can continue
-    return await players.create_player(member)
-
+    await server.set_user_as_new_player(member)
+    #return await players.create_player(member)
 
 
 

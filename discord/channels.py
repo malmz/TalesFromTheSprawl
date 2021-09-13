@@ -3,7 +3,7 @@ import datetime
 import discord
 
 from custom_types import PostTimestamp, ChannelIdentifier
-from common import personal_category_name, shops_category_name, chats_category_name, off_category_name, public_open_category_name, shadowlands_category_name, groups_category_name, announcements_category_name, gm_announcements_name
+from common import personal_category_name, shops_category_name, chats_category_name, off_category_name, public_open_category_name, shadowlands_category_name, groups_category_name, announcements_category_name, gm_announcements_name, setup_category_name, testing_category_name
 
 import actors
 import server
@@ -142,6 +142,10 @@ async def init_discord_channel(discord_channel):
                 await init_private_channel(discord_channel, gm_extra_access=True)
             else:
                 await init_common_read_only_channel(discord_channel)
+        elif discord_channel.category.name == setup_category_name:
+            await init_setup_channel(discord_channel)
+        elif discord_channel.category.name == testing_category_name:
+            await init_private_channel(discord_channel, gm_extra_access=True)
 
 
     else:
@@ -166,14 +170,10 @@ async def init_channel_state(discord_channel):
 
 async def set_base_permissions(discord_channel, private : bool, read_only : bool, gm_extra_access : bool=False):
     add_roles_tasks = (
-        [foobar(discord_channel, role, overwrites)
+        [asyncio.create_task(discord_channel.set_permissions(role, overwrite=overwrites))
         for (role, overwrites)
         in server.generate_base_overwrites(private, read_only, gm_extra_access).items()])
     await asyncio.gather(*add_roles_tasks)
-
-def foobar(discord_channel, role, overwrites):
-    return asyncio.create_task(discord_channel.set_permissions(role, overwrite=overwrites))
-
 
 async def init_common_read_only_channel(discord_channel, gm_only : bool=False):
     await set_base_permissions(discord_channel, private=gm_only, read_only=True, gm_extra_access=gm_only)
@@ -194,6 +194,16 @@ async def init_group_channel(discord_channel):
     await set_base_permissions(discord_channel, private=True, read_only=False, gm_extra_access=True)
     await init_channel_state(discord_channel)
     init_pseudonymous_channel(discord_channel.name)
+
+async def init_setup_channel(discord_channel):
+    add_roles_tasks = (
+        [asyncio.create_task(discord_channel.set_permissions(role, overwrite=overwrites))
+        for (role, overwrites)
+        in server.generate_setup_channel_overwrites().items()])
+    await asyncio.gather(*add_roles_tasks)
+    await init_channel_state(discord_channel)
+    await discord_channel.purge()
+
 
 async def make_read_only(channel_id : str):
     channel = get_discord_channel(channel_id)
@@ -414,3 +424,11 @@ async def delete_all_shops():
 async def get_all_shop_related_channels():
     channel_list = await server.get_all_channels()
     return [c for c in channel_list if is_shop_channel(c) or is_order_flow(c.name)]
+
+
+### Landing page channel
+
+landing_page = 'landing_page'
+
+def is_landing_page(channel_name : str):
+    return channel_name == landing_page

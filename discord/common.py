@@ -4,11 +4,8 @@ import emoji
 highest_ever_index = '___highest_ever'
 system_role_name = 'system'
 admin_role_name = 'admin'
-
-
-
-
 gm_role_name = 'gm'
+new_player_role_name = 'new_player'
 
 type_player = 'player'
 type_shop = 'shop'
@@ -59,6 +56,8 @@ shadowlands_category_name = 'shadowlands'
 groups_category_name = 'private_networks'
 announcements_category_name = 'announcements'
 gm_announcements_name = 'gm_alerts'
+setup_category_name = 'setup'
+testing_category_name = 'testing'
 
 # Roles
 all_players_role_name = '251'

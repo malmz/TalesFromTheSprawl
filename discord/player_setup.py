@@ -22,6 +22,7 @@ from common import coin
 # Known_handles is meant to be read-only during the event
 # It can be edited manually
 
+# TODO: re-write this to integrate the output with the general welcome message!
 
 class PlayerSetupInfo(object):
 	def __init__(

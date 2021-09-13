@@ -12,7 +12,7 @@ import shops
 import players
 
 from custom_types import Transaction, Actor, TransTypes
-from common import emoji_cancel
+from common import emoji_cancel, emoji_open
 
 import discord
 import asyncio
@@ -182,9 +182,9 @@ async def create_new_actor(guild, actor_index : str, actor_id : str, existing_ro
 
 async def create_gm_actor(guild, role_name : str, actor_id : str):
 	role = discord.utils.find(lambda role: role.name == role_name, guild.roles)
-	return await create_new_actor_with_role(guild, role, actor_id)
+	return await create_new_actor_with_role(guild, role, actor_id, is_gm=True)
 
-async def create_new_actor_with_role(guild, role, actor_id : str):
+async def create_new_actor_with_role(guild, role, actor_id : str, is_gm : bool=False):
 	# Create personal channels for user:
 	chat_hub_creation = asyncio.create_task(channels.create_personal_channel(
 		guild,
@@ -204,7 +204,7 @@ async def create_new_actor_with_role(guild, role, actor_id : str):
 	)
 
 	# Send welcome messages to the channels (no-one has the role to see it yet)
-	chat_hub_welcome = asyncio.create_task(send_startup_message_chat_hub(chat_hub_channel, actor_id))
+	chat_hub_welcome = asyncio.create_task(send_startup_message_chat_hub(chat_hub_channel, actor_id, is_gm))
 	finance_welcome = asyncio.create_task(send_startup_message_finance(finances_channel, actor_id))
 	init_handles = asyncio.create_task(handles.init_handles_for_actor(actor_id))
 	await asyncio.gather(chat_hub_welcome, finance_welcome, init_handles)
@@ -224,10 +224,15 @@ async def send_startup_message_finance(channel, actor_id : str):
 	content = content + 'A record of every transaction—involving any handle you control—will appear here. You cannot send anything in this channel.'
 	await channel.send(content)
 
-async def send_startup_message_chat_hub(channel, actor_id : str):
-	content = f'This is the chat hub for {actor_id}.'
-	content += ' All your chat connections will be visible here. If you close a chat, you can find it here to re-open it.\n '
-	content += 'You can start new chats by typing \".chat <handle>\" or [NOT IMPLEMENTED YET] \".room <room_name>\".'
+async def send_startup_message_chat_hub(channel, actor_id : str, is_gm : bool):
+	if is_gm:
+		content = 'This is the GM chat hub. The GM handles are shared between all GMs and you cannot start new chats from them.\n'
+		content += 'When other players want to chat with GM, they will show up here. You can open and close those chats just like your personal ones.\n'
+		content += 'Remember: all of the GMs can see and respond to all these chats! Communicate with each other to avoid chaos!'
+	else:
+		content = f'This is the chat hub for {actor_id}. '
+		content += 'You can start new chats by typing \".chat <handle>\", for example \".chat gm\".\n' # or [NOT IMPLEMENTED YET] \".room <room_name>\".'
+		content += f'Once you have started a chat, you will see it below, and you can close and re-open it by clicking the {emoji_cancel} and {emoji_open} below the message.\n '
 	await channel.send(content)
 
 def get_actor_for_handle(handle_id : str):

@@ -111,7 +111,7 @@ def get_next_player_index():
 	players.write()
 	return player_index
 
-async def create_player(member):
+async def create_player(member, handle_id : str=None):
 	user_id = str(member.id)
 	existing_player_id = get_player_id(user_id, expect_to_find=False)
 	if existing_player_id is not None:
@@ -135,7 +135,7 @@ async def create_player(member):
 		channels.get_cmd_line_name(new_player_id)
 	)
 
-	# Send welcome messages before adding the role -> avoid spamming notifications
+	# Send the basic info messages before adding the role -> avoid spamming notifications
 	await send_startup_message_cmd_line(new_player_id, cmd_line_channel)
 
 	# Edit user (change nick and add role):
@@ -144,6 +144,8 @@ async def create_player(member):
 	all_players_role = server.get_all_players_role()
 	if all_players_role not in new_roles:
 		new_roles.append(server.get_all_players_role())
+	new_player_role = server.get_new_player_role()
+	new_roles = [r for r in new_roles if r.name != new_player_role.name]
 	await member.edit(roles=new_roles)
 	try:
 		await member.edit(nick = new_player_id)
@@ -152,6 +154,12 @@ async def create_player(member):
 
 	player_data = PlayerData(new_player_id, cmd_line_channel.id)
 	store_player_data(player_data)
+
+	if handle_id is not None:
+		response = await handles.create_handle_and_switch(new_player_id, handle_id)
+		if response is not None:
+			await cmd_line_channel.send(response)
+
 
 async def send_startup_message_cmd_line(player_id : str, channel):
 	content = 'Welcome to the matrix_client. This is your command line. To see all commands, type \"**.help**\"\n'
@@ -162,17 +170,17 @@ async def send_startup_message_cmd_line(player_id : str, channel):
 	content = '=== **HANDLES** ===\n'
 	content = content + 'You can create and switch handles freely using the following commands:\n'
 	content = content + '\n'
-	content = content + '  **.handle <new_handle>**\n'
+	content = content + '  **.handle** new_handle\n'
 	content = content + '  Switch to handle - if it does not already exist, it will be created for you.\n'
 	content = content + '  Regular handles cannot be deleted, but you can just abandon it if you don\'t need it.\n'
 	content = content + '\n'
-	content = content + '  **.handle**\n'
-	content = content + '  Show you what your current handle is.\n'
+	content = content + '  **.handle** / **.handles**\n'
+	content = content + '  Show you what your current handle is / show all your handles.\n'
 	content = content + '\n'
-	content = content + '  **.burner <new_handle>**\n'
+	content = content + '  **.burner** new_handle\n'
 	content = content + '  Switch to a burner handle - if it does not already exist, it will be created for you.\n'
 	content = content + '\n'
-	content = content + '  **.burn <burner_handle>**\n'
+	content = content + '  **.burn** burner_handle\n'
 	content = content + '  Destroy a burner handle forever.\n'
 	content = content + '  While a burner handle is active, it can possibly be traced.\n'
 	content = content + '  After burning it, its ownership cannot be traced.\n'
@@ -188,7 +196,7 @@ async def send_startup_message_cmd_line(player_id : str, channel):
 	content = content + '  **.collect**\n'
 	content = content + '  Transfer all money from all handles you control to the one you are currently using.\n'
 	content = content + '\n'
-	content = content + '  **.pay <recipient> <amount>**\n'
+	content = content + '  **.pay** recipient amount\n'
 	content = content + '  Transfer money from your current handle to the recipient.\n'
 	content = content + '  You can of course use this to transfer money to another handle that you also own.\n'
 	content = content + '\n'

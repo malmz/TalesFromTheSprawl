@@ -2,13 +2,14 @@ import discord
 import asyncio
 from typing import List
 
-from common import system_role_name, admin_role_name, all_players_role_name, gm_role_name
+from common import system_role_name, admin_role_name, all_players_role_name, gm_role_name, new_player_role_name
 
 system_role = None
 admin_role = None
 all_players_role = None
 gm_role = None
 guild = None
+new_player_role = None
 
 # TODO: restrict reactions to only the channels where they actually do anything.
 # This is a third category I think:
@@ -39,11 +40,13 @@ async def init(bot, current_guild):
 	global guild
 	global all_players_role
 	global gm_role
+	global new_player_role
 	guild = current_guild
 	system_role = discord.utils.find(lambda role: role.name == system_role_name, guild.roles)
 	admin_role = discord.utils.find(lambda role: role.name == admin_role_name, guild.roles)
 	gm_role = discord.utils.find(lambda role: role.name == gm_role_name, guild.roles)
 	all_players_role = discord.utils.find(lambda role: role.name == all_players_role_name, guild.roles)
+	new_player_role = discord.utils.find(lambda role: role.name == new_player_role_name, guild.roles)
 	if all_players_role is None:
 		print(f'Creating role with name {all_players_role_name}')
 		all_players_role = await guild.create_role(name=all_players_role_name)
@@ -74,8 +77,14 @@ def check_member_has_role(member, role_names : List[str]):
 				return True
 	return False
 
+async def set_user_as_new_player(member):
+	await give_member_role(member, new_player_role)
+
 def get_all_players_role():
 	return all_players_role
+
+def get_new_player_role():
+	return new_player_role
 
 def generate_overwrites_own_private_channel(player_role):
 	return {player_role: normal_access}
@@ -97,6 +106,16 @@ def generate_base_overwrites(private : bool, read_only : bool, gm_extra_access :
 		system_role: super_access,
 		admin_role: super_access,
 		gm_role : normal_access if (gm_extra_access or not private) else no_access
+		})
+
+def generate_setup_channel_overwrites():
+	return (
+		{guild.default_role: no_access,
+		all_players_role: no_access,
+		system_role: super_access,
+		admin_role: super_access,
+		gm_role : super_access,
+		new_player_role : normal_access
 		})
 
 async def get_member_from_nick(nick : str):

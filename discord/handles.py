@@ -413,7 +413,7 @@ def switch_to_own_existing_handle(actor_id : str, handle : Handle, expected_type
         raise RuntimeError(f'Unexpected handle type of active handle. Dump: {handle.to_string()}')
     return response
 
-async def create_handle_and_switch(actor_id : str, new_handle_id : str, handle_type : HandleTypes):
+async def create_handle_and_switch(actor_id : str, new_handle_id : str, handle_type : HandleTypes=HandleTypes.Regular):
     handle : Handle = await create_handle(actor_id, new_handle_id, handle_type)
     if handle.handle_type == HandleTypes.Invalid:
         response = (f'Error: cannot create handle {handle.handle_id}. '

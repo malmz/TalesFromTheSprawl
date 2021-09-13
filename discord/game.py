@@ -57,7 +57,7 @@ def set_network_restored():
 		print(f'Network already up.')
 
 
-reserved_handles = {'admin', 'system', 'all'}
+reserved_handles = {'admin', 'system', 'all', 'new_handle', 'handle', 'burner', 'burner_handle', 'new_burner', 'balance', 'pay'}
 
 def is_handle_reserved(handle_id : str):
 	global reserved_handles
@@ -67,6 +67,7 @@ def init():
 	global reserved_handles
 	for handle in player_setup.get_all_reserved():
 		reserved_handles.add(handle)
+	# TODO: purge landig page, send welcome message
 
 
 
