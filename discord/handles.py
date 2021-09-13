@@ -33,9 +33,6 @@ class HandlesCog(commands.Cog, name='handles'):
 
     # TODO: admin-only command to remove a handle completely (for mistakes)
 
-    # TODO: .handle should be able to return a full handle report (similar to .balance)
-    # TODO: alt: .handles should return same output as .balance
-
     @commands.command(
         name='handle',
         brief='Show current handle or switch to another handle.',
@@ -48,6 +45,11 @@ class HandlesCog(commands.Cog, name='handles'):
         )
     async def handle_command(self, ctx, new_handle : str=None):
         await self.handle_command_internal(ctx, new_handle, burner=False)
+
+    @commands.command(name='handles', help='Show all your handles.')
+    async def handles_command(self, ctx):
+        response = await get_full_handles_report(ctx)
+        await self.send_command_response(ctx, response)
 
     @commands.command(name='burner', help='Create a new burner handle or switch to existing burner.')
     async def create_burner_command(self, ctx, new_burner : str=None):
@@ -297,7 +299,7 @@ def get_handles_for_actor_of_types(actor_id : str, types_list : List[HandleTypes
 
 
 
-### Async methods, directly related to commands
+### Methods directly related to commands
 
 def current_handle_report(actor_id : str):
     current_handle : Handle = get_active_handle(actor_id)
@@ -310,6 +312,37 @@ def current_handle_report(actor_id : str):
     else:
         raise RuntimeError(f'Unexpected handle type of active handle. Dump: {current_handle.to_string()}')
     return response
+
+def all_handles_report(actor_id : str):
+    current_handle : Handle = get_active_handle(actor_id)
+    report = 'Here are all your connected handles:\n'
+    any_burner = False
+    for handle in get_handles_for_actor(actor_id, include_npc=False):
+        if handle.handle_id == current_handle.handle_id:
+            report = report + f'> **{handle.handle_id}**'
+        else:
+            report = report + f'> {handle.handle_id}'
+        if handle.handle_type == HandleTypes.Burner:
+            any_burner = True
+            report += '  🔥'
+        report += '\n'
+
+    any_npc_found = False
+    for handle in get_handles_for_actor_of_types(actor_id, [HandleTypes.NPC]):
+        if not any_npc_found:
+            any_npc_found = True
+            report += '\n[OFF: You also control these NPC accounts:]\n'
+        if handle.handle_id == current_handle.handle_id:
+            report = report + f'> **{handle.handle_id}**\n'
+        else:
+            report = report + f'> {handle.handle_id}\n'
+
+    report += '\nYou can switch to another handle (any type), or create a new one, by using \".handle\".\n'
+    if any_burner:
+        report += 'Create new burner handles (🔥) using \".burner\". They can be deleted forever using \".burn\". Regular handles cannot be deleted.\n'
+
+    return report
+
 
 def switch_to_own_existing_handle(actor_id : str, handle : Handle, expected_type : HandleTypes):
     if handle.handle_type == HandleTypes.Burner:
@@ -392,6 +425,10 @@ async def process_handle_command(ctx, new_handle_id : str=None, burner : bool=Fa
 
     return response
 
+
+async def get_full_handles_report(ctx):
+    actor_id = players.get_player_id(str(ctx.message.author.id))
+    return all_handles_report(actor_id)
 
 #Burners
 

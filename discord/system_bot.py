@@ -176,6 +176,7 @@ async def on_raw_reaction_add(payload):
 
 @bot.event
 async def on_member_join(member):
+    # TODO: put the player in a special setup area, and force them to join (claim a handle) before they can continue
     return await players.create_player(member)
 
 
