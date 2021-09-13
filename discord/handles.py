@@ -31,8 +31,6 @@ class HandlesCog(commands.Cog, name='handles'):
     # Commands related to handles
     # These work in both cmd_line and chat_hub channels
 
-    # TODO: admin-only command to remove a handle completely (for mistakes)
-
     @commands.command(
         name='handle',
         brief='Show current handle or switch to another handle.',
@@ -85,6 +83,20 @@ class HandlesCog(commands.Cog, name='handles'):
         await clear_all_handles()
         await actors.init(ctx.guild, clear_all=False)
         await ctx.send('Done.')
+
+    @commands.command(
+        name='remove_handle',
+        brief='Admin-only.',
+        help=('Admin-only. Remove a handle (including all financial info) ' +
+            'without a trace.'),
+        hidden=True
+        )
+    async def remove_handle_command(self, ctx, handle_id : str=None):
+        if not channels.is_cmd_line(ctx.channel.name):
+            await server.swallow(ctx.message);
+            return
+        report = await process_remove_handle_command(ctx, handle_id)
+        await self.send_command_response(ctx, report)
 
 def setup(bot):
     bot.add_cog(HandlesCog(bot))
@@ -161,11 +173,24 @@ async def clear_all_handles():
 async def clear_all_handles_for_actor(actor_id : str):
     handles = get_handles_confobj()
     for handle in get_handles_for_actor(actor_id, include_burnt=True):
-        await finances.deinit_finances_for_handle(handle, record=False)
-        if handle.handle_id in handles[handles_to_actors]:
-            del handles[handles_to_actors][handle.handle_id]
+        await clear_handle(handle)
     del handles[actors_index][actor_id]
     handles.write()
+
+# TODO: remove old chats?
+async def clear_handle(handle : Handle):
+    await finances.deinit_finances_for_handle(handle, record=False)
+    handles = get_handles_confobj()
+    if handle.handle_id in handles[handles_to_actors]:
+        del handles[handles_to_actors][handle.handle_id]
+        handles.write()
+        file_name = f'{handles_conf_dir}/{handle.actor_id}.conf'
+        actor_handles_conf = ConfigObj(file_name)
+        if handles_index in actor_handles_conf:
+            if handle.handle_id in actor_handles_conf[handles_index]:
+                del actor_handles_conf[handles_index][handle.handle_id]
+                actor_handles_conf.write()
+
 
 async def init_handles_for_actor(actor_id : str, first_handle : str=None, overwrite=True):
     if first_handle is None:
@@ -301,6 +326,24 @@ def get_handles_for_actor_of_types(actor_id : str, types_list : List[HandleTypes
 
 ### Methods directly related to commands
 
+
+async def process_remove_handle_command(ctx, handle_id : str):
+    if handle_id is None:
+        return 'Error: you must say which handle you want to clear.'
+    handle : Handle = get_handle(handle_id)
+    if handle.handle_id == handle.actor_id:
+        return f'Error: cannot destroy this user\'s base handle.'
+    elif handle.handle_type == HandleTypes.Unused:
+        return f'Error: cannot clear handle {handle_id} because it does not exist.'
+    else:
+        active : Handle = get_active_handle(handle.actor_id)
+        if active.handle_id == handle.handle_id:
+            new_active : Handle = get_handle(handle.actor_id)
+            switch_to_handle(new_active)
+
+        await clear_handle(handle)
+        return f'Removed handle {handle_id}. Warning: if the handle is re-created in the future, some things might not work since old chats etc may linger in the database.'
+
 def current_handle_report(actor_id : str):
     current_handle : Handle = get_active_handle(actor_id)
     if current_handle.handle_type == HandleTypes.Burner:
@@ -340,6 +383,7 @@ def all_handles_report(actor_id : str):
     report += '\nYou can switch to another handle (any type), or create a new one, by using \".handle\".\n'
     if any_burner:
         report += 'Create new burner handles (🔥) using \".burner\". They can be deleted forever using \".burn\". Regular handles cannot be deleted.\n'
+    report += 'To see how much money each handle has, use \".balance\" or check your \"finances\" channel.\n'
 
     return report
 

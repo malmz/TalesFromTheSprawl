@@ -327,6 +327,7 @@ class EmployeeCog(commands.Cog, name='employee'):
 
 	@commands.command(
 		name='set_tips',
+		brief='Set which handle should get your tips.',
 		help=(
 			'Set the handle that is shown in the storefront and gets your tips.\n' +
 			'If you just do \".set_tips\" without any handle, you will not be shown in the storefront at all.\n' +
