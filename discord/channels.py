@@ -203,6 +203,7 @@ async def init_setup_channel(discord_channel):
     await asyncio.gather(*add_roles_tasks)
     await init_channel_state(discord_channel)
     await discord_channel.purge()
+    await discord_channel.send(generate_setup_channel_welcome_msg())
 
 
 async def make_read_only(channel_id : str):
@@ -432,3 +433,12 @@ landing_page = 'landing_page'
 
 def is_landing_page(channel_name : str):
     return channel_name == landing_page
+
+def generate_setup_channel_welcome_msg():
+    content = 'Welcome to the in-game matrix system! In order to join the game, you must select your first **handle**. '
+    content += 'Your starting money, access to private networks etc. are tied to this.\n\n'
+    content += 'To select your handle, type \"**.join <handle>**\" below.\n'
+    content += 'For example, if you are shadow_weaver, type \"**.join shadow_weaver**\"\n\n'
+    content += 'If you are not sure what your main handle is, please contact the organizers.\n'
+    content += '==============================='
+    return content

@@ -91,8 +91,8 @@ class AdminCog(commands.Cog, name='admin'):
 			member = await ctx.guild.fetch_member(ctx.message.author.id)
 			if member is None:
 				await self.send_response_in_landing_page(ctx, 'Failed: member not found.')
-			elif handle_id is None:
-				await self.send_response_in_landing_page(ctx, 'You must say which handle is yours! Example: \".join shadow_weaver\"')
+			elif handle_id is None or handle_id == 'handle' or handle_id == '<handle>':
+				await self.send_response_in_landing_page(ctx, '```You must say which handle is yours! Example: \".join shadow_weaver\"``')
 			else:
 				await players.create_player(member, handle_id)
 				await server.swallow(ctx.message, alert=False);
