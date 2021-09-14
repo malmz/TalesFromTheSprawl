@@ -14,6 +14,7 @@ import shops
 import game
 
 from custom_types import ActionResult
+from common import coin
 
 # good-to-have emojis:
 # ✅
@@ -34,6 +35,22 @@ async def remove_reaction(message, emoji, user_id : int):
 		print(f'Error: tried to remove reaction but member not found, user_id is {user_id}')
 	else:
 		await message.remove_reaction(emoji, member)
+
+def get_common_reactions_summary_string():
+	tipping_emojis = dict()
+	for emoji, amount in reactions_worth_money.items():
+		if amount in tipping_emojis:
+			tipping_emojis[amount].append(emoji)
+		else:
+			tipping_emojis[amount] = [emoji]
+	report = ''
+	for amount, emojis in tipping_emojis.items():
+		emojis_commas = ', '.join(emojis)
+		report += f'{emojis_commas}: give author {coin} {str(amount)}\n'
+	#report += f'{', '.join(chat_reactions)}: start a chat with author'
+	return report
+
+
 
 class ReactionRecipientSearchResult:
     message = None

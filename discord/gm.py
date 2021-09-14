@@ -108,6 +108,7 @@ class GmCog(commands.Cog, name=gm_role_name):
 			await server.swallow(ctx.message);
 			return
 		await init(clear_all=True)
+		await ctx.send('Done.')
 
 
 
@@ -126,8 +127,7 @@ async def create_gm_actor():
 		server.get_guild(),
 		role_name=gm_role_name,
 		actor_id=gm_actor_id)
-	handle = handles.get_active_handle(gm_actor_id)
-	response = await player_setup.player_setup_for_new_handle(handle)
+	response = await player_setup.setup_handles_no_welcome_new_player(gm_actor_id, gm_actor_id)
 	if response:
 		print(response)
 

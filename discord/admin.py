@@ -39,12 +39,14 @@ class AdminCog(commands.Cog, name='admin'):
 		help='Admin-only. Initialise a user as a player.',
 		hidden=True)
 	@commands.has_role('gm')
-	async def fake_join_command(self, ctx, user_id):
+	async def fake_join_command(self, ctx, user_id, handle : str=None):
 		member_to_fake_join = await ctx.guild.fetch_member(user_id)
 		if member_to_fake_join is None:
 			await ctx.send(f'Failed: member with user_id {user_id} not found.')
+		elif handle is None:
+			await ctx.send(f'Failed: you must give the player\'s main handle.')
 		else:
-			report = await players.create_player(member_to_fake_join)
+			report = await players.create_player(member_to_fake_join, handle)
 			if report is None:
 				report = "Done."
 			await ctx.send(report)
@@ -54,13 +56,15 @@ class AdminCog(commands.Cog, name='admin'):
 		help='Admin-only. Initialise a user as a player (based on discord name).',
 		hidden=True)
 	@commands.has_role('gm')
-	async def fake_join_name_command(self, ctx, name : str):
+	async def fake_join_name_command(self, ctx, name : str, handle : str=None):
 		members = await ctx.guild.fetch_members(limit=100).flatten()
 		member_to_fake_join = discord.utils.find(lambda m: m.name == name, members)
 		if member_to_fake_join is None:
 			await ctx.send(f'Failed: member with name {name} not found.')
+		elif handle is None:
+			await ctx.send(f'Failed: you must give the player\'s main handle.')
 		else:
-			report = await players.create_player(member_to_fake_join)
+			report = await players.create_player(member_to_fake_join, handle)
 			if report is None:
 				report = "Done."
 			await ctx.send(report)
@@ -70,18 +74,21 @@ class AdminCog(commands.Cog, name='admin'):
 		help='Admin-only. Initialise a user as a player (based on server nick).',
 		hidden=True)
 	@commands.has_role('gm')
-	async def fake_join_nick_command(self, ctx, nick : str):
+	async def fake_join_nick_command(self, ctx, nick : str, handle : str=None):
 		member_to_fake_join = await server.get_member_from_nick(nick)
 		if member_to_fake_join is None:
 			await ctx.send(f'Failed: member with nick {nick} not found.')
+		elif handle is None:
+			await ctx.send(f'Failed: you must give the player\'s main handle.')
 		else:
-			report = await players.create_player(member_to_fake_join)
+			report = await players.create_player(member_to_fake_join, handle)
 			if report is None:
 				report = "Done."
 			await ctx.send(report)
 
 	# This command ONLY works in the landing page channel.
 	# Note: no other commands work in the landing page channel!
+	# TODO: semaphore for joining
 	@commands.command(
 		name='join',
 		help='Claim a handle and join the game. Only for players who have not yet joined.',

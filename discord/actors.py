@@ -180,6 +180,8 @@ async def create_new_actor(guild, actor_index : str, actor_id : str, existing_ro
 
 	return await create_new_actor_with_role(guild, role, actor_id)
 
+# TODO: change GM handles to a special handle type that cannot handle money
+#       and remove the GM's financial channel completely
 async def create_gm_actor(guild, role_name : str, actor_id : str):
 	role = discord.utils.find(lambda role: role.name == role_name, guild.roles)
 	return await create_new_actor_with_role(guild, role, actor_id, is_gm=True)
@@ -231,7 +233,7 @@ async def send_startup_message_chat_hub(channel, actor_id : str, is_gm : bool):
 		content += 'Remember: all of the GMs can see and respond to all these chats! Communicate with each other to avoid chaos!'
 	else:
 		content = f'This is the chat hub for {actor_id}. '
-		content += 'You can start new chats by typing \".chat <handle>\", for example \".chat gm\".\n' # or [NOT IMPLEMENTED YET] \".room <room_name>\".'
+		content += 'You can start new chats by typing \"**.chat** *handle*\", for example \".chat gm\".\n' # or [NOT IMPLEMENTED YET] \".room <room_name>\".'
 		content += f'Once you have started a chat, you will see it below, and you can close and re-open it by clicking the {emoji_cancel} and {emoji_open} below the message.\n '
 	await channel.send(content)
 

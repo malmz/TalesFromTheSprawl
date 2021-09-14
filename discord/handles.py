@@ -3,11 +3,11 @@ import players
 import actors
 import chats
 import server
-import player_setup
+#import player_setup
 import channels
 import game
 from common import forbidden_content, forbidden_content_print, coin
-from custom_types import Handle, HandleTypes
+from custom_types import Handle, HandleTypes, ActionResult
 
 from discord.ext import commands
 from configobj import ConfigObj
@@ -413,33 +413,39 @@ def switch_to_own_existing_handle(actor_id : str, handle : Handle, expected_type
         raise RuntimeError(f'Unexpected handle type of active handle. Dump: {handle.to_string()}')
     return response
 
-async def create_handle_and_switch(actor_id : str, new_handle_id : str, handle_type : HandleTypes=HandleTypes.Regular):
-    handle : Handle = await create_handle(actor_id, new_handle_id, handle_type)
+async def create_handle_and_switch(
+    actor_id : str,
+    new_handle_id : str,
+    handle_type : HandleTypes=HandleTypes.Regular,
+    force_reserved : bool=False):
+    result = ActionResult()
+    handle : Handle = await create_handle(actor_id, new_handle_id, handle_type, force_reserved)
     if handle.handle_type == HandleTypes.Invalid:
-        response = (f'Error: cannot create handle {handle.handle_id}. '
+        result.report = (f'Error: cannot create handle {handle.handle_id}. '
             + 'Handles can only contain letters a-z, numbers 0-9, and \_ (underscore). '
             + 'May not start or end with \_, may not have more than one \_ in a row.')
     elif handle.handle_type == HandleTypes.Reserved:
-        response = (f'Error: cannot create handle {handle.handle_id}. '
+        result.report = (f'Error: cannot create handle {handle.handle_id}. '
             + 'That name is used by the system or reserved for a user who has not connected their main handle yet.')
     elif handle.handle_type == handle_type and handle.is_active():
         switch_to_handle(handle)
-        response = await player_setup.player_setup_for_new_handle(handle)
-        if response is not None:
+        #report = await player_setup.player_setup_for_new_handle(handle)
+        #if report is not None:
             # If something happened in player_setup_for_new_handle(), that report will be enough
-            return response
+        #    return report
+        result.success = True
         if handle_type == HandleTypes.Burner:
             # TODO: note about possibly being hacked until destroyed?
-            response = (f'Switched to new burner handle **{handle.handle_id}** (created now). '
+            result.report = (f'Switched to new burner handle **{handle.handle_id}** (created now). '
                 + f'To destroy it, use \".burn {handle.handle_id}\".')
         elif handle_type == HandleTypes.NPC:
-            response = (f'Switched to new handle **{handle.handle_id}** (created now). '
-                + '[OFF: it\'s an NPC handle, meaning it cannot be linked to your regular handles unless they interact with it]')
+            result.report = (f'Switched to new handle **{handle.handle_id}** (created now). '
+                + '[OFF: it\'s an NPC handle, meaning it cannot be linked to your regular handles unless it interacts with them.]')
         else:
-            response = f'Switched to new handle **{handle.handle_id}** (created now).'
+            result.report = f'Switched to new handle **{handle.handle_id}** (created now).'
     else:
-        response = (f'Error: failed to create {handle.handle_id}; reason unknown.')
-    return response
+        result.report = (f'Error: failed to create {handle.handle_id}; reason unknown.')
+    return result
 
 async def process_handle_command(ctx, new_handle_id : str=None, burner : bool=False, npc : bool=False):
     actor_id = players.get_player_id(str(ctx.message.author.id))
