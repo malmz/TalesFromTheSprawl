@@ -49,10 +49,10 @@ def setup(bot):
 
 
 artifacts_conf_dir = 'artifacts'
-artifacts_main_conf = ConfigObj(f'{artifacts_conf_dir}/__artifacts.conf')
 main_index = '___main'
 
 def init(clear_all : bool=False):
+	artifacts_main_conf = ConfigObj(f'{artifacts_conf_dir}/__artifacts.conf')
 	for art_name in artifacts_main_conf:
 		if clear_all:
 			del artifacts_main_conf[art_name]
@@ -83,10 +83,8 @@ class Artifact(object):
 	def __init__(
 		self,
 		name : str,
-		main : str = None,
 		areas : List[FileArea] = None):
 		self.name = name
-		self.main = '' if main is None else main
 		self.areas = [] if areas is None else areas
 
 	@staticmethod
@@ -105,13 +103,13 @@ class Artifact(object):
 		return simplejson.dumps(dict_to_save)
 
 	def store(self):
+		artifacts_main_conf = ConfigObj(f'{artifacts_conf_dir}/__artifacts.conf')
 		artifacts_main_conf[self.name] = self.to_string()
 		artifacts_main_conf.write()
 		file_name = f'{artifacts_conf_dir}/{self.name}.conf'
 		art_conf = ConfigObj(file_name)
 		for entry in art_conf:
 			del art_conf[entry]
-		art_conf[main_index] = self.main
 		for area in self.areas:
 			for code in area.codes:
 				art_conf[code] = area.to_string()
@@ -119,6 +117,16 @@ class Artifact(object):
 
 	@staticmethod
 	def get_contents_from_storage(name : str, code : str):
+		artifacts_main_conf = ConfigObj(f'{artifacts_conf_dir}/__artifacts.conf')
+		if code is None:
+			# When given only one input, we search through all artifact to find one that matches
+			try_code = name
+			for try_name in artifacts_main_conf:
+				file_name = f'{artifacts_conf_dir}/{try_name}.conf'
+				art_conf = ConfigObj(file_name)
+				if try_code in art_conf:
+					return Artifact.get_contents_from_storage(try_name, try_code)
+
 		if name is None:
 			return f'Error: you must give the name of the entity you want to access.'
 		if name not in artifacts_main_conf:
