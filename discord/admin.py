@@ -31,6 +31,9 @@ class AdminCog(commands.Cog, name='admin'):
 		)
 	@commands.has_role('gm')
 	async def init_all_players_command(self, ctx):
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
+			return
 		await players.initialise_all_users()
 		await ctx.send('Done.')
 
@@ -40,6 +43,9 @@ class AdminCog(commands.Cog, name='admin'):
 		hidden=True)
 	@commands.has_role('gm')
 	async def fake_join_command(self, ctx, user_id, handle : str=None):
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
+			return
 		member_to_fake_join = await ctx.guild.fetch_member(user_id)
 		if member_to_fake_join is None:
 			await ctx.send(f'Failed: member with user_id {user_id} not found.')
@@ -57,6 +63,9 @@ class AdminCog(commands.Cog, name='admin'):
 		hidden=True)
 	@commands.has_role('gm')
 	async def fake_join_name_command(self, ctx, name : str, handle : str=None):
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
+			return
 		members = await ctx.guild.fetch_members(limit=100).flatten()
 		member_to_fake_join = discord.utils.find(lambda m: m.name == name, members)
 		if member_to_fake_join is None:
@@ -75,6 +84,9 @@ class AdminCog(commands.Cog, name='admin'):
 		hidden=True)
 	@commands.has_role('gm')
 	async def fake_join_nick_command(self, ctx, nick : str, handle : str=None):
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
+			return
 		member_to_fake_join = await server.get_member_from_nick(nick)
 		if member_to_fake_join is None:
 			await ctx.send(f'Failed: member with nick {nick} not found.')
@@ -94,16 +106,16 @@ class AdminCog(commands.Cog, name='admin'):
 		help='Claim a handle and join the game. Only for players who have not yet joined.',
 		hidden=True)
 	async def join_command(self, ctx, handle_id : str=None):
-		if channels.is_landing_page(ctx.channel.name):
-			member = await ctx.guild.fetch_member(ctx.message.author.id)
-			if member is None:
-				await self.send_response_in_landing_page(ctx, 'Failed: member not found.')
-			elif handle_id is None or handle_id == 'handle' or handle_id == '<handle>':
-				await self.send_response_in_landing_page(ctx, '```You must say which handle is yours! Example: \".join shadow_weaver\"``')
-			else:
-				await players.create_player(member, handle_id)
-				await server.swallow(ctx.message, alert=False);
+		allowed = await channels.pre_process_command(ctx, allow_cmd_line=False, allow_landing_page=True)
+		if not allowed:
+			return
+		member = await ctx.guild.fetch_member(ctx.message.author.id)
+		if member is None:
+			await self.send_response_in_landing_page(ctx, 'Failed: member not found.')
+		elif handle_id is None or handle_id == 'handle' or handle_id == '<handle>':
+			await self.send_response_in_landing_page(ctx, '```You must say which handle is yours! Example: \".join shadow_weaver\"``')
 		else:
+			await players.create_player(member, handle_id)
 			await server.swallow(ctx.message, alert=False);
 
 	async def send_response_in_landing_page(self, ctx, response : str):
@@ -118,6 +130,9 @@ class AdminCog(commands.Cog, name='admin'):
 		hidden=True)
 	@commands.has_role('gm')
 	async def clear_all_players_command(self, ctx):
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
+			return
 		await players.init(ctx.guild, clear_all=True)
 		try:
 			await ctx.send('Done.')
@@ -131,6 +146,9 @@ class AdminCog(commands.Cog, name='admin'):
 		hidden=True)
 	@commands.has_role('gm')
 	async def clear_all_actors_command(self, ctx):
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
+			return
 		await actors.init(ctx.guild, clear_all=True)
 		try:
 			await ctx.send('Done.')
@@ -144,6 +162,9 @@ class AdminCog(commands.Cog, name='admin'):
 		hidden=True)
 	@commands.has_role('gm')
 	async def clear_actor_command(self, ctx, actor_id : str):
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
+			return
 		report = await actors.clear_actor(ctx.guild, actor_id)
 		try:
 			await ctx.send(report)
@@ -157,8 +178,11 @@ class AdminCog(commands.Cog, name='admin'):
 		hidden=True)
 	@commands.has_role('gm')
 	async def ping_command(self, ctx, player_id : str):
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
+			return
 		channel = players.get_cmd_line_channel(player_id)
-		if channel != None:
+		if channel is not None:
 			await channel.send(f'Testing ping for {player_id}')
 		else:
 			await ctx.send(f'Error: could not find the command line channel for {player_id}')
@@ -169,8 +193,8 @@ class AdminCog(commands.Cog, name='admin'):
 		hidden=True)
 	@commands.has_role('gm')
 	async def add_member_command(self, ctx, handle_id : str=None, group_id : str=None):
-		if not channels.is_cmd_line(ctx.channel.name):
-			await server.swallow(ctx.message);
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
 			return
 		report = await groups.add_member_from_handle(ctx.guild, group_id, handle_id)
 		if report is not None:
@@ -182,8 +206,8 @@ class AdminCog(commands.Cog, name='admin'):
 		hidden=True)
 	@commands.has_role('gm')
 	async def create_group_command(self, ctx, group_name : str=None):
-		if not channels.is_cmd_line(ctx.channel.name):
-			await server.swallow(ctx.message);
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
 			return
 		report = await groups.create_group_from_command(ctx, group_name)
 		if report is not None:
@@ -195,8 +219,8 @@ class AdminCog(commands.Cog, name='admin'):
 		hidden=True)
 	@commands.has_role('gm')
 	async def clear_all_groups_command(self, ctx):
-		if not channels.is_cmd_line(ctx.channel.name):
-			await server.swallow(ctx.message);
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
 			return
 		await groups.init(ctx.guild, clear_all=True)
 		await ctx.send('Done.')

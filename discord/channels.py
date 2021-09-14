@@ -210,6 +210,24 @@ async def make_read_only(channel_id : str):
     channel = get_discord_channel(channel_id)
     await set_base_permissions(channel, private=True, read_only=True)
 
+
+### Processing commands in channels
+async def pre_process_command(
+    ctx,
+    allow_cmd_line : bool=True,
+    allow_chat_hub : bool=False,
+    allow_landing_page : bool=False):
+    if is_cmd_line(ctx.channel.name) and allow_cmd_line:
+        return True
+    if is_chat_hub(ctx.channel.name) and allow_chat_hub:
+        return True
+    if is_landing_page(ctx.channel.name) and allow_landing_page:
+        return True
+    await server.swallow(ctx.message, alert=allow_cmd_line);
+    return False
+
+
+
 ### Anonymous channels:
 
 def get_public_anon_channel(guild):

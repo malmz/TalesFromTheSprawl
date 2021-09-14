@@ -24,10 +24,12 @@ class ArtifactsCog(commands.Cog, name='network'):
 		self.bot = bot
 		self._last_member = None
 
+	# TODO: when only one name is given, it should loop through all possible devices
+
 	@commands.command(name='connect', help='Connect to device or remote server. Aliases: .login, .access')
 	async def connect_command(self, ctx, name : str=None, code : str=None):
-		if not channels.is_cmd_line(ctx.channel.name):
-			await server.swallow(ctx.message);
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
 			return
 		report = access_artifact(name, code)
 		if report is not None:

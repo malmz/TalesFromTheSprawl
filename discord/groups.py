@@ -114,23 +114,24 @@ class Group(object):
 # Init and utils
 
 async def init(guild, clear_all=False):
+	for group_id in get_all_group_ids():
+		await clear_group(guild, group_id, spare_used=not clear_all)
+	clear_all = clear_all or not any_groups()
 	if clear_all:
-		for group_id in get_all_group_ids():
-			await clear_group(guild, group_id)
 		await channels.delete_all_group_channels()
-	else:
-		for group in get_all_groups():
-			# TODO: re-map stuff?
-			pass
+	await delete_all_group_roles(guild, spare_used=(not clear_all))	
+
 	groups = ConfigObj(groups_file_name)
 	if highest_ever_index not in groups or clear_all:
 		groups[highest_ever_index] = str(group_role_start)		
-		groups.write()	
-	await delete_all_group_roles(guild, spare_used=(not clear_all))
+		groups.write()
+	
 
-async def clear_group(guild, group_id : str):
+async def clear_group(guild, group_id : str, spare_used : bool):
 	if Group.exists(group_id):
 		group = Group.read(group_id)
+		if len(group.members) > 0 and spare_used:
+			return f'Did not remove group {group_id} because it has members.'
 		for player_id in group.members:
 			players.remove_group(player_id, group.group_id)
 		groups = ConfigObj(groups_file_name)
@@ -168,6 +169,14 @@ def get_all_group_ids():
 	for group_id in groups:
 		if group_id != highest_ever_index:
 			yield group_id
+
+def any_groups():
+	groups = ConfigObj(groups_file_name)
+	for group_id in groups:
+		if group_id != highest_ever_index:
+			return True
+	return False
+
 
 def get_main_channel(group_name : str):
 	if group_name is not None:

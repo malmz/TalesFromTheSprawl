@@ -43,6 +43,9 @@ class GmCog(commands.Cog, name=gm_role_name):
 		)
 	@commands.has_role(gm_role_name)
 	async def add_known_handle_command(self, ctx, handle_id : str):
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
+			return
 		if handle_id is None:
 			await ctx.send('Error: provide a handle')
 		else:
@@ -57,8 +60,8 @@ class GmCog(commands.Cog, name=gm_role_name):
 		hidden=True)
 	@commands.has_role(gm_role_name)
 	async def run_scenario_command(self, ctx, name : str=None):
-		if not channels.is_cmd_line(ctx.channel.name):
-			await server.swallow(ctx.message);
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
 			return
 		report = await scenarios.run_scenario(name)
 		if report is not None:
@@ -70,8 +73,8 @@ class GmCog(commands.Cog, name=gm_role_name):
 		hidden=True)
 	@commands.has_role(gm_role_name)
 	async def create_scenario_command(self, ctx, name : str=None):
-		if not channels.is_cmd_line(ctx.channel.name):
-			await server.swallow(ctx.message);
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
 			return
 		report = await scenarios.create_scenario(name)
 		if report is not None:
@@ -90,8 +93,8 @@ class GmCog(commands.Cog, name=gm_role_name):
 		)
 	@commands.has_role(gm_role_name)
 	async def create_artifact_command(self, ctx, name : str=None, content : str=None):
-		if not channels.is_cmd_line(ctx.channel.name):
-			await server.swallow(ctx.message);
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
 			return
 		report = artifacts.create_artifact(name, content)
 		if report is not None:
@@ -104,12 +107,11 @@ class GmCog(commands.Cog, name=gm_role_name):
 		)
 	@commands.has_role(gm_role_name)
 	async def init_gm_command(self, ctx):
-		if not channels.is_cmd_line(ctx.channel.name):
-			await server.swallow(ctx.message);
+		allowed = await channels.pre_process_command(ctx)
+		if not allowed:
 			return
 		await init(clear_all=True)
 		await ctx.send('Done.')
-
 
 
 def setup(bot):

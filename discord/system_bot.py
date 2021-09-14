@@ -68,7 +68,7 @@ async def on_ready():
     await server.init(bot, guild)
     await handles.init(clear_all)
     await actors.init(guild, clear_all=clear_all)
-    await players.init(guild, clear_all=True)
+    await players.init(guild, clear_all=clear_all)
     await channels.init()
     finances.init_finances()
     await chats.init(clear_all=clear_all)

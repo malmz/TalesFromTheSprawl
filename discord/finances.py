@@ -33,8 +33,8 @@ class FinancesCog(commands.Cog, name='finances'):
         )
     @commands.has_role('gm')
     async def create_money_command(self, ctx, handle_id : str=None, amount : int=0):
-        if not channels.is_cmd_line(ctx.channel.name):
-            await server.swallow(ctx.message);
+        allowed = await channels.pre_process_command(ctx)
+        if not allowed:
             return
 
         if handle_id == None:
@@ -58,8 +58,8 @@ class FinancesCog(commands.Cog, name='finances'):
         )
     @commands.has_role('gm')
     async def set_money_command(self, ctx, handle_id : str=None, amount : int=-1):
-        if not channels.is_cmd_line(ctx.channel.name):
-            await server.swallow(ctx.message);
+        allowed = await channels.pre_process_command(ctx)
+        if not allowed:
             return
 
         if handle_id == None:
@@ -86,8 +86,8 @@ class FinancesCog(commands.Cog, name='finances'):
             'Note: this command is also used to transfer money between two handles you control.')
         )
     async def pay_money_command(self, ctx, handle_recip : str=None, amount : int=0):
-        if not channels.is_cmd_line(ctx.channel.name):
-            await server.swallow(ctx.message);
+        allowed = await channels.pre_process_command(ctx)
+        if not allowed:
             return
 
         if handle_recip == None:
@@ -105,8 +105,8 @@ class FinancesCog(commands.Cog, name='finances'):
         brief='Show current balance (money) on all your handles.',
         help='Show the current balance (amount of money available) on all active handles that you control.')
     async def show_balance_command(self, ctx):
-        if not channels.is_cmd_line(ctx.channel.name):
-            await server.swallow(ctx.message);
+        allowed = await channels.pre_process_command(ctx)
+        if not allowed:
             return
 
         player_id = players.get_player_id(str(ctx.message.author.id))
@@ -121,8 +121,8 @@ class FinancesCog(commands.Cog, name='finances'):
             'All money will end up at your curent handle. Use \".handle\" to switch to the handle you want first.')
         )
     async def collect_command(self, ctx):
-        if not channels.is_cmd_line(ctx.channel.name):
-            await server.swallow(ctx.message);
+        allowed = await channels.pre_process_command(ctx)
+        if not allowed:
             return
 
         player_id = players.get_player_id(str(ctx.message.author.id))

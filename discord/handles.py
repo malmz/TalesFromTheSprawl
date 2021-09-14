@@ -44,21 +44,30 @@ class HandlesCog(commands.Cog, name='handles'):
     async def handle_command(self, ctx, new_handle : str=None):
         await self.handle_command_internal(ctx, new_handle, burner=False)
 
-    @commands.command(name='handles', help='Show all your handles.')
-    async def handles_command(self, ctx):
-        response = await get_full_handles_report(ctx)
-        await self.send_command_response(ctx, response)
-
     @commands.command(name='burner', help='Create a new burner handle or switch to existing burner.')
     async def create_burner_command(self, ctx, new_burner : str=None):
         await self.handle_command_internal(ctx, new_burner, burner=True)
 
     async def handle_command_internal(self, ctx, new_handle : str=None, burner : bool=False):
+        allowed = await channels.pre_process_command(ctx, allow_chat_hub=True)
+        if not allowed:
+            return
         response = await process_handle_command(ctx, new_handle, burner=burner)
+        await self.send_command_response(ctx, response)
+
+    @commands.command(name='handles', help='Show all your handles.')
+    async def handles_command(self, ctx):
+        allowed = await channels.pre_process_command(ctx, allow_chat_hub=True)
+        if not allowed:
+            return
+        response = await get_full_handles_report(ctx)
         await self.send_command_response(ctx, response)
 
     @commands.command(name='burn', help='Destroy a burner account forever.')
     async def burn_command(self, ctx, burner_name : str=None):
+        allowed = await channels.pre_process_command(ctx, allow_chat_hub=False)
+        if not allowed:
+            return
         response = await process_burn_command(ctx, burner_name)
         await self.send_command_response(ctx, response)
 
@@ -77,8 +86,8 @@ class HandlesCog(commands.Cog, name='handles'):
         hidden=True
         )
     async def clear_handles_command(self, ctx):
-        if not channels.is_cmd_line(ctx.channel.name):
-            await server.swallow(ctx.message);
+        allowed = await channels.pre_process_command(ctx)
+        if not allowed:
             return
         await clear_all_handles()
         await actors.init(ctx.guild, clear_all=False)
@@ -92,8 +101,8 @@ class HandlesCog(commands.Cog, name='handles'):
         hidden=True
         )
     async def remove_handle_command(self, ctx, handle_id : str=None):
-        if not channels.is_cmd_line(ctx.channel.name):
-            await server.swallow(ctx.message);
+        allowed = await channels.pre_process_command(ctx)
+        if not allowed:
             return
         report = await process_remove_handle_command(ctx, handle_id)
         await self.send_command_response(ctx, report)

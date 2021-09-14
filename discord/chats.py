@@ -47,22 +47,18 @@ class ChatsCog(commands.Cog, name='chats'):
 		)
 		)
 	async def chat_command(self, ctx, handle : str=None):
+		allowed = await channels.pre_process_command(ctx, allow_chat_hub=True)
+		if not allowed:
+			return
+
 		response = None
 		if handle is None:
-			response = await ctx.send(f'Error: you must say who you want to chat with. Example: \".chat shadow_weaver\"')
+			response = f'Error: you must say who you want to chat with. Example: \".chat shadow_weaver\"'
 		else:
 			handle = handle.lower()
 			response = await create_chat_from_command(str(ctx.message.author.id), handle)
 		if response is not None:
 			await self.send_command_response(ctx, response)
-
-	async def send_command_response(self, ctx, response : str):
-		if channels.is_cmd_line(ctx.channel.name):
-			await ctx.send(response)
-		elif channels.is_chat_hub(ctx.channel.name):
-			await ctx.send(response, delete_after=10)
-			await server.swallow(ctx.message, alert=False);
-
 
 	@commands.command(
 		name='chat_other',
@@ -70,6 +66,9 @@ class ChatsCog(commands.Cog, name='chats'):
 		hidden=True)
 	@commands.has_role('gm')
 	async def chat_other_command(self, ctx,  my_handle : str=None, other_handle : str=None):
+		allowed = await channels.pre_process_command(ctx, allow_chat_hub=False)
+		if not allowed:
+			return
 		if my_handle is None:
 			await ctx.send('Error: you must give two handles to start a chat.')
 			return
@@ -80,9 +79,6 @@ class ChatsCog(commands.Cog, name='chats'):
 
 		my_handle = my_handle.lower()
 		other_handle = other_handle.lower()
-		if not channels.is_cmd_line(ctx.channel.name):
-			await server.swallow(ctx.message);
-			return
 		report = await create_2party_chat_from_handle_id(my_handle, other_handle)
 		if report != None:
 			await ctx.send(report)
@@ -93,6 +89,9 @@ class ChatsCog(commands.Cog, name='chats'):
 		hidden=True)
 	@commands.has_role('gm')
 	async def gm_chat_command(self, ctx,  other_handle : str=None):
+		allowed = await channels.pre_process_command(ctx, allow_chat_hub=False)
+		if not allowed:
+			return
 		if other_handle is None:
 			report = f'Error: you must give the handle to chat with.'
 			await ctx.send(report)
@@ -100,9 +99,6 @@ class ChatsCog(commands.Cog, name='chats'):
 
 		my_handle = gm.get_gm_active_handle()
 		other_handle = other_handle.lower()
-		if not channels.is_cmd_line(ctx.channel.name):
-			await server.swallow(ctx.message);
-			return
 		report = await create_2party_chat_from_handle_id(my_handle, other_handle)
 		if report != None:
 			await ctx.send(report)
@@ -112,19 +108,20 @@ class ChatsCog(commands.Cog, name='chats'):
 		brief='Close a chat session from your end.',
 		help=(
 			'Close a chat session from your end. This will not affect how the other participant sees the chat. ' +
-			f'You can re-open the chat at any time using \".chat\", or by clicking the {emoji_open} in your chat_hub. ' +
-			'The chat will re-open automatically if the other person sends anything, unless you have the maximum number'
-			)#TODO finish this text
+			f'You can re-open the chat at any time using \".chat\", or by clicking the {emoji_open} in your chat_hub.'
+			)
 		)
 	async def close_chat_command(self, ctx, handle : str=None):
+		allowed = await channels.pre_process_command(ctx, allow_chat_hub=True)
+		if not allowed:
+			return
 		if handle is None:
-			await ctx.send(f'Error: you must say which chat you want to close. Example: \".close_chat shadow_weaver\"')
-			return
-		handle = handle.lower()
-		if not channels.is_cmd_line(ctx.channel.name):
-			await server.swallow(ctx.message);
-			return
-		await close_chat_session_from_command(ctx, handle)
+			response = f'Error: you must say which chat you want to close. Example: \".close_chat shadow_weaver\"'
+		else:
+			handle = handle.lower()
+			response = await close_chat_session_from_command(ctx, handle)
+		if response is not None:
+			await self.send_command_response(ctx, response)
 
 	@commands.command(
 		name='close_chat_other',
@@ -132,11 +129,11 @@ class ChatsCog(commands.Cog, name='chats'):
 		hidden=True)
 	@commands.has_role('gm')
 	async def close_chat_other_command(self, ctx, my_handle : str, other_handle : str):
+		allowed = await channels.pre_process_command(ctx, allow_chat_hub=False)
+		if not allowed:
+			return
 		my_handle = my_handle.lower()
 		other_handle = other_handle.lower()
-		if not channels.is_cmd_line(ctx.channel.name):
-			await server.swallow(ctx.message);
-			return
 		report = await close_2party_chat_session_from_handle_id(my_handle, other_handle)
 		if report is not None:
 			await ctx.send(report)
@@ -147,8 +144,19 @@ class ChatsCog(commands.Cog, name='chats'):
 		hidden=True)
 	@commands.has_role('gm')
 	async def clear_all_chats_command(self, ctx):
+		allowed = await channels.pre_process_command(ctx, allow_chat_hub=False)
+		if not allowed:
+			return
 		await init(clear_all=True)
 		await ctx.send('Done.')
+
+	async def send_command_response(self, ctx, response : str):
+		if channels.is_cmd_line(ctx.channel.name):
+			await ctx.send(response)
+		elif channels.is_chat_hub(ctx.channel.name):
+			await ctx.send(response, delete_after=10)
+			await server.swallow(ctx.message, alert=False, delay=10);
+
 
 chats_dir = 'chats'
 chats = ConfigObj(f'{chats_dir}/chats.conf')
@@ -865,9 +873,7 @@ async def close_chat_session_from_command(ctx, partner_handle_id : str):
 	my_user_id = str(ctx.message.author.id)
 	my_actor_id = players.get_player_id(my_user_id)
 	my_handle = handles.get_handle(my_actor_id)
-	report = await close_2party_chat_session(my_handle, partner_handle_id)
-	if report != None:
-		await ctx.send(report)
+	return await close_2party_chat_session(my_handle, partner_handle_id)
 
 async def close_2party_chat_session_from_handle_id(my_handle_id : str, partner_handle_id : str):
 	my_handle : Handle = handles.get_handle(my_handle_id)
