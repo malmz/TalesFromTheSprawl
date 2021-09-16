@@ -139,8 +139,7 @@ def get_handles_confobj():
 
 # May contain letters, numbers and underscores
 # Must start and end with letter or number
-# Must be at least two characters (TODO: not necessary, but makes for an easier regex)
-alphanumeric_regex = re.compile(f'^[a-zA-Z0-9][a-zA-Z0-9_]*[a-zA-Z0-9]$')
+alphanumeric_regex = re.compile(f'^[a-zA-Z0-9][a-zA-Z0-9_]*$')
 double_underscore = '__'
 
 class HandleAllowedResult(str, Enum):
@@ -153,7 +152,7 @@ def is_forbidden_handle(new_handle : str):
     matches = re.search(alphanumeric_regex, handle_to_check)
     if matches is None:
         return HandleAllowedResult.Invalid
-    elif double_underscore in handle_to_check:
+    elif double_underscore in handle_to_check or handle_to_check.startswith('_') or handle_to_check.endswith('_'):
         return HandleAllowedResult.Invalid
     elif game.is_handle_reserved(handle_to_check):
         return HandleAllowedResult.Reserved
@@ -478,7 +477,8 @@ async def process_handle_command(ctx, new_handle_id : str=None, burner : bool=Fa
             else:
                 response = f'Error: the handle {new_handle_id} not available.'
         else:
-            response = await create_handle_and_switch(actor_id, new_handle_id, handle_type)
+            result = await create_handle_and_switch(actor_id, new_handle_id, handle_type)
+            response = result.report
         if existing_handle.handle_id != new_handle_id:
             response += f'\nNote that handles are lowercase only: {new_handle_id} -> **{existing_handle.handle_id}**.'
 
