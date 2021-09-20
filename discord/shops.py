@@ -543,6 +543,7 @@ class Order(object):
 		order_id : str,
 		delivery_id : str,
 		price_total : int,
+		paid_total : int = 0,
 		order_flow_msg_id : str=None,
 		time_created : PostTimestamp=None,
 		undo_hooks : List[Tuple[str, str]]=None,
@@ -550,6 +551,7 @@ class Order(object):
 		self.order_id = order_id
 		self.delivery_id = delivery_id
 		self.price_total = price_total
+		self.paid_total = paid_total
 		self.order_flow_msg_id = order_flow_msg_id
 		self.items_ordered = items_ordered
 		self.time_created : PostTimestamp = time_created
@@ -572,7 +574,7 @@ class Order(object):
 		dict_to_save['time_updated'] = PostTimestamp.to_string(self.time_updated)
 		return simplejson.dumps(dict_to_save)
 
-	def add(self, product_name : str, product_price : str, timestamp : PostTimestamp):
+	def add(self, product_name : str, product_price : str, timestamp : PostTimestamp, pre_paid : bool):
 		if product_name in self.items_ordered:
 			prev_number = int(self.items_ordered[product_name])
 		else:
@@ -581,6 +583,7 @@ class Order(object):
 		self.items_ordered[product_name] = new_number
 		self.time_updated = timestamp
 		self.price_total += product_price
+		self.paid_total += product_price if pre_paid else 0
 		self.updated = True
 
 	async def remove_undo_hooks(self):
@@ -588,6 +591,9 @@ class Order(object):
 			# These are IDs for messages that could until now be used to undo the transaction
 			await actors.lock_tentative_transaction(actor_id, msg_id)
 		self.undo_hooks = []
+
+	def all_paid(self):
+		return self.paid_total == self.price_total
 
 
 
@@ -1186,7 +1192,7 @@ async def find_shop_for_command(user_id : str, shop_name : str, must_be_owner : 
 		# full syntax of specifying which shop they mean
 		if len(shops_of_player) == 0:
 			if is_gm_or_admin:
-				result.error_report = f'Error: no shop listed for {player_id}. Since you are GM/admin, you can edit any shop but you mus specify which shop you mean.'
+				result.error_report = f'Error: no shop listed for {player_id}. Since you are GM/admin, you can edit any shop but you must specify which shop you mean.'
 			else:
 				result.error_report = f'Error: player {player_id} does not have access to any shops'
 			return result
@@ -1269,7 +1275,6 @@ async def process_employ_command(user_id : str, guild, handle_id : str, shop_nam
 	return result.report
 
 async def remove_employee(shop : Shop, player_id : str, handle_id : str=None):
-	player_id = handle.actor_id
 	member = await server.get_member_from_nick(player_id)
 	if not players.player_exists(player_id) or member is None:
 		if handle_id is None:
@@ -1780,7 +1785,10 @@ def generate_order_message(order : Order, status : OrderStatus):
 	for item, amount in order.items_ordered.items():
 		# TODO: add the emoji for each product, as many times as the order, e.g. "4 Beer 🍺 🍺 🍺 🍺"
 		content += f'> {amount} {item}\n'
-	content += f'> Total: {coin} {order.price_total} (paid)'
+	if order.all_paid():
+		content += f'> Total: {coin} {order.price_total} (all paid)'
+	else:
+		content += f'> Total: {coin} {order.price_total} ({order.paid_total} paid)'
 	return content
 
 async def add_gui_reactions_to_order(message, status : OrderStatus):
@@ -1865,6 +1873,11 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 		# No delivery ID set for this player
 		delivery_id = buyer_handle.handle_id
 
+	must_be_pre_paid = True
+	if buyer_handle.actor_id in shop.get_employee_ids():
+		delivery_id = delivery_id + " [UNPAID]"
+		must_be_pre_paid = False
+
 	sem_success = await get_order_semaphore(shop.shop_id, delivery_id)
 	if not sem_success:
 		return f'Error: {shop.name} is overloaded. Wait a minute and try again.'
@@ -1882,29 +1895,28 @@ async def order_product(shop : Shop, product : Product, buyer_handle : Handle):
 		data=product.name,
 		timestamp=timestamp)
 	transaction.emoji = product.emoji
-	transaction = await finances.try_to_pay(transaction)
-	#print(f'Transaction: {transaction.to_string()}')
-	if not transaction.success:
+	if must_be_pre_paid:
+		transaction = await finances.try_to_pay(transaction)
+	if must_be_pre_paid and not transaction.success:
 		result.report = transaction.report
 	else:
 		# Otherwise, we move on to create the order
 		print(f'{transaction.payer} just bought {transaction.data} from {transaction.recip}!')
-		await place_order_in_flow(shop, transaction, delivery_id)
+		await place_order_in_flow(shop, transaction, delivery_id, must_be_pre_paid)
 
 		result.report = f'Successfully ordered {product.name} from {shop.name}'
 		result.success = True
 	return_order_semaphore(shop.shop_id, delivery_id)
 	return result
 
-async def place_order_in_flow(shop : Shop, purchase : Transaction, delivery_id : str):
-
+async def place_order_in_flow(shop : Shop, purchase : Transaction, delivery_id : str, pre_paid : bool):
 	previous_order_updated = False
 	order = fetch_active_order(shop.shop_id, delivery_id)
 	if order is not None:
 		# The previous order will have been deleted from active_orders
 		time_diff = PostTimestamp.get_time_diff(order.time_created, purchase.timestamp)
 		if time_diff <= shop.order_collection_limit:
-			order = await add_to_active_order(shop, order, purchase)
+			order = await add_to_active_order(shop, order, purchase, pre_paid)
 			previous_order_updated = True
 		else:
 			# Lock the previous order
@@ -1918,7 +1930,8 @@ async def place_order_in_flow(shop : Shop, purchase : Transaction, delivery_id :
 			order_id,
 			delivery_id,
 			purchase.amount,
-			items_ordered={purchase.data: 1},
+			paid_total = purchase.amount if pre_paid else 0,
+			items_ordered = {purchase.data: 1},
 			time_created = purchase.timestamp,
 			undo_hooks = purchase.get_undo_hooks_list()
 			)
@@ -1930,8 +1943,8 @@ async def place_order_in_flow(shop : Shop, purchase : Transaction, delivery_id :
 
 
 
-async def add_to_active_order(shop : Shop, order : Order, purchase : Transaction):
-	order.add(purchase.data, purchase.amount, purchase.timestamp)
+async def add_to_active_order(shop : Shop, order : Order, purchase : Transaction, pre_paid : bool):
+	order.add(purchase.data, purchase.amount, purchase.timestamp, pre_paid)
 	order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
 	order_flow_message = await order_flow_channel.fetch_message(order.order_flow_msg_id)
 	content = generate_order_message(order, OrderStatus.Active)
