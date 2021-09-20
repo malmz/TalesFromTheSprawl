@@ -164,4 +164,4 @@ def create_artifact(name : str, main : str=None):
 
 def access_artifact(name : str, code : str):
 	result = Artifact.get_contents_from_storage(name, code)
-	return result
+	return f'```{result}```'
