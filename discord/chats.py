@@ -166,7 +166,7 @@ def setup(bot):
 	bot.add_cog(ChatsCog(bot))
 	chats = ConfigObj(f'{chats_dir}/chats.conf')
 
-channel_limit_per_actor = 6
+channel_limit_per_actor = 5
 
 channel_id_index = '___channel_id'
 handle_index = '___handle'
