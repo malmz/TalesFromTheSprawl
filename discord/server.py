@@ -115,7 +115,7 @@ def generate_setup_channel_overwrites():
 		system_role: super_access,
 		admin_role: super_access,
 		gm_role : super_access,
-		new_player_role : normal_access
+		new_player_role : super_access
 		})
 
 async def get_member_from_nick(nick : str):
