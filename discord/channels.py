@@ -3,7 +3,7 @@ import datetime
 import discord
 
 from custom_types import PostTimestamp, ChannelIdentifier
-from common import personal_category_name, shops_category_name, chats_category_name, off_category_name, public_open_category_name, shadowlands_category_name, groups_category_name, announcements_category_name, gm_announcements_name, setup_category_name, testing_category_name
+from common import all_categories, personal_category_name, shops_category_name, chats_category_name, off_category_name, public_open_category_name, shadowlands_category_name, groups_category_name, announcements_category_name, gm_announcements_name, setup_category_name, testing_category_name
 
 import actors
 import server
@@ -159,6 +159,13 @@ async def init():
     channel_list = await server.get_all_channels()
     task_list = (asyncio.create_task(init_discord_channel(c)) for c in channel_list)
     await asyncio.gather(*task_list)
+    task_list_categories = (asyncio.create_task(verify_category_exists(cat)) for cat in all_categories)
+    await asyncio.gather(*task_list_categories)
+
+async def verify_category_exists(category_name : str):
+    guild = server.get_guild()
+    if not category_name in guild.categories:
+        await guild.create_category(category_name)
 
 async def init_channel_state(discord_channel):
     await discord_channel.edit(slowmode_delay=slowmode_delay)
