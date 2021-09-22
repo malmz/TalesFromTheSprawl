@@ -94,8 +94,10 @@ def read_player_setup_info(handle_id : str):
 	if handle_id in known_handles:
 		return PlayerSetupInfo.from_string(known_handles[handle_id])
 	else:
+		return None
+		# To allow players to join with unannounced handles, switch the above line to the below:
 		# Return a new object, containing only the one handle we know we want
-		return PlayerSetupInfo(handle_id)
+		#return PlayerSetupInfo(handle_id)
 
 
 def get_all_reserved():
@@ -106,18 +108,22 @@ def get_all_reserved():
 			yield entry
 
 def can_setup_new_player_with_handle(main_handle : str):
-	return read_player_setup_info(main_handle) is not None
+	info = read_player_setup_info(main_handle)
+	if info is None:
+		return False
+	handle = handles.get_handle(main_handle)
+	return handle.handle_type == HandleTypes.Unused
 
 async def setup_handles_and_welcome_new_player(player : PlayerData, main_handle : str):
 	channel = channels.get_discord_channel(str(player.cmd_line_channel_id))
 	if channel is None:
 		print(f'Error: Failed to welcome player {player.player_id} -- no cmd line channel found!')
-		return
+		return False
 	result : ActionResult = await handles.create_handle_and_switch(player.player_id, main_handle, force_reserved=True)
 	if not result.success:
 		report = f'Error: Failed to claim main handle {main_handle} for player {player.player_id}! Please contact administrator.'
 		await channel.send(report)
-		return
+		return False
 
 	info = read_player_setup_info(main_handle)
 
@@ -195,6 +201,7 @@ async def setup_handles_and_welcome_new_player(player : PlayerData, main_handle 
 	content += 'In any discussion, you can use the following reactions to interact with the author of a message:\n\n'
 	content += reactions.get_common_reactions_summary_string()
 	await channel.send(content)
+	return True
 
 
 async def setup_handles_no_welcome_new_player(actor_id : str, main_handle : str):

@@ -121,12 +121,16 @@ class AdminCog(commands.Cog, name='admin'):
 			if sem_id is None:
 				await self.send_response_in_landing_page(ctx, '```Failed: system is too busy. Wait a few minutes and try again.``')
 			else:
-				await players.create_player(member, handle_id)
+				report = await players.create_player(member, handle_id)
+				if report is not None:
+					await self.send_response_in_landing_page(ctx, f'```Failed: invalid starting handle \"{handle_id}\" (or handle is already taken).```')
+				else:
+					await server.swallow(ctx.message, alert=False);
 				self.return_order_semaphore(sem_id)
-				await server.swallow(ctx.message, alert=False);
 
 	async def send_response_in_landing_page(self, ctx, response : str):
-		await ctx.send(response, delete_after=10)
+		if response is not None:
+			await ctx.send(response, delete_after=10)
 		await server.swallow(ctx.message, alert=False);
 
 

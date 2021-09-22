@@ -9,7 +9,7 @@ from groups import Group
 
 from common import coin, highest_ever_index, player_personal_role_start, admin_role_name, gm_role_name
 
-from custom_types import PlayerData, Handle
+from custom_types import PlayerData, Handle, ActionResult
 
 import discord
 import asyncio
@@ -112,6 +112,8 @@ def get_next_player_index():
 	return player_index
 
 async def create_player(member, handle_id : str=None):
+	if not player_setup.can_setup_new_player_with_handle(handle_id):
+		return f'Failed: invalid starting handle \"{handle_id}\" (or handle is already taken).'
 	user_id = str(member.id)
 	existing_player_id = get_player_id(user_id, expect_to_find=False)
 	if existing_player_id is not None:
@@ -152,7 +154,11 @@ async def create_player(member, handle_id : str=None):
 	player_data = PlayerData(new_player_id, cmd_line_channel.id)
 	store_player_data(player_data)
 
-	await player_setup.setup_handles_and_welcome_new_player(player_data, handle_id)
+	success = await player_setup.setup_handles_and_welcome_new_player(player_data, handle_id)
+	if not success:
+		return(f'Error! Created player {player_data.player_id} but could not set up handle {handle_id}!')
+	else:
+		return None
 
 
 def get_cmd_line_channels_for_handles(handles : List[str]):

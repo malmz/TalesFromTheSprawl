@@ -182,7 +182,8 @@ async def clear_all_handles_for_actor(actor_id : str):
     handles = get_handles_confobj()
     for handle in get_handles_for_actor(actor_id, include_burnt=True):
         await clear_handle(handle)
-    del handles[actors_index][actor_id]
+    if actor_id in handles[actors_index]:
+        del handles[actors_index][actor_id]
     handles.write()
 
 # TODO: remove old chats?
