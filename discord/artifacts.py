@@ -24,8 +24,6 @@ class ArtifactsCog(commands.Cog, name='network'):
 		self.bot = bot
 		self._last_member = None
 
-	# TODO: when only one name is given, it should loop through all possible devices
-
 	@commands.command(name='connect', help='Connect to device or remote server. Aliases: .login, .access')
 	async def connect_command(self, ctx, name : str=None, code : str=None):
 		allowed = await channels.pre_process_command(ctx)
@@ -43,6 +41,19 @@ class ArtifactsCog(commands.Cog, name='network'):
 	async def access_command(self, ctx, name : str=None, code : str=None):
 		await self.connect_command(ctx, name, code)
 
+	@commands.command(name='ACCESS', help='Connect to device or remote server. Same as .connect.', hidden=True)
+	async def access_upper_command(self, ctx, name : str=None, code : str=None):
+		await self.connect_command(ctx, name, code)
+
+	@commands.command(name='LOGIN', help='Connect to device or remote server. Same as .connect.', hidden=True)
+	async def login_upper_command(self, ctx, name : str=None, code : str=None):
+		await self.connect_command(ctx, name, code)
+
+	@commands.command(name='CONNECT', help='Connect to device or remote server. Same as .connect.', hidden=True)
+	async def connect_upper_command(self, ctx, name : str=None, code : str=None):
+		await self.connect_command(ctx, name, code)
+
+
 def setup(bot):
 	bot.add_cog(ArtifactsCog(bot))
 
@@ -52,7 +63,8 @@ artifacts_conf_dir = 'artifacts'
 main_index = '___main'
 
 def init(clear_all : bool=False):
-	artifacts_main_conf = ConfigObj(f'{artifacts_conf_dir}/__artifacts.conf')
+	with open(f'{artifacts_conf_dir}/__artifacts.conf', "r", encoding='utf-8') as read_file:
+		artifacts_main_conf = ConfigObj(read_file, encoding='UTF8')
 	for art_name in artifacts_main_conf:
 		if clear_all:
 			del artifacts_main_conf[art_name]
@@ -103,11 +115,11 @@ class Artifact(object):
 		return simplejson.dumps(dict_to_save)
 
 	def store(self):
-		artifacts_main_conf = ConfigObj(f'{artifacts_conf_dir}/__artifacts.conf')
+		artifacts_main_conf = ConfigObj(f'{artifacts_conf_dir}/__artifacts.conf', encoding='UTF8')
 		artifacts_main_conf[self.name] = self.to_string()
 		artifacts_main_conf.write()
 		file_name = f'{artifacts_conf_dir}/{self.name}.conf'
-		art_conf = ConfigObj(file_name)
+		art_conf = ConfigObj(file_name, encoding='UTF8')
 		for entry in art_conf:
 			del art_conf[entry]
 		for area in self.areas:
@@ -117,13 +129,13 @@ class Artifact(object):
 
 	@staticmethod
 	def get_contents_from_storage(name : str, code : str):
-		artifacts_main_conf = ConfigObj(f'{artifacts_conf_dir}/__artifacts.conf')
+		artifacts_main_conf = ConfigObj(f'{artifacts_conf_dir}/__artifacts.conf', encoding='UTF8')
 		if code is None:
 			# When given only one input, we search through all artifact to find one that matches
 			try_code = name
 			for try_name in artifacts_main_conf:
 				file_name = f'{artifacts_conf_dir}/{try_name}.conf'
-				art_conf = ConfigObj(file_name)
+				art_conf = ConfigObj(file_name, encoding='UTF8')
 				if try_code in art_conf:
 					return Artifact.get_contents_from_storage(try_name, try_code)
 
@@ -132,14 +144,15 @@ class Artifact(object):
 		if name not in artifacts_main_conf:
 			return f'Error: entity \"{name}\" not found. Check the spelling.'
 		file_name = f'{artifacts_conf_dir}/{name}.conf'
-		art_conf = ConfigObj(file_name)
-		if code is None:
-			main = art_conf[main_index]
-			if main is None or main == '':
-				return f'Error: entity \"{name}\" cannot be accessed without a password / code. Use \".connect {name} <code>\"'
-			else:
-				return art_conf[main_index]
-		elif code not in art_conf:
+		art_conf = ConfigObj(file_name, encoding='UTF8')
+		#if code is None:
+		#	main = art_conf[main_index]
+		#	if main is None or main == '':
+		#		return f'Error: entity \"{name}\" cannot be accessed without a password / code. Use \".connect {name} <code>\"'
+		#	else:
+		#		return art_conf[main_index]
+		#elif code not in art_conf:
+		if code not in art_conf:
 			return f'Error trying to access {name}: incorrect credentials \"{code}\".'
 		else:
 			area = FileArea.from_string(art_conf[code])
@@ -164,4 +177,4 @@ def create_artifact(name : str, main : str=None):
 
 def access_artifact(name : str, code : str):
 	result = Artifact.get_contents_from_storage(name, code)
-	return f'```{result}```'
+	return result
