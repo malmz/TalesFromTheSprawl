@@ -105,15 +105,22 @@ async def on_message(message):
         # No bot shenanigans in the off channel
         return
 
-    if not game.can_process_messages():
-        await server.swallow(message, alert=False)
-        return
+    # "Off messages" means starting and replying to chats with GM and similar
+    only_off_messages = not game.can_process_messages()
+    #await server.swallow(message, alert=False)
+    #return
 
     if channels.is_cmd_line(message.channel.name):
+        if only_off_messages and not has_chat_command(message):
+                await server.swallow(message, alert=False)
+                return
         await bot.process_commands(message)
         return
 
     if channels.is_chat_hub(message.channel.name) or channels.is_landing_page(message.channel.name):
+        if only_off_messages and not has_chat_command(message):
+                await server.swallow(message, alert=False)
+                return
         # TODO: fix custom help command to avoid this hack
         # The .help command does not discern between channels, so we must check for it specifically since
         # we want it to work in cmd_line but not in chat_hub
@@ -130,6 +137,13 @@ async def on_message(message):
     if has_any_command(message):
         await server.swallow(message, alert=True)
         return
+
+    if only_off_messages:
+        # Only chats with certain handles are okay
+        allowed = channels.is_chat_channel(message.channel) and game.is_out_of_game_chat(message.channel)
+        if not allowed:
+            await server.swallow(message, alert=False)
+            return
 
     alert_checking = asyncio.create_task(game.check_alerts(message.content, message.channel, str(message.author.id)))
     processing = asyncio.create_task(process_message(message))
@@ -157,6 +171,15 @@ def has_any_command(message):
 def has_help_command(message):
     help_regex = re.compile(f'^\.help')
     matches = re.search(help_regex, message.content)
+    return matches is not None
+
+def has_chat_command(message):
+    chat_regex = re.compile(f'^\.chat')
+    matches = re.search(chat_regex, message.content)
+    if matches is not None:
+        return True
+    chat_regex = re.compile(f'^\.gm_chat')
+    matches = re.search(chat_regex, message.content)
     return matches is not None
 
 # General reaction handling

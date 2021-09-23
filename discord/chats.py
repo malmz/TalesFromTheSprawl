@@ -12,6 +12,7 @@ import channels
 import server
 import posting
 import gm
+import game
 from common import emoji_cancel, emoji_open, emoji_green, emoji_red, emoji_green_book, emoji_red_book, emoji_unread
 from custom_types import Handle, HandleTypes, PostTimestamp
 
@@ -466,6 +467,13 @@ def write_new_chat_log_entry(chat_name : str, entry : ChatLogEntry):
 	store_chat_log_entry(chat_name, next_index, entry)
 	increment_log_length(chat_name)
 
+def get_participant_handle_ids(channel):
+	chat_channel_data : ChatConnectionMapping = read_chat_connection_from_channel(str(channel.id))
+	if chat_channel_data is not None:
+		chat_state = get_chat_state(chat_channel_data.chat_name)
+		for participant in get_participants(chat_state):
+			yield participant.handle
+
 
 # Returns True if the chat was newly created, False if it already existed
 def init_chat_log(chat_name : str):
@@ -538,6 +546,9 @@ async def create_2party_chat_from_handle_id(my_handle_id : str, partner_handle_i
 
 # TODO: Split this into create_2party_chat and create_chat, where the latter takes my_handle and [other_handles]
 async def create_2party_chat(my_handle : Handle, partner_handle_id : str):
+	if not game.is_2party_chat_possible(my_handle.handle_id, partner_handle_id):
+		return '```[OFF: network unavailable -- right now you can chat with gm and similar but not others]```'
+
 	if my_handle.handle_id == partner_handle_id:
 		return f'Error: {partner_handle_id} is your current handle – cannot open chat with yourself.'
 

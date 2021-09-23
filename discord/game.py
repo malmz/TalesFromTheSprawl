@@ -9,6 +9,7 @@ import channels
 import player_setup
 import server
 import handles
+import chats
 from common import gm_announcements_name
 
 #Game-wide state. Only put general info here; anything specific should go in players / shops / groups / scenarios etc.
@@ -58,6 +59,8 @@ def set_network_restored():
 
 
 reserved_handles = {'admin', 'system', 'all', 'new_handle', 'handle', 'burner', 'burner_handle', 'new_burner', 'balance', 'pay'}
+meta_handles = {'admin', 'system', 'gm', 'arr', 'eclipse'} # TODO create dynamically
+
 
 def is_handle_reserved(handle_id : str):
 	global reserved_handles
@@ -69,7 +72,19 @@ def init():
 		reserved_handles.add(handle)
 	# TODO: purge landig page, send welcome message
 
+def is_out_of_game_chat(channel):
+	for handle in chats.get_participant_handle_ids(channel):
+		if is_out_of_game_handle(handle):
+			return True
+	return False
 
+def is_out_of_game_handle(handle_id : str):
+	return handle_id in meta_handles
+
+def is_2party_chat_possible(handle_a : str, handle_b : str):
+	return (get_network_status() == NetworkState.Ready
+		or is_out_of_game_handle(handle_a)
+		or is_out_of_game_handle(handle_b))
 
 # Alerts:
 

@@ -170,10 +170,11 @@ def clear_reaction_semaphores():
 
 
 async def process_reaction_add(message_id : int, user_id : int, channel, emoji):
-	if not game.can_process_reactions():
+	if not game.can_process_reactions() and not channels.is_chat_hub(channel.name):
 		# Remove the reaction
 		message = await channel.fetch_message(message_id)
 		await remove_reaction(message, emoji, user_id)
+		return
 
 	# Semaphore handling to ensure we only process one action per player at a time:
 	semaphore = await get_reaction_semaphore(user_id)
