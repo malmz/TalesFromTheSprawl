@@ -297,3 +297,13 @@ async def give_group_access(channel, group_id : str):
 	await server.give_role_access(channel, role)
 
 
+def get_members_of_groups(group_ids : List[str]):
+	members = []
+	for group_id in group_ids:
+		group : Group = Group.read(group_id)
+		if group is not None:
+			for player_id in group.members:
+				if player_id not in members:
+					members.append(player_id)
+	print(f'Found members {members} in groups {group_ids}')
+	return members

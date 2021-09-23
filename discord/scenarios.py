@@ -25,10 +25,13 @@ from custom_types import Handle, HandleTypes, Actor, ActionResult
 
 
 class EventType(str, Enum):
+	Wait = 'wait'
 	NetworkOutage = 'outage'
+	NetworkDown = 'down'
+	NetworkRestored = 'up'
 	MessagePlayersByHandles = 'msg_handles'
 	MessageAllPlayersExceptHandles = 'msg_except_handles'
-	MessageGroup = 'msg_groups'
+	MessageGroups = 'msg_groups'
 	MessageExceptGroups = 'msg_except_groups'
 	Unknown = 'NA'
 
@@ -36,6 +39,30 @@ class EventType(str, Enum):
 async def send_message_to_channels(message : str, channel_list):
 	task_list = [asyncio.create_task(c.send(message)) for c in channel_list]
 	await asyncio.gather(*task_list)
+
+class WaitEvent(object):
+	def __init__(
+		self,
+		time_in_seconds : int = 60
+		):
+		self.time_in_seconds = time_in_seconds
+
+	@staticmethod
+	def from_string(string : str):
+		obj = WaitEvent()
+		obj.__dict__ = simplejson.loads(string)
+		return obj
+
+	def to_string(self):
+		return simplejson.dumps(self.__dict__)
+
+	def get_type(self):
+		return EventType.Wait
+
+	async def execute(self):
+		await asyncio.sleep(self.time_in_seconds)
+
+
 
 class NetworkOutageEvent(object):
 	def __init__(
@@ -57,10 +84,52 @@ class NetworkOutageEvent(object):
 		return EventType.NetworkOutage
 
 	async def execute(self):
+		down = NetworkDownEvent()
+		await down.execute()
+		await asyncio.sleep(self.time_in_seconds)
+		restored = NetworkRestoredEvent()
+		await restored.execute()
+
+
+class NetworkDownEvent(object):
+	def __init__(self):
+		pass
+
+	@staticmethod
+	def from_string(string : str):
+		obj = NetworkDownEvent()
+		obj.__dict__ = simplejson.loads(string)
+		return obj
+
+	def to_string(self):
+		return simplejson.dumps(self.__dict__)
+
+	def get_type(self):
+		return EventType.NetworkDown
+
+	async def execute(self):
 		channel_list = [players.get_cmd_line_channel(p) for p in players.get_all_players()]
 		await send_message_to_channels('```Error: Network connection lost```', channel_list)
 		game.set_network_down()
-		await asyncio.sleep(self.time_in_seconds)
+
+class NetworkRestoredEvent(object):
+	def __init__(self):
+		pass
+
+	@staticmethod
+	def from_string(string : str):
+		obj = NetworkRestoredEvent()
+		obj.__dict__ = simplejson.loads(string)
+		return obj
+
+	def to_string(self):
+		return simplejson.dumps(self.__dict__)
+
+	def get_type(self):
+		return EventType.NetworkRestored
+
+	async def execute(self):
+		channel_list = [players.get_cmd_line_channel(p) for p in players.get_all_players()]
 		game.set_network_restored()
 		await send_message_to_channels('```Network connection restored```', channel_list)
 
@@ -122,6 +191,75 @@ class MessagePlayersExceptHandlesEvent(object):
 				channel_list.append(channel)
 		await send_message_to_channels(self.message, channel_list)
 
+# groups:
+
+class MessageGroupsEvent(object):
+	def __init__(
+		self,
+		message : str,
+		groups : List[str]=None
+		):
+		self.message = message
+		self.groups = [] if groups is None else handles
+
+	@staticmethod
+	def from_string(string : str):
+		obj = MessageGroupsEvent(None)
+		obj.__dict__ = simplejson.loads(string)
+		return obj
+
+	def to_string(self):
+		return simplejson.dumps(self.__dict__)
+
+	def get_type(self):
+		return EventType.MessageGroups
+
+	async def execute(self):
+		channel_list = [
+			players.get_cmd_line_channel(c)
+			for c
+			in groups.get_members_of_groups(self.groups)
+			]
+		for channel in channel_list:
+			print(f'Found channel {channel}')
+		await send_message_to_channels(self.message, channel_list)
+
+
+class MessageExceptGroupsEvent(object):
+	def __init__(
+		self,
+		message : str,
+		groups : List[str]=None
+		):
+		self.message = message
+		self.groups = [] if groups is None else groups
+
+	@staticmethod
+	def from_string(string : str):
+		obj = MessageExceptGroupsEvent(None)
+		obj.__dict__ = simplejson.loads(string)
+		return obj
+
+	def to_string(self):
+		return simplejson.dumps(self.__dict__)
+
+	def get_type(self):
+		return EventType.MessageExceptGroups
+
+	async def execute(self):
+		channel_ids_to_avoid = [
+			players.get_cmd_line_channel(c).id
+			for c
+			in groups.get_members_of_groups(self.groups)
+			]		
+		channel_list = []
+		for player_id in players.get_all_players():
+			channel = players.get_cmd_line_channel(player_id)
+			if channel is not None and channel.id not in channel_ids_to_avoid:
+				channel_list.append(channel)
+		await send_message_to_channels(self.message, channel_list)
+
+
 
 
 class Event(object):
@@ -150,23 +288,30 @@ class Event(object):
 		return simplejson.dumps(self.__dict__)
 
 	def to_specific_type(self):
-		if self.event_type == EventType.NetworkOutage:
+		if self.event_type == EventType.Wait:
+			return WaitEvent.from_string(self.data)
+		elif self.event_type == EventType.NetworkOutage:
 			return NetworkOutageEvent.from_string(self.data)
+		elif self.event_type == EventType.NetworkDown:
+			return NetworkDownEvent.from_string(self.data)
+		elif self.event_type == EventType.NetworkRestored:
+			return NetworkRestoredEvent.from_string(self.data)
 		elif self.event_type == EventType.MessagePlayersByHandles:
 			return MessagePlayersByHandleEvent.from_string(self.data)
+		elif self.event_type == EventType.MessageAllPlayersExceptHandles:
+			return MessagePlayersExceptHandlesEvent.from_string(self.data)
+		elif self.event_type == EventType.MessageGroups:
+			return MessageGroupsEvent.from_string(self.data)
+		elif self.event_type == EventType.MessageExceptGroups:
+			return MessageExceptGroupsEvent.from_string(self.data)
 		else:
 			print(f'Scenario event type {self.event_type} not implemented yet.')
+			return None
 
 	async def execute(self):
 		for i in range(self.repetitions):
-			if self.event_type == EventType.NetworkOutage:
-				event = NetworkOutageEvent.from_string(self.data)
-			elif self.event_type == EventType.MessagePlayersByHandles:
-				event = MessagePlayersByHandleEvent.from_string(self.data)
-			elif self.event_type == EventType.MessageAllPlayersExceptHandles:
-				event = MessagePlayersExceptHandlesEvent.from_string(self.data)
-			else:
-				print(f'  Scenario event type {self.event_type} not implemented yet.')
+			event = self.to_specific_type()
+			if event is None:
 				return
 			await event.execute()
 			print(f'  Executed repetition {i+1} out of {self.repetitions}')
@@ -239,6 +384,16 @@ async def create_scenario(name : str):
 	scenario.steps.append(
 		Event.from_specific_event(
 			NetworkOutageEvent(time_in_seconds=1)
+			)
+		)
+	scenario.steps.append(
+		Event.from_specific_event(
+			NetworkDownEvent()
+			)
+		)
+	scenario.steps.append(
+		Event.from_specific_event(
+			NetworkRestoredEvent()
 			)
 		)
 	scenario.steps.append(
