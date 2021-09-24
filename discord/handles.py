@@ -69,6 +69,16 @@ class HandlesCog(commands.Cog, name='handles'):
         response = await get_full_handles_report(ctx)
         await self.send_command_response(ctx, response)
 
+    @commands.command(name='show_handles', help='Show all handles for another player.', hidden=True)
+    @commands.has_role('gm')
+    async def handles_command(self, ctx, handle_id :str=None):
+        allowed = await channels.pre_process_command(ctx, allow_chat_hub=False)
+        if not allowed:
+            return
+        response = await get_full_handles_report_for_handle(handle_id)
+        await self.send_command_response(ctx, response)
+
+
     @commands.command(name='burn', help='Destroy a burner account forever.')
     async def burn_command(self, ctx, burner_name : str=None):
         allowed = await channels.pre_process_command(ctx, allow_chat_hub=False)
@@ -410,9 +420,12 @@ def current_handle_report(actor_id : str):
         raise RuntimeError(f'Unexpected handle type of active handle. Dump: {current_handle.to_string()}')
     return response
 
-def all_handles_report(actor_id : str):
+def all_handles_report(actor_id : str, third_person : bool=False):
     current_handle : Handle = get_active_handle(actor_id)
-    report = 'Here are all your connected handles:\n'
+    if third_person:
+        report = 'The following handles are all connected:\n'
+    else:
+        report = 'Here are all your connected handles:\n'
     any_burner = False
     for handle in get_handles_for_actor(actor_id, include_npc=False):
         if handle.handle_id == current_handle.handle_id:
@@ -428,7 +441,10 @@ def all_handles_report(actor_id : str):
     for handle in get_handles_for_actor_of_types(actor_id, [HandleTypes.NPC]):
         if not any_npc_found:
             any_npc_found = True
-            report += '\n[OFF: You also control these NPC accounts:]\n'
+            if third_person:
+                report += '\n[OFF: The same player also control these NPC accounts:]\n'
+            else:
+                report += '\n[OFF: You also control these NPC accounts:]\n'
         if handle.handle_id == current_handle.handle_id:
             report = report + f'> **{handle.handle_id}**\n'
         else:
@@ -540,6 +556,21 @@ async def process_handle_command(ctx, new_handle_id : str=None, burner : bool=Fa
 async def get_full_handles_report(ctx):
     actor_id = players.get_player_id(str(ctx.message.author.id))
     return all_handles_report(actor_id)
+
+async def get_full_handles_report_for_handle(handle_id : str):
+    if handle_id is None:
+        return 'Error: you must give a handle to search for.'
+    handle = get_handle(handle_id)
+    if handle.handle_type == HandleTypes.Unused:
+        return f'Handle {handle_id} has never been used.'
+    report = ''
+    if handle.handle_type == HandleTypes.Burnt:
+        report += (f'Handle **{handle_id}** was a burner handle and it has been burnt. ' +
+            'It should be untraceable, even for a good hacker!\n' +
+            'For GM eyes only, the player\'s current handles are given below.\n\n')
+    report += all_handles_report(handle.actor_id, third_person=True)
+    return report
+
 
 #Burners
 
