@@ -76,6 +76,8 @@ def is_category_channel(discord_channel, category_name : str, channel_suffix : s
 
 
 
+# TODO: allow for "manual shops",
+# e.g. channels under shops_category_name that are nonetheless handled just like public_open_category_name
 
 def is_shop_channel(discord_channel):
     if discord_channel.category == None:

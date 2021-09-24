@@ -17,6 +17,7 @@ import server
 import finances
 import actors
 
+#TODO: reinitialise?
 
 class ArtifactsCog(commands.Cog, name='network'):
 	"""Commands for connecting to devices and accessing files."""

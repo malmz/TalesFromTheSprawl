@@ -393,6 +393,11 @@ async def create_scenario(name : str):
 		)
 	scenario.steps.append(
 		Event.from_specific_event(
+			WaitEvent(time_in_seconds=5)
+			)
+		)
+	scenario.steps.append(
+		Event.from_specific_event(
 			NetworkRestoredEvent()
 			)
 		)

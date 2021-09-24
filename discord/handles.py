@@ -19,6 +19,8 @@ import re
 # This module tracks and handles state related to handles, e.g. in-game names/accounts that
 # players can create.
 
+# TODO: use the same semaphore for handles and .join
+
 class HandlesCog(commands.Cog, name='handles'):
     '''Commands related to handles. 
     Your handle is how you appear to other users in most other channels. 
