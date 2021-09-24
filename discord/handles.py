@@ -13,7 +13,9 @@ from discord.ext import commands
 from configobj import ConfigObj
 from typing import List
 from enum import Enum
+import random
 import re
+import asyncio
 
 ### Module handles.py
 # This module tracks and handles state related to handles, e.g. in-game names/accounts that
@@ -54,6 +56,8 @@ class HandlesCog(commands.Cog, name='handles'):
         allowed = await channels.pre_process_command(ctx, allow_chat_hub=True)
         if not allowed:
             return
+        # Note: this command may edit handles but may also be read-only.
+        # The below function will claim handles semaphore if editing is required.
         response = await process_handle_command(ctx, new_handle, burner=burner)
         await self.send_command_response(ctx, response)
 
@@ -70,7 +74,11 @@ class HandlesCog(commands.Cog, name='handles'):
         allowed = await channels.pre_process_command(ctx, allow_chat_hub=False)
         if not allowed:
             return
+        sem_id = await get_semaphore(f'burning_{burner_name}')
+        if sem_id is None:
+            return 'Failed: system is too busy. Wait a few minutes and try again.'
         response = await process_burn_command(ctx, burner_name)
+        return_semaphore(sem_id)
         await self.send_command_response(ctx, response)
 
     async def send_command_response(self, ctx, response : str):
@@ -91,8 +99,12 @@ class HandlesCog(commands.Cog, name='handles'):
         allowed = await channels.pre_process_command(ctx)
         if not allowed:
             return
+        sem_id = await get_semaphore('clear_all_handles')
+        if sem_id is None:
+            return 'Failed: system is too busy. Wait a few minutes and try again.'
         await clear_all_handles()
         await actors.init(ctx.guild, clear_all=False)
+        return_semaphore(sem_id)
         await ctx.send('Done.')
 
     @commands.command(
@@ -106,15 +118,45 @@ class HandlesCog(commands.Cog, name='handles'):
         allowed = await channels.pre_process_command(ctx)
         if not allowed:
             return
+        sem_id = await get_semaphore(f'removing_{handle_id}')
+        if sem_id is None:
+            return 'Failed: system is too busy. Wait a few minutes and try again.'
         report = await process_remove_handle_command(ctx, handle_id)
+        return_semaphore(sem_id)
         await self.send_command_response(ctx, report)
 
 def setup(bot):
     bot.add_cog(HandlesCog(bot))
 
 
-# TODO: might need a semaphore for editing handles?
-# or object-oriented with the cog
+handles_semaphore = None
+
+async def get_semaphore(user_id : str):
+    global handles_semaphore
+    sem_id = user_id + '_' + str(random.randrange(10000))
+    number_iterations = 0
+    while True:
+        if handles_semaphore is None:
+            handles_semaphore = sem_id
+            await asyncio.sleep(0.5)
+            if handles_semaphore == sem_id:
+                break
+        await asyncio.sleep(0.5)
+        number_iterations += 1
+        if number_iterations > 120:
+            print(f'Error: semaphore probably stuck! Resetting semaphore for {sem_id}.')
+            handles_semaphore = None
+            return None
+    return sem_id
+
+def return_semaphore(sem_id : str):
+    global handles_semaphore
+    if handles_semaphore == sem_id:
+        handles_semaphore = None
+    else:
+        print(f'Semaphore error for \"handle edit\": tried to return semaphore for {sem_id} but it was already free!')
+
+
 
 # 'handles' is the config object holding each user's current handles.
 handles_conf_dir = 'handles'
@@ -127,6 +169,7 @@ actors_index = '___all_actors'
 active_index = '___active'
 last_regular_index = '___last_regular'
 handles_index = '___all_handles'
+
 
 def get_handles_confobj():
     handles = ConfigObj(handles_conf_dir + '/__handles.conf')
@@ -465,6 +508,11 @@ async def process_handle_command(ctx, new_handle_id : str=None, burner : bool=Fa
         if burner:
             response += ' To create a new burner, use \".burner <new_name>\".'
     else:
+        # Entry point for possibly editing handles:
+        sem_id = await get_semaphore(f'switching_to_{new_handle_id}')
+        if sem_id is None:
+            return 'Failed: system is too busy. Wait a few minutes and try again.'
+
         existing_handle : Handle = get_handle(new_handle_id)
         handle_type = HandleTypes.Regular
         if burner:
@@ -484,6 +532,7 @@ async def process_handle_command(ctx, new_handle_id : str=None, burner : bool=Fa
             response = result.report
         if existing_handle.handle_id != new_handle_id:
             response += f'\nNote that handles are lowercase only: {new_handle_id} -> **{existing_handle.handle_id}**.'
+        return_semaphore(sem_id)
 
     return response
 

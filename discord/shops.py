@@ -146,9 +146,15 @@ class EmployeeCog(commands.Cog, name='employee'):
 		allowed = await channels.pre_process_command(ctx)
 		if not allowed:
 			return
-		result : ActionResult = await create_shop(ctx.guild, shop_name, player_id, is_owner=True)
-		if result.report is not None:
-			await ctx.send(result.report)
+		sem_id = await handles.get_semaphore(f'creating_shop_{shop_name}')
+		if sem_id is None:
+			await ctx.send('Failed: system is too busy. Wait a few minutes and try again.')
+		else:
+			result : ActionResult = await create_shop(ctx.guild, shop_name, player_id, is_owner=True)
+			if result.report is not None:
+				await ctx.send(result.report)
+			handles.return_semaphore(sem_id)		
+
 
 	@commands.command(
 		name='employ',

@@ -110,8 +110,13 @@ class GmCog(commands.Cog, name=gm_role_name):
 		allowed = await channels.pre_process_command(ctx)
 		if not allowed:
 			return
-		await init(clear_all=True)
-		await ctx.send('Done.')
+		sem_id = await handles.get_semaphore('init_gm')
+		if sem_id is None:
+			await ctx.send('Failed: system is too busy. Wait a few minutes and try again.')
+		else:
+			await init(clear_all=True)
+			await ctx.send('Done.')
+			handles.return_semaphore(sem_id)
 
 
 def setup(bot):
