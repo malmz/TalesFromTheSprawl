@@ -27,6 +27,7 @@ import scenarios
 import game
 import artifacts
 import gm
+import logger
 from common import coin
 
 
@@ -36,6 +37,8 @@ guild_name = os.getenv('GUILD_NAME')
 
 intents = discord.Intents.default()
 intents.members = True
+
+logger.setup_command_logger()
 
 # Change only the no_category default string
 help_command = commands.DefaultHelpCommand(
@@ -104,6 +107,12 @@ async def on_message(message):
     if channels.is_offline_channel(message.channel):
         # No bot shenanigans in the off channel
         return
+
+    try:
+        player_name = players.get_player_id(message.author.id, False)
+        logger.log_command(message.author.id, player_name, message.channel.name, message.content)
+    except:
+        print("Failed to log command to file")
 
     # "Off messages" means starting and replying to chats with GM and similar
     only_off_messages = not game.can_process_messages()
