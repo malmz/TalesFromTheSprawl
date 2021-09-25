@@ -71,7 +71,7 @@ class HandlesCog(commands.Cog, name='handles'):
 
     @commands.command(name='show_handles', help='Show all handles for another player.', hidden=True)
     @commands.has_role('gm')
-    async def handles_command(self, ctx, handle_id :str=None):
+    async def show_handles_command(self, ctx, handle_id :str=None):
         allowed = await channels.pre_process_command(ctx, allow_chat_hub=False)
         if not allowed:
             return
