@@ -42,14 +42,18 @@ async def init(bot, current_guild):
 	global gm_role
 	global new_player_role
 	guild = current_guild
-	system_role = discord.utils.find(lambda role: role.name == system_role_name, guild.roles)
-	admin_role = discord.utils.find(lambda role: role.name == admin_role_name, guild.roles)
-	gm_role = discord.utils.find(lambda role: role.name == gm_role_name, guild.roles)
-	all_players_role = discord.utils.find(lambda role: role.name == all_players_role_name, guild.roles)
-	new_player_role = discord.utils.find(lambda role: role.name == new_player_role_name, guild.roles)
-	if all_players_role is None:
-		print(f'Creating role with name {all_players_role_name}')
-		all_players_role = await guild.create_role(name=all_players_role_name)
+	system_role = await init_role(system_role_name)
+	admin_role = await init_role(admin_role_name)
+	gm_role = await init_role(gm_role_name)
+	all_players_role = await init_role(all_players_role_name)
+	new_player_role = await init_role(new_player_role_name)
+
+async def init_role(role_name: str):
+	role = discord.utils.find(lambda role: role.name == role_name, guild.roles)
+	if role is None:
+		print(f'Creating role with name {role_name}')
+		role = await guild.create_role(name=role_name)
+	return role
 
 def get_guild():
 	return guild

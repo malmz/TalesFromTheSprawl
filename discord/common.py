@@ -59,6 +59,20 @@ gm_announcements_name = 'gm_alerts'
 setup_category_name = 'setup'
 testing_category_name = 'testing'
 
+all_categories = [
+	gm_announcements_name,
+	announcements_category_name,
+	off_category_name,
+	public_open_category_name,
+	shadowlands_category_name,
+	shops_category_name,
+	groups_category_name,
+	personal_category_name,
+	chats_category_name,
+	setup_category_name,
+	testing_category_name
+]
+
 # Roles
 all_players_role_name = '251'
 shop_role_start = 2300
