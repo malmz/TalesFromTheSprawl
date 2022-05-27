@@ -1,5 +1,6 @@
 import re
 import emoji
+import itertools
 
 highest_ever_index = '___highest_ever'
 system_role_name = 'system'
@@ -47,9 +48,7 @@ def letter_emoji(letter : str):
 
 # channels
 
-personal_category_name = 'personal_account'
 shops_category_name = 'public_business'
-chats_category_name = 'chats'
 off_category_name = 'offline'
 public_open_category_name = 'public_network'
 shadowlands_category_name = 'shadowlands'
@@ -58,8 +57,12 @@ announcements_category_name = 'announcements'
 gm_announcements_name = 'gm_alerts'
 setup_category_name = 'setup'
 testing_category_name = 'testing'
+personal_category_base = 'personal_account_'
+chats_category_base = 'chats_'
+num_per_player_category_groups = 7 # 6 for regular players, one for non-player entities
 
-all_categories = [
+
+base_categories = [
 	gm_announcements_name,
 	announcements_category_name,
 	off_category_name,
@@ -67,11 +70,11 @@ all_categories = [
 	shadowlands_category_name,
 	shops_category_name,
 	groups_category_name,
-	personal_category_name,
-	chats_category_name,
 	setup_category_name,
-	testing_category_name
-]
+	testing_category_name]
+pa_categories =	[(personal_category_base + str(i)) for i in range(num_per_player_category_groups)]
+chats_categories = [(chats_category_base + str(i)) for i in range(num_per_player_category_groups)]
+all_categories = itertools.chain(base_categories, pa_categories, chats_categories)
 
 # Roles
 all_players_role_name = '251'

@@ -3,7 +3,7 @@ import datetime
 import discord
 
 from custom_types import PostTimestamp, ChannelIdentifier
-from common import all_categories, personal_category_name, shops_category_name, chats_category_name, off_category_name, public_open_category_name, shadowlands_category_name, groups_category_name, announcements_category_name, gm_announcements_name, setup_category_name, testing_category_name
+from common import all_categories, personal_category_base, shops_category_name, chats_category_base, off_category_name, public_open_category_name, shadowlands_category_name, groups_category_name, announcements_category_name, gm_announcements_name, setup_category_name, testing_category_name
 
 import actors
 import server
@@ -57,10 +57,10 @@ def is_chat_channel(discord_channel):
     if discord_channel.category == None:
         return False
     else:
-        return discord_channel.category.name.startswith(chats_category_name)
+        return discord_channel.category.name.startswith(chats_category_base)
 
 def is_personal_channel(discord_channel, channel_suffix : str=None):
-    return is_category_channel(discord_channel, personal_category_name, channel_suffix)
+    return is_category_channel(discord_channel, personal_category_base, channel_suffix)
 
 def is_group_channel(discord_channel, channel_suffix : str=None):
     return is_category_channel(discord_channel, groups_category_name, channel_suffix)
@@ -126,13 +126,28 @@ async def delete_discord_channel(channel_id : str):
 
 ### Common init functions:
 
+
+async def init():
+    for elem in channel_states:
+        del channel_states[elem]
+    channel_states.write()
+    channel_list = await server.get_all_channels()
+
+    for c in channel_list:
+        print("Setting roles for %s" % c.name)
+        await init_discord_channel(c)
+
+    task_list_categories = (asyncio.create_task(verify_category_exists(cat)) for cat in all_categories)
+    await asyncio.gather(*task_list_categories)
+
+
 async def init_discord_channel(discord_channel):
     if discord_channel.type in [discord.ChannelType.category, discord.ChannelType.voice]:
         # No need to do anything for the categories themselves or the voice channels
         return
 
     if discord_channel.category != None:
-        if discord_channel.category.name.startswith(personal_category_name):
+        if discord_channel.category.name.startswith(personal_category_base):
             await init_private_channel(discord_channel)
         elif discord_channel.category.name == public_open_category_name:
             await init_public_open_channel(discord_channel)
@@ -155,22 +170,10 @@ async def init_discord_channel(discord_channel):
         print(f'Will not create channel state for channel {discord_channel.name} which has no category')
 
 
-async def init():
-    for elem in channel_states:
-        del channel_states[elem]
-    channel_states.write()
-    channel_list = await server.get_all_channels()
-
-    for c in channel_list:
-        print("Setting roles for %s" % c.name)
-        await init_discord_channel(c)
-
-    task_list_categories = (asyncio.create_task(verify_category_exists(cat)) for cat in all_categories)
-    await asyncio.gather(*task_list_categories)
-
 async def verify_category_exists(category_name : str):
     guild = server.get_guild()
-    if not category_name in guild.categories:
+    if not category_name in [cat.name for cat in guild.categories]:
+        print("Did not find category %s, will create it" % category_name)
         await guild.create_category(category_name)
 
 async def init_channel_state(discord_channel):
@@ -354,7 +357,7 @@ async def create_personal_channel(guild, role, channel_name : str, actor_id : st
     else:
         print("Using default category index 6 for non-player %s" % actor_id)
         category_index = 6
-    category_name = "%s_%d" % (personal_category_name, category_index)
+    category_name = "%s%d" % (personal_category_base, category_index)
     return await create_discord_channel(guild, overwrites, channel_name, category_name)
 
 async def create_group_channel(guild, role, channel_name : str, read_only : bool=False):
@@ -429,7 +432,7 @@ def init_chat_channel(channel_name : str):
 
 async def create_chat_session_channel_no_role(guild, discord_channel_name : str, read_only : bool=False, category_index : int=0):
     base_overwrites = server.generate_base_overwrites(private = True, read_only = read_only)
-    return await create_discord_channel(guild, base_overwrites, discord_channel_name, "%s_%d" % (chats_category_name, category_index))
+    return await create_discord_channel(guild, base_overwrites, discord_channel_name, "%s%d" % (chats_category_base, category_index))
 
 async def delete_all_chats():
     channel_list = await get_all_chat_channels()

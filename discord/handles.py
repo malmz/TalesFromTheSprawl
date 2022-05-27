@@ -214,7 +214,6 @@ def is_forbidden_handle(new_handle : str):
     else:
         return HandleAllowedResult.Allowed
 
-
 async def init(clear_all : bool=False):
     handles = get_handles_confobj()
     if handles_to_actors not in handles:

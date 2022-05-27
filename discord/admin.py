@@ -122,25 +122,28 @@ class AdminCog(commands.Cog, name='admin'):
 		name='join',
 		help='Claim a handle and join the game. Only for players who have not yet joined.',
 		hidden=True)
-	async def join_command(self, ctx, handle_id : str=None):
+	async def join_command(self, ctx, handle : str=None):
 		allowed = await channels.pre_process_command(ctx, allow_cmd_line=False, allow_landing_page=True)
 		if not allowed:
 			return
 		member = await ctx.guild.fetch_member(ctx.message.author.id)
 		if member is None:
 			await self.send_response_in_landing_page(ctx, 'Failed: member not found.')
-		elif handle_id is None or handle_id == 'handle' or handle_id == '<handle>':
+		elif handle is None or handle == 'handle' or handle == '<handle>':
 			await self.send_response_in_landing_page(ctx, '```You must say which handle is yours! Example: \".join shadow_weaver\"```')
 		else:
 			sem_id = await handles.get_semaphore(str(member.id))
 			if sem_id is None:
 				await self.send_response_in_landing_page(ctx, '```Failed: system is too busy. Wait a few minutes and try again.```')
 			else:
+				# TODO give player some sort of warning about using lower-case only
+				handle_id = handle.lower()
 				report = await players.create_player(member, handle_id)
 				if report is not None:
 					await self.send_response_in_landing_page(ctx, f'```Failed: invalid starting handle \"{handle_id}\" (or handle is already taken).```')
 				else:
-					await server.swallow(ctx.message, alert=False);
+					message = ctx.message
+					await server.swallow(message, alert=False);
 				handles.return_semaphore(sem_id)
 
 	async def send_response_in_landing_page(self, ctx, response : str):
