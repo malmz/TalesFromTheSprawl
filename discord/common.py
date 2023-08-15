@@ -1,4 +1,3 @@
-import re
 import emoji
 import itertools
 
@@ -46,11 +45,10 @@ def letter_emoji(letter : str):
 	return emoji.emojize(string, use_aliases=True)
 
 
-# channels
-
+# Channels
 shops_category_name = 'public_business'
 off_category_name = 'offline'
-public_open_category_name = 'public_network'
+public_open_category_name = 'Local network'
 shadowlands_category_name = 'shadowlands'
 groups_category_name = 'private_networks'
 announcements_category_name = 'announcements'
@@ -59,22 +57,27 @@ setup_category_name = 'setup'
 testing_category_name = 'testing'
 personal_category_base = 'personal_account_'
 chats_category_base = 'chats_'
-num_per_player_category_groups = 7 # 6 for regular players, one for non-player entities
+num_per_player_category_groups = 12 # 11 for regular players, one for non-player entities
 
 
 base_categories = [
-	gm_announcements_name,
-	announcements_category_name,
-	off_category_name,
-	public_open_category_name,
-	shadowlands_category_name,
-	shops_category_name,
-	groups_category_name,
-	setup_category_name,
-	testing_category_name]
-pa_categories =	[(personal_category_base + str(i)) for i in range(num_per_player_category_groups)]
-chats_categories = [(chats_category_base + str(i)) for i in range(num_per_player_category_groups)]
-all_categories = itertools.chain(base_categories, pa_categories, chats_categories)
+	(off_category_name, ["off_general", "off_teknikhjälp"]),
+	(setup_category_name, ["landing_page"]),
+	(announcements_category_name, [gm_announcements_name]),
+	(testing_category_name, ["cmd_line_gm", "off_intrig"]),
+	(shadowlands_category_name, ["seattle_news", "open_channel", "anon"]),
+	(public_open_category_name, ["marketplace", "you_are_drunk"]),
+	(shops_category_name, []),
+	(groups_category_name, [])
+]
+
+pa_categories = [(personal_category_base + str(i), []) for i in range(num_per_player_category_groups)]
+chats_categories = [(chats_category_base + str(i), []) for i in range(num_per_player_category_groups)]
+
+
+def get_all_categories():
+	return itertools.chain(base_categories, pa_categories, chats_categories)
+
 
 # Roles
 all_players_role_name = '251'

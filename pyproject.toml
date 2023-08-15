@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "talesfromthesprawl"
+version = "0.1.0"
+description = ""
+authors = ["Carl Malmz <callem217@gmail.com>"]
+readme = "README.md"
+packages = [{ include = "discord" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+discord-py-interactions = "^5.9.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

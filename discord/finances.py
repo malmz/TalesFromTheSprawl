@@ -2,11 +2,11 @@ import channels
 import handles
 import actors
 import players
-import server
 from custom_types import Transaction, TransTypes, Handle, HandleTypes, PostTimestamp
 from common import coin, transaction_collector, transaction_collected
 
 from discord.ext import commands
+from discord import app_commands, Interaction
 from configobj import ConfigObj
 from copy import deepcopy
 import asyncio
@@ -25,18 +25,11 @@ class FinancesCog(commands.Cog, name='finances'):
     # Commands related to money
     # These only work in cmd_line channels
 
-    @commands.command(
+    @app_commands.command(
         name='create_money',
-        brief='Admin-only.',
-        help='Admin-only. Use \".create_money <handle> <amount>\" to create new money.',
-        hidden=True
-        )
-    @commands.has_role('gm')
-    async def create_money_command(self, ctx, handle_id : str=None, amount : int=0):
-        allowed = await channels.pre_process_command(ctx)
-        if not allowed:
-            return
-
+        description='Admin-only. Creates new money and deposits them in a handle.')
+    @app_commands.checks.has_role('gm')
+    async def create_money_command(self, interaction: Interaction, handle_id: str, amount: int):
         if handle_id == None:
             response = 'Error: no handle specified.'
         elif amount <= 0:
@@ -48,19 +41,13 @@ class FinancesCog(commands.Cog, name='finances'):
                 response = f'Added {amount} to the balance of {handle.handle_id}'
             else:
                 response = f'Error: handle \"{handle_id}\" does not exist, or is not capable of having money.'
-        await ctx.send(response)
+        await interaction.response.send_message(response, ephemeral=True)
 
-    @commands.command(
+    @app_commands.command(
         name='set_money',
-        brief='Admin-only.',
-        help='Admin-only. Use \".set_money <handle> <amount>\" to set the balance of an account.',
-        hidden=True
-        )
-    @commands.has_role('gm')
-    async def set_money_command(self, ctx, handle_id : str=None, amount : int=-1):
-        allowed = await channels.pre_process_command(ctx)
-        if not allowed:
-            return
+        description='Admin-only. Sets the balance of an account.')
+    @app_commands.checks.has_role('gm')
+    async def set_money_command(self, interaction: Interaction, handle_id: str, amount: int):
 
         if handle_id == None:
             response = 'Error: no handle specified.'
@@ -73,67 +60,52 @@ class FinancesCog(commands.Cog, name='finances'):
                 response = f'Set the balance of {handle.handle_id} to {amount}'
             else:
                 response = f'Error: handle \"{handle_id}\" does not exist, or is not capable of having money'
-        await ctx.send(response)
+        await interaction.response.send_message(response, ephemeral=True)
 
     #TODO: move some of this error handling into try_to_pay_from_command
-    @commands.command(
+    @app_commands.command(
         name='pay',
-        brief=f'Pay money ({coin}) to another handle.',
-        help=(f'Pay money ({coin}) to another handle.\nThe money will be paid from your current handle. ' +
-            f'Minimum transfer is {coin} 1.' +
-            'Use .balance or check your personal finance channel to see if you have enough.\n' +
-            f'Example: \".pay shadow_weaver 10\" to pay {coin} 10 to shadow_weaver.\n' +
-            'Note: this command is also used to transfer money between two handles you control.')
+        description=f'Pay money ({coin}) to another handle. The money will be paid from your current handle.',
+#        help=(f'Pay money ({coin}) to another handle.\nThe money will be paid from your current handle. ' +
+#            f'Minimum transfer is {coin} 1.' +
+#            'Use /balance or check your personal finance channel to see if you have enough.\n' +
+#            f'Example: \"/pay shadow_weaver 10\" to pay {coin} 10 to shadow_weaver.\n' +
+#            'Note: this command is also used to transfer money between two handles you control.')
         )
-    async def pay_money_command(self, ctx, handle_recip : str=None, amount : int=0):
-        allowed = await channels.pre_process_command(ctx)
-        if not allowed:
-            return
-
-        if handle_recip == None:
-            response = 'Error: no recipient specified. Use \".pay <recipient> <amount>\", e.g. \".pay shadow_weaver 500\".'
+    async def pay_money_command(self, interaction: Interaction, target_handle: str, amount: int):
+        await interaction.response.defer(ephemeral=True)
+        if target_handle == None:
+            response = 'Error: no recipient specified. Use \"/pay <recipient> <amount>\", e.g. \"/pay shadow_weaver 500\".'
         elif amount <= 0:
-            response = f'Error: cannot transfer less than {coin} 1. Use \".pay <recipient> <amount>\", e.g. \".pay {handle_recip} 500\".'
+            response = f'Error: cannot transfer less than {coin} 1. Use \"/pay <recipient> <amount>\", e.g. \"/pay {target_handle} 500\".'
         else:
-            player_id = players.get_player_id(str(ctx.message.author.id))
-            transaction : custom_types.Transaction = await try_to_pay_from_actor(player_id, handle_recip, amount)
+            player_id = players.get_player_id(str(interaction.user.id))
+            transaction : Transaction = await try_to_pay_from_actor(player_id, target_handle, amount)
             response = transaction.report
-        await ctx.send(response)
+        await interaction.followup.send(response, ephemeral=True)
 
-    @commands.command(
-        name='balance',
-        brief='Show current balance (money) on all your handles.',
-        help='Show the current balance (amount of money available) on all active handles that you control.')
-    async def show_balance_command(self, ctx):
-        allowed = await channels.pre_process_command(ctx)
-        if not allowed:
-            return
-
-        player_id = players.get_player_id(str(ctx.message.author.id))
+    @app_commands.command(name='balance', description='Show current balance (money) on all your handles.')
+    async def show_balance_command(self, interaction: Interaction):
+        player_id = players.get_player_id(str(interaction.user.id))
         response = get_all_handles_balance_report(player_id)
-        await ctx.send(response)
+        await interaction.response.send_message(response, ephemeral=True)
 
-    @commands.command(
+    @app_commands.command(
         name='collect',
-        brief='Collect all your funds to the same handle.',
-        help=(
-            'Collect all your money from all handles you control. ' +
-            'All money will end up at your curent handle. Use \".handle\" to switch to the handle you want first.')
+        description='Collect all your funds to the same handle. All money will end up at your current handle.'
         )
-    async def collect_command(self, ctx):
-        allowed = await channels.pre_process_command(ctx)
-        if not allowed:
-            return
-
-        player_id = players.get_player_id(str(ctx.message.author.id))
-        response = 'Collecting all funds to the account of the current handle...'
-        task_list = [asyncio.create_task(c) for c in [ctx.send(response), collect_all_funds(player_id)]]
-        [_, report] = await asyncio.gather(*task_list)
+    async def collect_command(self, interaction: Interaction):
+        await interaction.response.defer(ephemeral=True)
+        player_id = players.get_player_id(str(interaction.user.id))
+        #await interaction.response.send_message('Collecting all funds to the account of the current handle...', ephemeral=True)
+        report = await collect_all_funds(player_id)
         if report is not None:
-            await ctx.send(report)
+            await interaction.followup.send(report, ephemeral=True)
+        else:
+            await interaction.followup.send("Unknown error. Contact system admin.", ephemeral=True)
 
-def setup(bot):
-    bot.add_cog(FinancesCog(bot))
+async def setup(bot):
+    await bot.add_cog(FinancesCog(bot))
 
 
 
@@ -161,7 +133,7 @@ class InternalTransRecord(object):
     def from_string(string : str):
         obj = InternalTransRecord(None, None, 0)
         loaded_dict = simplejson.loads(string)
-        obj.__dict__ = loaded_dict
+        obj.__dict__.update(loaded_dict)
         obj.timestamp : PostTimestamp = PostTimestamp.from_string(loaded_dict['timestamp'])
         return obj
 
@@ -205,7 +177,7 @@ def init_finances():
 def init_finances_for_handle(handle : Handle, overwrite : bool=True):
     file_name = f'{finances_conf_dir}/{handle.handle_id}.conf'
     finances_conf = ConfigObj(file_name)
-    if not finances_conf or overwrite:
+    if overwrite:
         for entry in finances_conf:
             del finances_conf[entry]
     if balance_index not in finances_conf:
@@ -291,11 +263,10 @@ def get_all_handles_balance_report(actor_id : str):
             any_npc_found = True
             report += '[OFF: Current balance for NPC accounts you control:]\n'
         balance = get_current_balance(handle)
-        balance_str = str(balance)
         if handle.handle_id == current_handle.handle_id:
-            report = report + f'> [**{handle.handle_id}**: {coin} **{balance_str}**]\n'
+            report = report + f'> [**{handle.handle_id}**: {coin} **{balance}**]\n'
         else:
-            report = report + f'> [{handle.handle_id}: {coin} **{balance_str}**]\n'
+            report = report + f'> [{handle.handle_id}: {coin} **{balance}**]\n'
 
     report += 'Current balance for all your accounts:\n'
     total = 0
@@ -407,31 +378,31 @@ async def try_to_pay_from_actor(actor_id : str, recip_handle_id : str, amount : 
 def find_transaction_parties(transaction : Transaction):
     if transaction.payer is None:
         if transaction.payer_actor is None:
-            transaction.report = f'Error: attempted transaction without knowing either the handle or the user ID of the payer.'
+            transaction.report = f'Error: Attempted transaction without knowing either the handle or the user ID of the payer.'
         else:
             transaction.payer = handles.get_active_handle(transaction.payer_actor).handle_id
             if transaction.payer is None:
-                transaction.report = f'Error: attempted transaction for {transaction.payer_actor} but could not find current handle.'
+                transaction.report = f'Error: Attempted transaction for {transaction.payer_actor} but could not find current handle.'
     else:
         if transaction.payer_actor is None and transaction.payer_actor != system_fake_handle:
             payer_handle : Handle = handles.get_handle(transaction.payer)
             if not can_have_finances(payer_handle.handle_type):
-                transaction.report = f'Error: attempted transaction from handle {transaction.payer} which does not exist.'
+                transaction.report = f'Error: Attempted transaction from handle {transaction.payer} which does not exist.'
             else:
                 transaction.payer_actor = payer_handle.actor_id
 
     if transaction.recip is None:
         if transaction.recip_actor is None:
-            transaction.report = f'Error: attempted transaction without knowing either the handle or the user ID of the recipient.'
+            transaction.report = f'Error: Attempted transaction without knowing either the handle or the user ID of the recipient.'
         else:
             transaction.recip = handles.get_active_handle(transaction.recip_actor).handle_id
             if transaction.recip is None:
-                transaction.report = f'Error: attempted transaction to {transaction.recip_actor} but could not find current handle.'
+                transaction.report = f'Error: Attempted transaction targeting {transaction.recip_actor} but could not find current handle.'
     else:
         if transaction.recip_actor is None and transaction.recip_actor != system_fake_handle:
             recip_handle : Handle = handles.get_handle(transaction.recip)
             if not can_have_finances(recip_handle.handle_type):
-                transaction.report = f'Error: attempted transaction to handle {transaction.recip} which does not exist.'
+                transaction.report = f'Error: Attempted transaction targeting handle {transaction.recip} which does not exist.'
             else:
                 transaction.recip_actor = recip_handle.actor_id
 
@@ -496,29 +467,6 @@ def record_transaction_internal(transaction : Transaction):
     if transaction.recip_actor is not None:
         recip_record = InternalTransRecord.from_transaction(transaction, for_payer=False)
         add_internal_record(transaction.recip, recip_record)
-
-
-async def generate_internal_record_for_payer(transaction : Transaction):
-    if transaction.payer_actor is None:
-        return None
-    if transaction.payer_actor == transaction.recip_actor:
-        if transaction.cause == TransTypes.Burn:
-            # Will be generated for the recipient
-            return None
-        else:
-            return generate_record_self_transfer(transaction)
-    if transaction.cause == TransTypes.Transfer:
-        return generate_record_payer(transaction)
-    if transaction.cause == TransTypes.ChatReact:
-        # TODO add more info
-        return generate_record_payer(transaction)
-    if transaction.cause == TransTypes.Collect:
-        return generate_record_collected(transaction)
-    if transaction.cause == TransTypes.ShopOrder:
-        return generate_record_buyer(transaction)
-    if transaction.cause == TransTypes.ShopRefund:
-        # Will not be recorded -- the original transaction will just vanish instead
-        await actors.refresh_financial_statement(transaction.payer_actor)
 
 
 async def generate_record_for_payer(transaction : Transaction):

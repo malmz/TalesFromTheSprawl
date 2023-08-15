@@ -6,14 +6,14 @@ import server
 #import player_setup
 import channels
 import game
-from common import forbidden_content, forbidden_content_print, coin
+from common import coin
 from custom_types import Handle, HandleTypes, ActionResult
 
 from discord.ext import commands
+from discord import app_commands, Interaction
 from configobj import ConfigObj
 from typing import List
 from enum import Enum
-import random
 import re
 import asyncio
 
@@ -21,7 +21,7 @@ import asyncio
 # This module tracks and handles state related to handles, e.g. in-game names/accounts that
 # players can create.
 
-# TODO: use the same semaphore for handles and .join
+# TODO: use the same semaphore for handles and /join
 
 class HandlesCog(commands.Cog, name='handles'):
     '''Commands related to handles. 
@@ -35,137 +35,89 @@ class HandlesCog(commands.Cog, name='handles'):
     # Commands related to handles
     # These work in both cmd_line and chat_hub channels
 
-    @commands.command(
-        name='handle',
-        brief='Show current handle or switch to another handle.',
-        help=(
-            'Show current handle, or switch to another handle.\n' +
-            'To show current, use \".handle\"\n' +
-            'To switch, use \".handle new_handle\"\n'
-            'The new handle can either be one you already control, or an unused one which will then be registered to you.'
-        )
-        )
-    async def handle_command(self, ctx, new_handle : str=None):
-        await self.handle_command_internal(ctx, new_handle, burner=False)
 
-    @commands.command(name='burner', help='Create a new burner handle or switch to existing burner.')
-    async def create_burner_command(self, ctx, new_burner : str=None):
-        await self.handle_command_internal(ctx, new_burner, burner=True)
+    @app_commands.command(name='show_handle', description='Show current handle')
+    async def handle_command(self, interaction: Interaction):
+        await self.handle_command_internal(interaction, None, burner=False)
+        
+    @app_commands.command(name='handle', description='Switch to another handle. It will be created if not exists already.')
+    async def switch_handle_command(self, interaction: Interaction, handle_name: str):
+        await self.handle_command_internal(interaction, handle_name, burner=False)
+        
+    @app_commands.command(name='show_gm_handle', description='Show current handle for the gm user')
+    @app_commands.checks.has_role('gm')
+    async def handle_command_gm(self, interaction: Interaction):
+        await self.handle_command_internal(interaction, None, burner=False, use_gm_actor=True)
+        
+    @app_commands.command(name='gm_handle', description='Switch handle for gm user')
+    @app_commands.checks.has_role('gm')
+    async def handle_command_gm(self, interaction: Interaction, handle_name: str):
+        await self.handle_command_internal(interaction, handle_name, burner=False, use_gm_actor=True)
 
-    async def handle_command_internal(self, ctx, new_handle : str=None, burner : bool=False):
-        allowed = await channels.pre_process_command(ctx, allow_chat_hub=True)
-        if not allowed:
-            return
+    @app_commands.command(name='burner', description='Create a new burner handle or switch to existing burner.')
+    async def create_burner_command(self, ctx, burner_name: str):
+        await self.handle_command_internal(ctx, burner_name, burner=True)
+
+    async def handle_command_internal(self, interaction: Interaction, new_handle: str=None, burner: bool=False, use_gm_actor: bool=False):
         # Note: this command may edit handles but may also be read-only.
         # The below function will claim handles semaphore if editing is required.
-        response = await process_handle_command(ctx, new_handle, burner=burner)
-        await self.send_command_response(ctx, response)
+        await interaction.response.defer(ephemeral=True)
+        response = await process_handle_command(interaction.user.id, new_handle, burner=burner, use_gm_actor=use_gm_actor)
+        await interaction.followup.send(response, ephemeral=True)
 
-    @commands.command(name='handles', help='Show all your handles.')
-    async def handles_command(self, ctx):
-        allowed = await channels.pre_process_command(ctx, allow_chat_hub=True)
-        if not allowed:
-            return
-        response = await get_full_handles_report(ctx)
-        await self.send_command_response(ctx, response)
+    @app_commands.command(name='handles', description='Show all your handles.')
+    async def handles_command(self, interaction: Interaction):
+        await interaction.response.defer(ephemeral=True)
+        response = await get_full_handles_report(interaction.user.id)
+        await interaction.followup.send(response, ephemeral=True)
 
-    @commands.command(name='show_handles', help='Show all handles for another player.', hidden=True)
-    @commands.has_role('gm')
-    async def show_handles_command(self, ctx, handle_id :str=None):
-        allowed = await channels.pre_process_command(ctx, allow_chat_hub=False)
-        if not allowed:
-            return
+    @app_commands.command(name='show_handles', description='Show all handles for another player.')
+    @app_commands.checks.has_role('gm')
+    async def show_handles_command(self, interaction: Interaction, handle_id: str):
+        await interaction.response.defer(ephemeral=True)
         response = await get_full_handles_report_for_handle(handle_id)
-        await self.send_command_response(ctx, response)
+        await interaction.followup.send(response, ephemeral=True)
 
 
-    @commands.command(name='burn', help='Destroy a burner account forever.')
-    async def burn_command(self, ctx, burner_name : str=None):
-        allowed = await channels.pre_process_command(ctx, allow_chat_hub=False)
-        if not allowed:
-            return
-        sem_id = await get_semaphore(f'burning_{burner_name}')
-        if sem_id is None:
-            return 'Failed: system is too busy. Wait a few minutes and try again.'
-        response = await process_burn_command(ctx, burner_name)
-        return_semaphore(sem_id)
-        await self.send_command_response(ctx, response)
+    @app_commands.command(name='burn', description='Destroy a burner account forever.')
+    async def burn_command(self, interaction: Interaction, burner_name: str):
+        await interaction.response.defer(ephemeral=True)
+        async with semaphore():
+            response = await process_burn_command(interaction.user.id, burner_name)
+        await interaction.followup.send(response, ephemeral=True)
 
-    async def send_command_response(self, ctx, response : str):
-        if channels.is_cmd_line(ctx.channel.name):
-            await ctx.send(response)
-        elif channels.is_chat_hub(ctx.channel.name):
-            await ctx.send(response, delete_after=10)
-            await server.swallow(ctx.message, alert=False);
-
-    @commands.command(
+    @app_commands.command(
         name='clear_all_handles',
-        brief='Admin-only.',
-        help=('Admin-only. Remove all handles (including all financial info) ' +
-            'and reset all users to their original handle uXXXX.'),
-        hidden=True
+        description='Admin-only. Remove all handles and reset all users',
+#        help='Admin-only. Remove all handles (including all financial info) and reset all users to their original handle uXXXX.'
         )
-    async def clear_handles_command(self, ctx):
-        allowed = await channels.pre_process_command(ctx)
-        if not allowed:
-            return
-        sem_id = await get_semaphore('clear_all_handles')
-        if sem_id is None:
-            return 'Failed: system is too busy. Wait a few minutes and try again.'
-        await clear_all_handles()
-        await actors.init(ctx.guild, clear_all=False)
-        return_semaphore(sem_id)
-        await ctx.send('Done.')
+    @app_commands.checks.has_role('gm')
+    async def clear_handles_command(self, interaction: Interaction):
+        await interaction.response.defer(ephemeral=True)
+        async with semaphore():
+            await clear_all_handles()
+            await actors.init(clear_all=False)
+        await interaction.followup.send('Done.', ephemeral=True)
 
-    @commands.command(
+    @app_commands.command(
         name='remove_handle',
-        brief='Admin-only.',
-        help=('Admin-only. Remove a handle (including all financial info) ' +
-            'without a trace.'),
-        hidden=True
+        description='Admin-only. Remove a handle (including all financial info) without a trace.'
         )
-    async def remove_handle_command(self, ctx, handle_id : str=None):
-        allowed = await channels.pre_process_command(ctx)
-        if not allowed:
-            return
-        sem_id = await get_semaphore(f'removing_{handle_id}')
-        if sem_id is None:
-            return 'Failed: system is too busy. Wait a few minutes and try again.'
-        report = await process_remove_handle_command(ctx, handle_id)
-        return_semaphore(sem_id)
-        await self.send_command_response(ctx, report)
+    @app_commands.checks.has_role('gm')
+    async def remove_handle_command(self, interaction: Interaction, handle_id: str):
+        await interaction.response.defer(ephemeral=True)
+        async with semaphore():
+            report = await process_remove_handle_command(handle_id)
+        await interaction.followup.send(report, ephemeral=True)
 
-def setup(bot):
-    bot.add_cog(HandlesCog(bot))
+async def setup(bot):
+    await bot.add_cog(HandlesCog(bot))
 
 
-handles_semaphore = None
+handles_semaphore = asyncio.Semaphore(1)
 
-async def get_semaphore(user_id : str):
-    global handles_semaphore
-    sem_id = user_id + '_' + str(random.randrange(10000))
-    number_iterations = 0
-    while True:
-        if handles_semaphore is None:
-            handles_semaphore = sem_id
-            await asyncio.sleep(0.5)
-            if handles_semaphore == sem_id:
-                break
-        await asyncio.sleep(0.5)
-        number_iterations += 1
-        if number_iterations > 120:
-            print(f'Error: semaphore probably stuck! Resetting semaphore for {sem_id}.')
-            handles_semaphore = None
-            return None
-    return sem_id
-
-def return_semaphore(sem_id : str):
-    global handles_semaphore
-    if handles_semaphore == sem_id:
-        handles_semaphore = None
-    else:
-        print(f'Semaphore error for \"handle edit\": tried to return semaphore for {sem_id} but it was already free!')
-
+def semaphore():
+    return handles_semaphore
 
 
 # 'handles' is the config object holding each user's current handles.
@@ -283,8 +235,8 @@ def store_handle(handle : Handle):
     actor_handles_conf.write()
 
 
-async def create_handle(actor_id : str, handle_id : str, handle_type : HandleTypes, force_reserved : bool=False):
-    handle = Handle(handle_id, handle_type = handle_type, actor_id = actor_id)
+async def create_handle(actor_id : str, handle_id : str, handle_type : HandleTypes, force_reserved : bool=False, auto_respond_message : str=None):
+    handle = Handle(handle_id, handle_type = handle_type, actor_id = actor_id, auto_respond_message = auto_respond_message)
     result : HandleAllowedResult = is_forbidden_handle(handle_id)
     if result == HandleAllowedResult.Allowed:
         store_handle(handle)
@@ -390,7 +342,7 @@ def get_handles_for_actor_of_types(actor_id : str, types_list : List[HandleTypes
 ### Methods directly related to commands
 
 
-async def process_remove_handle_command(ctx, handle_id : str):
+async def process_remove_handle_command(handle_id : str):
     if handle_id is None:
         return 'Error: you must say which handle you want to clear.'
     handle : Handle = get_handle(handle_id)
@@ -408,13 +360,16 @@ async def process_remove_handle_command(ctx, handle_id : str):
         return f'Removed handle {handle_id}. Warning: if the handle is re-created in the future, some things might not work since old chats etc may linger in the database.'
 
 def current_handle_report(actor_id : str):
+    import gm
+    is_gm_actor = gm.gm_actor_id == actor_id
+    cmd = '/handle' if not is_gm_actor else '/gm_handle'
     current_handle : Handle = get_active_handle(actor_id)
     if current_handle.handle_type == HandleTypes.Burner:
-        response = f'Your current handle is **{current_handle.handle_id}**. It\'s a burner handle – to destroy it, use \".burn {current_handle.handle_id}\". To switch handle, type \".handle <new_name>\".'
+        response = f'Your current handle is **{current_handle.handle_id}**. It\'s a burner handle – to destroy it, use \"/burn {current_handle.handle_id}\". To switch handle, type \"{cmd} <new_name>\".'
     elif current_handle.handle_type == HandleTypes.NPC:
         response = f'Your current handle is **{current_handle.handle_id}**. [OFF: It\'s an NPC handle, so it cannot be directly linked to your other handles, unless they interact with it]'
     elif current_handle.handle_type == HandleTypes.Regular:
-        response = f'Your current handle is **{current_handle.handle_id}**. To switch handle, type \".handle <new_name>\".'
+        response = f'Your current handle is **{current_handle.handle_id}**. To switch handle, type \"{cmd} <new_name>\".'
     else:
         raise RuntimeError(f'Unexpected handle type of active handle. Dump: {current_handle.to_string()}')
     return response
@@ -449,19 +404,19 @@ def all_handles_report(actor_id : str, third_person : bool=False):
         else:
             report = report + f'> {handle.handle_id}\n'
 
-    report += '\nYou can switch to another handle (any type), or create a new one, by using \".handle\".\n'
+    report += '\nYou can switch to another handle (any type), or create a new one, by using \"/handle\".\n'
     if any_burner:
-        report += 'Create new burner handles (🔥) using \".burner\". They can be deleted forever using \".burn\". Regular handles cannot be deleted.\n'
-    report += 'To see how much money each handle has, use \".balance\" or check your \"finances\" channel.\n'
+        report += 'Create new burner handles (🔥) using \"/burner\". They can be deleted forever using \"/burn\". Regular handles cannot be deleted.\n'
+    report += 'To see how much money each handle has, use \"/balance\" or check your \"finances\" channel.\n'
 
     return report
 
 
-def switch_to_own_existing_handle(actor_id : str, handle : Handle, expected_type : HandleTypes):
+def switch_to_own_existing_handle(handle : Handle, expected_type : HandleTypes):
     if handle.handle_type == HandleTypes.Burner:
         if expected_type in [HandleTypes.Regular, HandleTypes.Burner]:
-            # We can switch to a burner handle using both .handle and .burner
-            response = f'Switched to burner handle **{handle.handle_id}**. Remember to burn it when done, using \".burn {handle.handle_id}\".'
+            # We can switch to a burner handle using both /handle and /burner
+            response = f'Switched to burner handle **{handle.handle_id}**. Remember to burn it when done, using \"/burn {handle.handle_id}\".'
             switch_to_handle(handle)
         else:
             response = f'Attempted to switch to {expected_type} handle {handle.handle_id}, but {handle.handle_id} is in fact a burner.'
@@ -473,8 +428,8 @@ def switch_to_own_existing_handle(actor_id : str, handle : Handle, expected_type
             response = f'Switched to handle **{handle.handle_id}**.'
             switch_to_handle(handle)
         else:
-            # We cannot switch to a non-burner using .burner
-            response = f'Handle **{handle.handle_id}** already exists but is not a {expected_type} handle. Use \".handle {handle.handle_id}\" to switch to it.'
+            # We cannot switch to a non-burner using /burner
+            response = f'Handle **{handle.handle_id}** already exists but is not a {expected_type} handle. Use \"/handle {handle.handle_id}\" to switch to it.'
     elif handle.handle_type == HandleTypes.NPC:
         response = f'Switched to NPC handle **{handle.handle_id}**.'
         switch_to_handle(handle)
@@ -506,7 +461,7 @@ async def create_handle_and_switch(
         if handle_type == HandleTypes.Burner:
             # TODO: note about possibly being hacked until destroyed?
             result.report = (f'Switched to new burner handle **{handle.handle_id}** (created now). '
-                + f'To destroy it, use \".burn {handle.handle_id}\".')
+                + f'To destroy it, use \"/burn {handle.handle_id}\".')
         elif handle_type == HandleTypes.NPC:
             result.report = (f'Switched to new handle **{handle.handle_id}** (created now). '
                 + '[OFF: it\'s an NPC handle, meaning it cannot be linked to your regular handles unless it interacts with them.]')
@@ -516,44 +471,46 @@ async def create_handle_and_switch(
         result.report = (f'Error: failed to create {handle.handle_id}; reason unknown.')
     return result
 
-async def process_handle_command(ctx, new_handle_id : str=None, burner : bool=False, npc : bool=False):
-    actor_id = players.get_player_id(str(ctx.message.author.id))
+async def process_handle_command(user_id: int, new_handle_id : str=None, burner : bool=False, npc : bool=False, use_gm_actor : bool=False):
+    if use_gm_actor:
+        import gm
+        actor_id = gm.gm_actor_id
+    else:
+        actor_id = players.get_player_id(str(user_id))
+
     if new_handle_id == None:
         response = current_handle_report(actor_id)
         if burner:
-            response += ' To create a new burner, use \".burner <new_name>\".'
+            response += ' To create a new burner, use \"/burner <new_name>\".'
     else:
         # Entry point for possibly editing handles:
-        sem_id = await get_semaphore(f'switching_to_{new_handle_id}')
-        if sem_id is None:
-            return 'Failed: system is too busy. Wait a few minutes and try again.'
+        async with semaphore():
+            existing_handle : Handle = get_handle(new_handle_id)
+            handle_type = HandleTypes.Regular
+            if burner:
+                handle_type = HandleTypes.Burner
+            elif npc:
+                handle_type = HandleTypes.NPC
 
-        existing_handle : Handle = get_handle(new_handle_id)
-        handle_type = HandleTypes.Regular
-        if burner:
-            handle_type = HandleTypes.Burner
-        elif npc:
-            handle_type = HandleTypes.NPC
-
-        if existing_handle.handle_type != HandleTypes.Unused:
-            if existing_handle.actor_id == actor_id:
-                response = switch_to_own_existing_handle(actor_id, existing_handle, handle_type)
-            elif existing_handle.handle_id != new_handle_id:
-                response = f'Error: cannot create handle {new_handle_id} because its internal ID ({existing_handle.handle_id}) clashes with an existing handle.'
+            if existing_handle.handle_type != HandleTypes.Unused:
+                if existing_handle.actor_id == actor_id:
+                    response = switch_to_own_existing_handle(existing_handle, handle_type)
+                elif existing_handle.handle_id != new_handle_id:
+                    response = f'Error: cannot create handle {new_handle_id} because its internal ID ' + \
+                               f'({existing_handle.handle_id}) clashes with an existing handle.'
+                else:
+                    response = f'Error: the handle {new_handle_id} not available.'
             else:
-                response = f'Error: the handle {new_handle_id} not available.'
-        else:
-            result = await create_handle_and_switch(actor_id, new_handle_id, handle_type)
-            response = result.report
-        if existing_handle.handle_id != new_handle_id:
-            response += f'\nNote that handles are lowercase only: {new_handle_id} -> **{existing_handle.handle_id}**.'
-        return_semaphore(sem_id)
+                result = await create_handle_and_switch(actor_id, new_handle_id, handle_type)
+                response = result.report
+            if existing_handle.handle_id != new_handle_id:
+                response += f'\nNote that handles are lowercase only: {new_handle_id} -> **{existing_handle.handle_id}**.'
 
     return response
 
 
-async def get_full_handles_report(ctx):
-    actor_id = players.get_player_id(str(ctx.message.author.id))
+async def get_full_handles_report(user_id: int):
+    actor_id = players.get_player_id(str(user_id))
     return all_handles_report(actor_id)
 
 async def get_full_handles_report_for_handle(handle_id : str):
@@ -574,7 +531,7 @@ async def get_full_handles_report_for_handle(handle_id : str):
 #Burners
 
 # returns the amount of money (if any) that was transferred away from the burner
-async def destroy_burner(guild, burner : Handle):
+async def destroy_burner(burner : Handle):
     balance = 0
     # If we burn the active handle, we must figure out the new active one
     active : Handle = get_active_handle(burner.actor_id)
@@ -598,11 +555,11 @@ async def destroy_burner(guild, burner : Handle):
     await finances.deinit_finances_for_handle(burner, record=True)
     return balance
 
-async def process_burn_command(ctx, burner_id : str=None):
+async def process_burn_command(user_id: int, burner_id: str=None):
     if burner_id == None:
-        response = 'Error: No burner handle specified. Use \".burn <handle>\"'
+        response = 'Error: No burner handle specified. Use \"/burn <handle>\"'
     else:
-        actor_id = players.get_player_id(str(ctx.message.author.id))
+        actor_id = players.get_player_id(str(user_id))
         burner : Handle = get_handle(burner_id)
         if not burner.is_active():
             response = f'Error: the handle {burner_id} does not exist.'
@@ -611,7 +568,7 @@ async def process_burn_command(ctx, burner_id : str=None):
         elif burner.handle_type in [HandleTypes.Regular, HandleTypes.NPC]:
             response = f'Error: **{burner_id}** is not a burner handle, cannot be destroyed. To stop using it, simply switch to another handle.'
         elif burner.handle_type == HandleTypes.Burner:
-            amount = await destroy_burner(ctx.guild, burner)
+            amount = await destroy_burner(burner)
             current_handle_id = get_active_handle_id(actor_id)
             response = 'Destroyed burner handle **' + burner_id + '**.\n'
             response = response + 'It will not be possible to use again, for anyone. Its previous use cannot be traced to you.\n'

@@ -1,11 +1,7 @@
-import discord
-import asyncio
 import simplejson
 from configobj import ConfigObj
-from enum import Enum
 from typing import List
 
-import players
 import handles
 import channels
 import server
@@ -40,7 +36,7 @@ class PlayerSetupInfo(object):
 	@staticmethod
 	def from_string(string : str):
 		obj = PlayerSetupInfo(None)
-		obj.__dict__ = simplejson.loads(string)
+		obj.__dict__.update(simplejson.loads(string))
 		return obj
 
 	def to_string(self):
@@ -69,14 +65,14 @@ def remove_examples(entries : List[str]):
 			yield entry
 
 def remove_examples_from_firsts(entries : List):
-	for (a, b) in entries:
-		if double_underscore not in a:
-			yield (a, b)
+	for entry in entries:
+		if double_underscore not in entry[0]:
+			yield entry
 
 def only_firsts_no_examples(entries):
-	for (first, second) in entries:
-		if double_underscore not in first:
-			yield first
+	for entry in entries:
+		if double_underscore not in entry[0]:
+			yield entry[0]
 
 def add_known_handle(handle_id : str):
 	known_handles = ConfigObj('known_handles.conf')
@@ -115,7 +111,8 @@ def can_setup_new_player_with_handle(main_handle : str):
 	return handle.handle_type == HandleTypes.Unused
 
 async def setup_handles_and_welcome_new_player(player : PlayerData, main_handle : str):
-	channel = channels.get_discord_channel(str(player.cmd_line_channel_id))
+	guild = actors.get_guild_for_actor(player.player_id)
+	channel = channels.get_discord_channel(str(player.cmd_line_channel_id), guild.id)
 	if channel is None:
 		print(f'Error: Failed to welcome player {player.player_id} -- no cmd line channel found!')
 		return False
@@ -127,7 +124,7 @@ async def setup_handles_and_welcome_new_player(player : PlayerData, main_handle 
 
 	info = read_player_setup_info(main_handle)
 
-	content = f'Welcome to the matrix_client, **{main_handle}**. This is your command line. To see all commands, type \"**.help**\"\n'
+	content = f'Welcome to the matrix_client, **{main_handle}**. This is your command line but you can issue commands anywhere.\n'
 	content += f'Your account ID is {player.player_id}. All channels ending with {player.player_id} are only visible to you.\n'
 	content += f'In all other channels, your posts will be shown under your current **handle** ({main_handle}).'
 	await channel.send(content)
@@ -135,17 +132,17 @@ async def setup_handles_and_welcome_new_player(player : PlayerData, main_handle 
 	content = '=== **HANDLES** ===\n'
 	content += 'You can create and switch handles freely using the following commands:\n'
 	content += '\n'
-	content += '> **.handle** *new_handle*\n'
+	content += '> **/handle** *new_handle*\n'
 	content += '  Switch to handle - if it does not already exist, it will be created for you.\n'
 	content += '  Regular handles cannot be deleted, but you can just abandon it if you don\'t need it.\n'
 	content += '\n'
-	content += '> **.handle** / **.handles**\n'
+	content += '> **/show_handle** / **/handles**\n'
 	content += '  Show you what your current handle is / show all your handles.\n'
 	content += '\n'
-	content += '> **.burner** *new_handle*\n'
+	content += '> **/burner** *new_handle*\n'
 	content += '  Switch to a burner handle - if it does not already exist, it will be created for you.\n'
 	content += '\n'
-	content += '> **.burn** *burner_handle*\n'
+	content += '> **/burn** *burner_handle*\n'
 	content += '  Destroy a burner handle forever.\n'
 	content += '  While a burner handle is active, it can possibly be traced.\n'
 	content += '  After burning it, its ownership cannot be traced.\n'
@@ -168,13 +165,13 @@ async def setup_handles_and_welcome_new_player(player : PlayerData, main_handle 
 	content = '=== **MONEY** ===\n'
 	content += 'Each handle has its own balance (money). Commands related to money:\n'
 	content += '\n'
-	content += '> **.balance**\n'
+	content += '> **/balance**\n'
 	content += '  Show the current balance of all handles you control.\n'
 	content += '\n'
-	content += '> **.collect**\n'
+	content += '> **/collect**\n'
 	content += '  Transfer all money from all handles you control to the one you are currently using.\n'
 	content += '\n'
-	content += '> **.pay** *recipient* *amount*\n'
+	content += '> **/pay** *recipient* *amount*\n'
 	content += '  Transfer money from your current handle to the recipient.\n'
 	content += '  You can of course use this to transfer money to another handle that you also own.\n'
 	content += '\n'
@@ -220,20 +217,25 @@ async def setup_handles_no_welcome_new_player(actor_id : str, main_handle : str)
 	await setup_groups(actor_id, info.groups)
 
 	for (shops_list, is_owner) in [(info.shops_owner, True), (info.shops_employee, False)]:
-		async for content in setup_shops(actor_id, shops_list, is_owner):
+		async for _ in setup_shops(actor_id, shops_list, is_owner):
 			pass
 
 
 async def setup_alternate_handles(actor_id : str, aliases, alias_type : HandleTypes):
 	result = ActionResult()
 	result.report = ''
-	for (other_handle_id, amount) in remove_examples_from_firsts(aliases):
+	for handle_data in remove_examples_from_firsts(aliases):
+		other_handle_id = handle_data[0]
+		amount = handle_data[1]
+		auto_respond_msg = handle_data[2] if len(handle_data) > 2 else None
+
 		# TODO: check if handle already exists and throw error
 		other_handle = await handles.create_handle(
 			actor_id,
 			other_handle_id,
 			alias_type,
-			force_reserved=True
+			force_reserved=True,
+			auto_respond_message=auto_respond_msg
 			)
 		if other_handle.handle_type != HandleTypes.Unused:
 			result.report += get_connected_alias_report(other_handle_id, alias_type, int(amount))
@@ -257,19 +259,19 @@ def get_all_connected_aliases_of_type_report(handle_type : HandleTypes, last_exa
 		return ''
 	elif handle_type == HandleTypes.Burner:
 		example_burner = 'burner_name' if last_example is None else last_example
-		return f'  (Use for example \".burn {example_burner}\" to destroy a burner and erase its tracks)\n'
+		return f'  (Use for example \"/burn {example_burner}\" to destroy a burner and erase its tracks)\n'
 	elif handle_type == HandleTypes.NPC:
 		return '  [OFF: NPC handles let you act as someone else, and cannot be traced to your other handles.]\n'
 
 
 async def setup_groups(actor_id : str, group_names : List[str]):
-	guild = server.get_guild()
 	any_found = False
 	report = ''
+	guild = actors.get_guild_for_actor(actor_id)
 	for group_name in remove_examples(group_names):
 		any_found = True
-		await setup_group_for_new_member(guild, group_name, actor_id)
-		channel = groups.get_main_channel(group_name)
+		await setup_group_for_new_member(group_name, actor_id)
+		channel = groups.get_main_channel(guild, group_name)
 		report += f'- **{group_name}**: {channels.clickable_channel_ref(channel)}\n'
 	if any_found:
 		report = ('=== **COMMUNITIES** ===\nEach community has a private chat room that is invisible to outsiders:\n' +
@@ -277,49 +279,50 @@ async def setup_groups(actor_id : str, group_names : List[str]):
 			'  Keep in mind that you can access these channels using any of your handles!')
 	return report
 
-async def setup_group_for_new_member(guild, group_name : str, actor_id : str):
+async def setup_group_for_new_member(group_name : str, actor_id : str):
 	if Group.exists(group_name):
 		report = await groups.add_member_from_player_id(group_name, actor_id)
 	else:
-		await groups.create_new_group(guild, group_name, [actor_id])
+		await groups.create_new_group(group_name, [actor_id])
 
 
 async def setup_shops(actor_id : str, shop_names : List[str], is_owner : bool):
-	guild = server.get_guild()
 	handle : Handle = handles.get_active_handle(actor_id)
 	if handle is None:
 		return
+	guild = actors.get_guild_for_actor(actor_id)
 	for shop_name in remove_examples(shop_names):
-		shop : Shop = await setup_shop_for_member(guild, shop_name, handle, is_owner)
+		shop : Shop = await setup_shop_for_member(shop_name, handle, is_owner)
 		if shop is None:
 			report = f'Error: failed to gain access to **{shop_name}**. Most likely the player data entry for {handle.actor_id} is corrupt.\n\n'
 		else:
 			report = f'=== **{shop_name.upper()}** ===\n'
 			if is_owner:
 				if shop.owner_id != handle.actor_id:
-					report += f'Error: according to the database {handle.actor_id} should be the owner of the shop **{trinity_taskbar}**, but it is owned by {shop.owner_id}.\n'
+					report += f'Error: according to the database {handle.actor_id} should be the owner of the shop **{shop_name}**, but it is owned by {shop.owner_id}.\n'
 				else:
 					report += f'You are the owner of the shop **{shop_name}**.\n'
 			else:
 				report += f'You are employed at **{shop_name}**.\n'
 			report += f'Use \".help employee\" to see the commands you can use to manage the business.\n'
-			report += f'  Public storefront: {channels.clickable_channel_id_ref(shop.storefront_channel_id)}.\n'
+			report += f'  Public storefront: {channels.clickable_channel_id_ref(shop.get_storefront_channel_id(guild))}.\n'
 			report += f'  Order status: {channels.clickable_channel_id_ref(shop.order_flow_channel_id)}.\n'
 			shop_actor : Actor = actors.read_actor(shop.shop_id)
 			report += f'  Financial status: {channels.clickable_channel_id_ref(shop_actor.finance_channel_id)}.\n'
 			report += f'  Business chat hub: {channels.clickable_channel_id_ref(shop_actor.chat_channel_id)}.\n'
-			report += f'  Note: customers will see you as **{handle.handle_id}** unless you change it with \".set_tips\"!'
+			report += f'  Note: customers will see you as **{handle.handle_id}** unless you change it with \"/set_tips\"!'
 		yield report
 
 
-async def setup_shop_for_member(guild, shop_name : str, handle : Handle, is_owner : bool):
+async def setup_shop_for_member(shop_name : str, handle : Handle, is_owner : bool):
 	if shops.shop_exists(shop_name):
 		shop : Shop = shops.read_shop(shop_name)
-		await shops.employ(guild, handle, shop, is_owner=is_owner)
+		await shops.employ(handle, shop, is_owner=is_owner)
 		return shop
 	else:
-		result : ActionResult = await shops.create_shop(guild, shop_name, handle.actor_id, is_owner=is_owner)
+		result : ActionResult = await shops.create_shop(shop_name, handle.actor_id, is_owner=is_owner)
 		if result.success:
 			return shops.read_shop(shop_name)
 		else:
+			print(f'Failed to setup shop for member: {result.report}')
 			return None

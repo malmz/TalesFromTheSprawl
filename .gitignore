@@ -1,14 +1,5 @@
 # Runtime conf files
-discord/*.conf
-discord/players/*.conf
-discord/handles/*.conf
-discord/finances/*.conf
-discord/artifacts/*.conf
-discord/scenarios/*.conf
-discord/chats/*.conf
-discord/groups/*.conf
-discord/actors/*.conf
-discord/shops/*.conf
+config/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -139,3 +130,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+.DS_Store

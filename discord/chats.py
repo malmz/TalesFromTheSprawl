@@ -1,9 +1,13 @@
+from typing import Optional
 import discord
 import asyncio
 import simplejson
 from configobj import ConfigObj
 from enum import Enum
 from discord.ext import commands
+from discord import app_commands, Interaction
+from discord.enums import AppCommandPermissionType
+
 
 import actors
 import players
@@ -14,7 +18,7 @@ import posting
 import gm
 import game
 from common import emoji_cancel, emoji_open, emoji_green, emoji_red, emoji_green_book, emoji_red_book, emoji_unread
-from custom_types import Handle, HandleTypes, PostTimestamp
+from custom_types import Handle, PostTimestamp
 
 
 
@@ -33,143 +37,129 @@ class ChatsCog(commands.Cog, name='chats'):
 	# Commands related to chats
 	# These only work in cmd_line channels
 
-	@commands.command(
+	@app_commands.command(
 		name='chat',
-		brief='Open a chat session with another user.',
-		help=(
-			'Open a chat session between you (using your current handle) and another user. ' +
-			'If you have never had a chat between those two handles before, one will be created. ' +
-			'All your active chats are shown in your personal chat_hub channel, where you can open and ' +
-			'close the connections as needed.\n' +
-			'You can close a chat and re-open it and all the chat history will be stored, except for file attachments. ' +
-			'Note: you cannot change your handle in an existing chat, so make sure to start the chat from the correct one! ' +
-			'If you switch handles and open a new chat, the other person can see that two handles have tried to contact them, ' +
-			'but they will not see that they belong to the same person.'
+		description='Open a chat session with another user.',
+#		help=(
+#			'Open a chat session between you (using your current handle) and another user. ' +
+#			'If you have never had a chat between those two handles before, one will be created. ' +
+#			'All your active chats are shown in your personal chat_hub channel, where you can open and ' +
+#			'close the connections as needed.\n' +
+#			'You can close a chat and re-open it and all the chat history will be stored, except for file attachments. ' +
+#			'Note: you cannot change your handle in an existing chat, so make sure to start the chat from the correct one! ' +
+#			'If you switch handles and open a new chat, the other person can see that two handles have tried to contact them, ' +
+#			'but they will not see that they belong to the same person.'
+#		)
 		)
-		)
-	async def chat_command(self, ctx, handle : str=None):
-		allowed = await channels.pre_process_command(ctx, allow_chat_hub=True)
-		if not allowed:
-			return
-
-		response = None
+	async def chat_command(self, interaction: Interaction, handle: str):
 		if handle is None:
-			response = f'Error: you must say who you want to chat with. Example: \".chat shadow_weaver\"'
+			response = f'Error: you must say who you want to chat with. Example: \"/chat shadow_weaver\"'
+			await interaction.response.send_message(response, ephemeral=True)
 		else:
+			await interaction.response.defer(ephemeral=True)
 			handle = handle.lower()
-			response = await create_chat_from_command(str(ctx.message.author.id), handle)
-		if response is not None:
-			await self.send_command_response(ctx, response)
+			response = await create_chat_from_command(str(interaction.user.id), handle)
+			if response is not None:
+				await interaction.followup.send(response, ephemeral=True)
+			else:
+				await interaction.followup.send("Unknown error. Contact system admin.", ephemeral=True)
 
-	@commands.command(
+	@app_commands.command(
 		name='chat_other',
-		help='Admin only. Open a chat session for someone else.',
-		hidden=True)
-	@commands.has_role('gm')
-	async def chat_other_command(self, ctx,  my_handle : str=None, other_handle : str=None):
-		allowed = await channels.pre_process_command(ctx, allow_chat_hub=False)
-		if not allowed:
+		description='Admin only. Open a chat session for someone else.')
+	@app_commands.checks.has_role('gm')
+	async def chat_other_command(self, interaction: Interaction, from_handle: str, to_handle: str):
+		if from_handle is None:
+			await interaction.response.send_message('Error: you must give two handles to start a chat.', ephemeral=True)
 			return
-		if my_handle is None:
-			await ctx.send('Error: you must give two handles to start a chat.')
-			return
-		elif other_handle is None:
-			report = f'Error: you must give the second handle that should chat with {my_handle}.'
-			await ctx.send(report)
+		elif to_handle is None:
+			report = f'Error: you must give the second handle that should chat with {from_handle}.'
+			await interaction.response.send_message(report, ephemeral=True)
 			return
 
-		my_handle = my_handle.lower()
-		other_handle = other_handle.lower()
-		report = await create_2party_chat_from_handle_id(my_handle, other_handle)
+		await interaction.response.defer(ephemeral=True)
+		from_handle = from_handle.lower()
+		to_handle = to_handle.lower()
+		report = await create_2party_chat_from_handle_id(from_handle, to_handle)
 		if report != None:
-			await ctx.send(report)
+			await interaction.followup.send(report, ephemeral=True)
+		else:
+			await interaction.followup.send("Unknown error. Contact system admin.", ephemeral=True)
 
-	@commands.command(
+	@app_commands.command(
 		name='gm_chat',
-		help='GM only. Open a chat session from the shared GM account.',
-		hidden=True)
-	@commands.has_role('gm')
-	async def gm_chat_command(self, ctx,  other_handle : str=None):
-		allowed = await channels.pre_process_command(ctx, allow_chat_hub=False)
-		if not allowed:
-			return
+		description='GM only. Open a chat session from the shared GM account.')
+	@app_commands.checks.has_role('gm')
+	async def gm_chat_command(self, interaction: Interaction, other_handle: str):
 		if other_handle is None:
 			report = f'Error: you must give the handle to chat with.'
-			await ctx.send(report)
+			await interaction.response.send_message(report, ephemeral=True)
 			return
 
+		await interaction.response.defer(ephemeral=True)
 		my_handle = gm.get_gm_active_handle()
 		other_handle = other_handle.lower()
 		report = await create_2party_chat_from_handle_id(my_handle, other_handle)
 		if report != None:
-			await ctx.send(report)
-
-	@commands.command(
-		name='close_chat',
-		brief='Close a chat session from your end.',
-		help=(
-			'Close a chat session from your end. This will not affect how the other participant sees the chat. ' +
-			f'You can re-open the chat at any time using \".chat\", or by clicking the {emoji_open} in your chat_hub.'
-			)
-		)
-	async def close_chat_command(self, ctx, handle : str=None):
-		allowed = await channels.pre_process_command(ctx, allow_chat_hub=True)
-		if not allowed:
-			return
-		if handle is None:
-			response = f'Error: you must say which chat you want to close. Example: \".close_chat shadow_weaver\"'
+			await interaction.followup.send(report, ephemeral=True)
 		else:
-			handle = handle.lower()
-			response = await close_chat_session_from_command(ctx, handle)
-		if response is not None:
-			await self.send_command_response(ctx, response)
+			await interaction.followup.send("Unknown error. Contact system admin.", ephemeral=True)
 
-	@commands.command(
+	@app_commands.command(
+		name='close_chat',
+		description='Close a chat session from your end.',
+#		help=(
+#			'Close a chat session from your end. This will not affect how the other participant sees the chat. ' +
+#			f'You can re-open the chat at any time using \"/chat\", or by clicking the {emoji_open} in your chat_hub.'
+#			)
+		)
+	async def close_chat_command(self, interaction: Interaction, handle: str):
+		if handle is None:
+			response = f'Error: you must say which chat you want to close. Example: \"/close_chat shadow_weaver\"'
+			await interaction.response.send_message(response, ephemeral=True)
+		else:
+			await interaction.response.defer(ephemeral=True)
+			handle = handle.lower()
+			response = await close_chat_session_from_command(interaction.user.id, handle)
+			if response is not None:
+				await interaction.followup.send(response, ephemeral=True)
+			else:
+				await interaction.followup.send("Unknown error. Contact system admin.", ephemeral=True)
+
+	@app_commands.command(
 		name='close_chat_other',
-		help='Admin-only. Close a chat session for someone else.',
-		hidden=True)
-	@commands.has_role('gm')
-	async def close_chat_other_command(self, ctx, my_handle : str, other_handle : str):
-		allowed = await channels.pre_process_command(ctx, allow_chat_hub=False)
-		if not allowed:
-			return
+		description='Admin-only. Close a chat session for someone else.')
+	@app_commands.checks.has_role('gm')
+	async def close_chat_other_command(self, interaction: Interaction, my_handle: str, other_handle: str):
+		await interaction.response.defer(ephemeral=True)
 		my_handle = my_handle.lower()
 		other_handle = other_handle.lower()
 		report = await close_2party_chat_session_from_handle_id(my_handle, other_handle)
 		if report is not None:
-			await ctx.send(report)
+			await interaction.followup.send(report, ephemeral=True)
+		else:
+			await interaction.followup.send("Unknown error. Contact system admin.", ephemeral=True)
 
-	@commands.command(
+	@app_commands.command(
 		name='clear_all_chats',
-		help='Admin-only. Delete all chats and chat channels for all users.',
-		hidden=True)
-	@commands.has_role('gm')
-	async def clear_all_chats_command(self, ctx):
-		allowed = await channels.pre_process_command(ctx, allow_chat_hub=False)
-		if not allowed:
-			return
+		description='Admin-only. Delete all chats and chat channels for all users.')
+	@app_commands.checks.has_role('gm')
+	async def clear_all_chats_command(self, interaction: Interaction):
+		await interaction.response.defer(ephemeral=True)
 		await init(clear_all=True)
-		await ctx.send('Done.')
-
-	async def send_command_response(self, ctx, response : str):
-		if channels.is_cmd_line(ctx.channel.name):
-			await ctx.send(response)
-		elif channels.is_chat_hub(ctx.channel.name):
-			await ctx.send(response, delete_after=10)
-			await server.swallow(ctx.message, alert=False, delay=10);
+		await interaction.followup.send('Done.', ephemeral=True)
 
 
 chats_dir = 'chats'
 chats = ConfigObj(f'{chats_dir}/chats.conf')
 
-def setup(bot):
+async def setup(bot):
 	global chats
-	bot.add_cog(ChatsCog(bot))
+	await bot.add_cog(ChatsCog(bot))
 	chats = ConfigObj(f'{chats_dir}/chats.conf')
 
 channel_limit_per_actor = 5
 
-channel_id_index = '___channel_id'
 handle_index = '___handle'
 chat_channel_data_index = '___chat_channel_data'
 chat_hub_msg_data_index = '___chat_hub_msg_data'
@@ -210,7 +200,7 @@ class ChatParticipant(object):
 	@staticmethod
 	def from_string(string : str):
 		obj = ChatParticipant(None, None, None, None, None, None)
-		obj.__dict__ = simplejson.loads(string)
+		obj.__dict__.update(simplejson.loads(string))
 		return obj
 
 	def to_string(self):
@@ -227,7 +217,7 @@ class ChatConnectionMapping(object):
 	@staticmethod
 	def from_string(string : str):
 		obj = ChatConnectionMapping(None, None, None)
-		obj.__dict__ = simplejson.loads(string)
+		obj.__dict__.update(simplejson.loads(string))
 		return obj
 
 	def to_string(self):
@@ -249,7 +239,7 @@ class ChatLogEntry(object):
 	@staticmethod
 	def from_string(string : str):
 		obj = ChatLogEntry(None)
-		obj.__dict__ = simplejson.loads(string)
+		obj.__dict__.update(simplejson.loads(string))
 		return obj
 
 	def to_string(self):
@@ -320,7 +310,7 @@ async def init(clear_all : bool=False):
 			for participant in get_participants(chat_state):
 				# Close all chat sessions. If the discord and config files are still in sync,
 				# this will update all chat hub messages so that chats can be easily re-opened
-				await close_chat_session(chat_state, participant)
+				await close_chat_session(participant)
 	# Remove all channel mappings
 	chats[chat_channel_data_index] = {}
 	if clear_all:
@@ -347,31 +337,38 @@ def create_2party_chat_name(handle1 : Handle, handle2 : Handle):
 	handles_ordered = sorted([handle1.handle_id, handle2.handle_id])
 	return f'{handles_ordered[0]}_{handles_ordered[1]}'
 
-def read_chat_connection_from_channel(channel_id : str):
+def _get_chat_connection_key(guild_id: int, channel_id: str):
+	return f'{guild_id}#{channel_id}'
+
+def read_chat_connection_from_channel(guild_id: int, channel_id : str):
 	init_chats_confobj()
 	chats = ConfigObj(f'{chats_dir}/chats.conf')
 
-	if channel_id in chats[chat_channel_data_index]:
-		string = chats[chat_channel_data_index][channel_id]
+	key = _get_chat_connection_key(guild_id, channel_id)
+	if key in chats[chat_channel_data_index]:
+		string = chats[chat_channel_data_index][key]
 		chat_connection : ChatConnectionMapping = ChatConnectionMapping.from_string(string)
 		return chat_connection
 	else:
 		return None
 
-def store_chat_connection_for_channel(channel_id : str, chat_connection : ChatConnectionMapping):
+def store_chat_connection_for_channel(guild_id: int, channel_id : str, chat_connection : ChatConnectionMapping):
 	init_chats_confobj()
-	chats[chat_channel_data_index][channel_id] = chat_connection.to_string()
+	key = _get_chat_connection_key(guild_id, channel_id)
+	chats[chat_channel_data_index][key] = chat_connection.to_string()
 	chats.write()
 
-def clear_channel_connection_mappings(channel_id):
+def clear_channel_connection_mappings(guild_id: int, channel_id: str):
 	init_chats_confobj()
-	if channel_id in chats[chat_channel_data_index]:
-		del chats[chat_channel_data_index][channel_id]
+	key = _get_chat_connection_key(guild_id, channel_id)
+	if key in chats[chat_channel_data_index]:
+		del chats[chat_channel_data_index][key]
 		chats.write()
 
 
 def read_chat_connection_from_hub_msg(msg_id : str):
 	init_chats_confobj()
+	# TODO: Guard msg_id with guild_id too?
 	if msg_id in chats[chat_hub_msg_data_index]:
 		string = chats[chat_hub_msg_data_index][msg_id]
 		chat_connection : ChatConnectionMapping = ChatConnectionMapping.from_string(string)
@@ -468,7 +465,7 @@ def write_new_chat_log_entry(chat_name : str, entry : ChatLogEntry):
 	increment_log_length(chat_name)
 
 def get_participant_handle_ids(channel):
-	chat_channel_data : ChatConnectionMapping = read_chat_connection_from_channel(str(channel.id))
+	chat_channel_data : ChatConnectionMapping = read_chat_connection_from_channel(channel.guild.id, str(channel.id))
 	if chat_channel_data is not None:
 		chat_state = get_chat_state(chat_channel_data.chat_name)
 		for participant in get_participants(chat_state):
@@ -563,13 +560,11 @@ async def create_2party_chat(my_handle : Handle, partner_handle_id : str):
 	if newly_created_chat:
 		channels.init_chat_channel(chat_name)
 
-	guild = server.get_guild()
 	chat_state = get_chat_state(chat_name)
 
 	# Always activate my own session:
 	task_add_me = asyncio.create_task(
 		add_participant_to_chat(
-			guild,
 			chat_state,
 			chat_name,
 			my_handle,
@@ -583,7 +578,6 @@ async def create_2party_chat(my_handle : Handle, partner_handle_id : str):
 	# only contain a channel if we are re-opening a chat that was already open in their end
 	task_add_partner = asyncio.create_task(
 		add_participant_to_chat(
-			guild,
 			chat_state,
 			chat_name,
 			partner_handle,
@@ -623,7 +617,6 @@ async def create_2party_chat(my_handle : Handle, partner_handle_id : str):
 ### Common method used both when creating and re-opening chats
 
 async def add_participant_to_chat(
-	guild,
 	chat_state,
 	chat_name : str,
 	handle : Handle,
@@ -632,6 +625,7 @@ async def add_participant_to_chat(
 	):
 	channel_name = f'{handle.handle_id}_to_{port_name}'
 	
+	guild = actors.get_guild_for_actor(handle.actor_id)
 	participant : ChatParticipant = read_participant(chat_state, handle.handle_id)
 	if participant == None:
 		# This is a newly added participant
@@ -668,7 +662,7 @@ async def get_chat_ui_for_active_session(guild, participant):
 		raise RuntimeError(f'Chat session {participant.handle} : {participant.chat_name} is listed as active, '
 			+ 'but missing either channel_id or chat_hub_msg_id'
 		)
-	chat_channel = channels.get_discord_channel(participant.channel_id)
+	chat_channel = channels.get_discord_channel(participant.channel_id, guild.id)
 
 	chat_hub_channel = actors.get_chat_hub_channel(participant.actor_id)
 	chat_hub_message = await chat_hub_channel.fetch_message(participant.chat_hub_msg_id)
@@ -707,10 +701,10 @@ async def get_chat_ui_for_inactive_session(guild, chat_state, participant : Chat
 			participant.channel_id = str(channel.id)
 			# channel ID -> chat mapping
 			chat_connection = ChatConnectionMapping(participant.chat_name, participant.actor_id, participant.handle)
-			store_chat_connection_for_channel(participant.channel_id, chat_connection)
+			store_chat_connection_for_channel(guild.id, participant.channel_id, chat_connection)
 			status_change = True
 
-	chat_hub_message = await update_chat_hub_message(guild, channel, participant, has_changed=status_change)
+	chat_hub_message = await update_chat_hub_message(channel, participant, has_changed=status_change)
 	participant.chat_hub_msg_id = str(chat_hub_message.id)
 
 	# chat -> actor, channel ID, msg ID mapping
@@ -728,10 +722,7 @@ async def get_chat_ui_for_inactive_session(guild, chat_state, participant : Chat
 
 async def create_channel_for_chat_session(guild, chat_state, participant : ChatParticipant):
 	archived = participant.session_status in [session_status_open_archive, session_status_closed_archive]
-	if players.is_player(participant.actor_id):
-		category_index = players.get_player_category_index(participant.actor_id)
-	else:
-		category_index = 6
+	category_index = players.get_player_category_index(participant.actor_id)
 	channel = await channels.create_chat_session_channel_no_role(guild, participant.channel_name, read_only=archived, category_index=category_index)
 	await channel.send(
 		(
@@ -743,11 +734,11 @@ async def create_channel_for_chat_session(guild, chat_state, participant : ChatP
 	await repost_message_history(channel, chat_state, participant)
 
 	# At this point we want to give permissions (prevent unread from before)
-	await actors.give_actor_access(guild, channel, participant.actor_id)
+	await actors.give_actor_access(channel, participant.actor_id)
 	return channel
 
 async def open_chat_from_reaction(chat_state, participant : ChatParticipant):
-	guild = server.get_guild()
+	guild = actors.get_guild_for_actor(participant.actor_id)
 	# activate the session:
 	chat_ui = await get_chat_ui(guild, chat_state, participant, activation=Activation.Open)
 	return chat_ui.session_status in [session_status_active, session_status_open_archive]
@@ -800,7 +791,7 @@ def generate_hub_msg_closed_archived_session(chat_title : str, handle_id : str):
 def generate_hub_msg(handle_id : str, session_status : str, chat_title : str=None, discord_channel=None):
 	if session_status == session_status_active:
 		if discord_channel is None:
-			raise RuntimeError(f'Attempted to write chat hub msg for active session, but there is no channel. Dump: {participant.to_string()}')
+			raise RuntimeError(f'Attempted to write chat hub msg for active session, but there is no channel. Dump: {handle_id}')
 		return generate_hub_msg_active_session(discord_channel, handle_id)
 	elif session_status == session_status_inactive:
 		return generate_hub_msg_inactive_session(chat_title, handle_id)
@@ -813,7 +804,7 @@ def generate_hub_msg(handle_id : str, session_status : str, chat_title : str=Non
 	else:
 		return "Archived chat -- not implemented yet!"
 
-async def update_chat_hub_message(guild, chat_channel, participant, has_changed : bool=False, repost : bool=False):
+async def update_chat_hub_message(chat_channel, participant, has_changed : bool=False, repost : bool=False):
 	message = None
 	chat_hub_channel = actors.get_chat_hub_channel(participant.actor_id)
 	if participant.chat_hub_msg_id is not None:
@@ -871,7 +862,7 @@ async def process_reaction_in_chat_hub(message, emoji : str):
 		):
 		# Ignore return value -- it's not worth the effort to send it to actor's command line
 		# (and they may not even have one)
-		await close_chat_session(chat_state, participant)
+		await close_chat_session(participant)
 	elif (participant.session_status in [session_status_inactive, session_status_unread, session_status_closed_archive]
 		and emoji == emoji_open
 		):
@@ -884,10 +875,10 @@ async def process_reaction_in_chat_hub(message, emoji : str):
 
 ### Closing chats
 
-async def close_chat_session_from_command(ctx, partner_handle_id : str):
-	my_user_id = str(ctx.message.author.id)
+async def close_chat_session_from_command(user_id: int, partner_handle_id : str):
+	my_user_id = str(user_id)
 	my_actor_id = players.get_player_id(my_user_id)
-	my_handle = handles.get_handle(my_actor_id)
+	my_handle = handles.get_active_handle(my_actor_id)
 	return await close_2party_chat_session(my_handle, partner_handle_id)
 
 async def close_2party_chat_session_from_handle_id(my_handle_id : str, partner_handle_id : str):
@@ -912,17 +903,15 @@ async def close_2party_chat_session(my_handle : Handle, partner_handle_id : str)
 	chat_state = get_chat_state(chat_name)
 	participant : ChatParticipant = read_participant(chat_state, my_handle.handle_id)
 
-	failure_report = await close_chat_session(chat_state, participant)
+	failure_report = await close_chat_session(participant)
 	if failure_report is None:
-		return f'Closed chat session with {partner_handle.handle_id}. To re-open, use \".chat {partner_handle.handle_id}\".'
+		return f'Closed chat session with {partner_handle.handle_id}. To re-open, use \"/chat {partner_handle.handle_id}\".'
 	else:
 		return failure_report
 
 
-async def close_chat_session(chat_state, participant : ChatParticipant):
+async def close_chat_session(participant : ChatParticipant):
 	print(f'Trying to close {participant.chat_name}, for {participant.handle}')
-	guild = server.get_guild()
-	chat_state = get_chat_state(participant.chat_name)
 
 	# update chat -> channel ID mapping
 	should_log = True
@@ -941,19 +930,20 @@ async def close_chat_session(chat_state, participant : ChatParticipant):
 
 	decrease_num_active_chats(participant.actor_id)
 	channel_id_to_close = participant.channel_id
+	guild_id = actors.get_guild_for_actor(participant.actor_id).id
 
 	# Update participant
 	participant.channel_id = None
 
 	# Remove channel ID -> chat mapping
-	clear_channel_connection_mappings(channel_id_to_close)
+	clear_channel_connection_mappings(guild_id, channel_id_to_close)
 
 	# TODO: we could put the channel closing and the chat hub update in an asyncio.gather if we wanted
 
 	# Close the session, i.e. delete the actor's discord channel
-	await channels.delete_discord_channel(channel_id_to_close)
+	await channels.delete_discord_channel(channel_id_to_close, guild_id)
 
-	chat_hub_message = await update_chat_hub_message(guild, None, participant, has_changed=True)
+	chat_hub_message = await update_chat_hub_message(None, participant, has_changed=True)
 	participant.chat_hub_msg_id = str(chat_hub_message.id)
 
 	# 'participant' is the chat -> actor, channel ID, msg ID mapping
@@ -982,8 +972,7 @@ def is_archived(participant : ChatParticipant):
 async def archive_chat_for_handle(handle: Handle, chat_name : str, chat_state):
 	participants = list(get_participants(chat_state))
 	participant_to_archive = next(p for p in participants if participant_is_handle(handle, p))
-	guild = server.get_guild()
-	archived_participant = await archive_chat_for_participant(guild, chat_state, participant_to_archive)
+	archived_participant = await archive_chat_for_participant(chat_state, participant_to_archive)
 	store_participant(chat_name, archived_participant)
 
 	other_participants = [p for p in participants if not participant_is_handle(handle, p)]
@@ -994,18 +983,19 @@ async def archive_chat_for_handle(handle: Handle, chat_name : str, chat_state):
 	print(f'Archiving chat for {handle.handle_id}. Other participant is {other_participants[0].to_string()}. is_non_archived: {is_non_archived}, archive_for_remaining: {archive_for_remaining}')
 	task_list = (
 		asyncio.create_task(
-			update_other_participant_after_archiving(guild, p, handle, chat_state, archive_for_remaining)
+			update_other_participant_after_archiving(p, handle, chat_state, archive_for_remaining)
 		) for p in other_participants
 	)
 	await asyncio.gather(*task_list)
 
 
-async def archive_chat_for_participant(guild, chat_state, participant : ChatParticipant):
+async def archive_chat_for_participant(chat_state, participant : ChatParticipant):
+	guild = actors.get_guild_for_actor(participant.actor_id)
 	chat_ui = await get_chat_ui(guild, chat_state, participant)
 	if chat_ui.session_status == session_status_active:
 		participant.session_status = session_status_open_archive
 		await chat_ui.channel.send(get_archived_alert(participant.handle))
-		await channels.make_read_only(participant.channel_id)
+		await channels.make_read_only(participant.channel_id, guild.id)
 	elif chat_ui.session_status in [session_status_inactive, session_status_unread]:
 		participant.session_status = session_status_closed_archive
 	elif chat_ui.session_status in [session_status_open_archive, session_status_closed_archive]:
@@ -1017,17 +1007,17 @@ async def archive_chat_for_participant(guild, chat_state, participant : ChatPart
 	entry = ChatLogEntry(None, archived_handle_id=participant.handle)
 	write_new_chat_log_entry(participant.chat_name, entry)
 
-	chat_hub_message = await update_chat_hub_message(guild, chat_ui.channel, participant, has_changed=True)
+	await update_chat_hub_message(chat_ui.channel, participant, has_changed=True)
 	return participant
 
 async def update_other_participant_after_archiving(
-	guild,
 	participant : ChatParticipant,
 	archived_handle : Handle,
 	chat_state,
 	should_be_archived : bool):
+	guild = actors.get_guild_for_actor(participant.actor_id)
 	if should_be_archived:
-		participant = await archive_chat_for_participant(guild, chat_state, participant)
+		participant = await archive_chat_for_participant(chat_state, participant)
 		store_participant(participant.chat_name, participant)
 	else:
 		chat_ui = await get_chat_ui(guild, chat_state, participant)
@@ -1038,12 +1028,13 @@ async def update_other_participant_after_archiving(
 
 ### Messages in chat
 
-async def post_to_participant(guild, chat_state, message, participant : ChatParticipant, poster_id : str, full_post : bool):
+async def post_to_participant(chat_state, msg_data : posting.MessageData, participant : ChatParticipant, poster_id : str, full_post : bool):
 	if participant.session_status != session_status_active:
 		# A new channel may be created => we should always include the full header on the first message
 		full_post = True
 
 	# Try to activate the session for the recipient
+	guild = actors.get_guild_for_actor(participant.actor_id)
 	chat_ui = await get_chat_ui(guild, chat_state, participant, activation=Activation.Msg)
 	if chat_ui.session_status == session_status_active:
 		if chat_ui.channel is None:
@@ -1051,12 +1042,12 @@ async def post_to_participant(guild, chat_state, message, participant : ChatPart
 		else:
 			# Send the message to the open channel
 			poster_id = poster_id if full_post else None
-			await posting.repost_message_to_channel(chat_ui.channel, message, poster_id)
+			await posting.repost_message_to_channel(chat_ui.channel, msg_data, poster_id)
 	elif chat_ui.session_status == session_status_inactive:
 		# The channel was not opened when requested -- recipient must be at their chat session limit
 		participant.session_status = session_status_unread
 		# Update and repost the chat hub message:
-		chat_hub_message = await update_chat_hub_message(guild, chat_ui.channel, participant, has_changed=True, repost=True)
+		chat_hub_message = await update_chat_hub_message(chat_ui.channel, participant, has_changed=True, repost=True)
 		participant.chat_hub_msg_id = str(chat_hub_message.id)
 		# chat -> (actor, channel ID, msg ID mapping) has been updated
 		store_participant(participant.chat_name, participant)
@@ -1069,33 +1060,48 @@ async def post_to_participant(guild, chat_state, message, participant : ChatPart
 		raise RuntimeError(f'Unexpected case! Dump: {participant.to_string()}, {chat_ui.session_status}')
 
 
-def create_reposting_tasks(guild, chat_name : str, message, poster_id : str, full_post : bool):
+def create_reposting_tasks(chat_name : str, msg_data: posting.MessageData, poster_id : str, full_post : bool):
 	chat_state = get_chat_state(chat_name)
 	for participant in get_participants(chat_state):
-		yield asyncio.create_task(post_to_participant(guild, chat_state, message, participant, poster_id, full_post))
+		yield asyncio.create_task(post_to_participant(chat_state, msg_data, participant, poster_id, full_post))
 
 async def process_message(message):
-	task1 = asyncio.create_task(message.delete())
+	await message.delete()
 
 	sender_channel = message.channel
-	chat_channel_data : ChatConnectionMapping = read_chat_connection_from_channel(str(sender_channel.id))
+	chat_channel_data : ChatConnectionMapping = read_chat_connection_from_channel(sender_channel.guild.id, str(sender_channel.id))
 	if chat_channel_data is None:
 		return
+	await process_message_data(chat_channel_data, posting.MessageData.load_from_discord_message(message))
+	await auto_respond_if_needed(chat_channel_data, message)
+
+async def auto_respond_if_needed(chat_channel_data: ChatConnectionMapping, message: discord.Message):
+	chat_state = get_chat_state(chat_channel_data.chat_name)
+	for participant in get_participants(chat_state):
+		handle = handles.get_handle(participant.handle)
+		if handle.auto_respond_message:
+			actor = actors.read_actor(participant.actor_id)
+			chat_channel_data_2 : ChatConnectionMapping = read_chat_connection_from_channel(actor.guild_id, participant.channel_id)
+			if chat_channel_data_2:
+				print("Sending auto respond message for %s" % participant.handle)
+				await process_message_data(chat_channel_data_2, posting.MessageData(content=handle.auto_respond_message, created_at=message.created_at))
+				break
+
+async def process_message_data(chat_channel_data: ChatConnectionMapping, msg_data: posting.MessageData):
 	poster_id = chat_channel_data.handle
 	chat_name = chat_channel_data.chat_name
 
 	# With timestamps from discord, we must apply the DST diff compared to the python env timestamps
-	post_time = PostTimestamp.from_datetime(message.created_at, dst_diff=2)
+	post_time = PostTimestamp.from_datetime(msg_data.created_at, dst_diff=2)
 	full_post = channels.record_new_post(chat_channel_data.chat_name, poster_id, post_time)
-	guild = server.get_guild()
-	tasks = create_reposting_tasks(guild, chat_name, message, poster_id, full_post)
+	tasks = create_reposting_tasks(chat_name, msg_data, poster_id, full_post)
 
-	await asyncio.gather(task1, *tasks)
+	await asyncio.gather(*tasks)
 
 	# Write to the persistent log:
 	# TODO: also add header if it is the first message after someone disconnected
 	poster_id = poster_id if full_post else None
-	post = posting.create_post(message, poster_id, attachments_supported=False)
+	post = posting.create_post(msg_data, poster_id, attachments_supported=False)
 	entry = ChatLogEntry(post, full_post)
 	chat_state = get_chat_state(chat_name)
 	write_new_chat_log_entry(chat_name, entry)

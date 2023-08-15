@@ -1,6 +1,6 @@
 import simplejson
 from enum import Enum
-from typing import List, Set
+from typing import List
 from copy import deepcopy
 
 class ActionResult(object):
@@ -22,7 +22,7 @@ class PostTimestamp(object):
 	@staticmethod
 	def from_string(string : str):
 		obj = PostTimestamp(0, 0)
-		obj.__dict__ = simplejson.loads(string)
+		obj.__dict__.update(simplejson.loads(string))
 		return obj
 
 	@staticmethod
@@ -34,17 +34,11 @@ class PostTimestamp(object):
 
 	def pretty_print(self, second : int=-1):
 		# Manual DST fix
-		hour_str = str(self.hour)
-		if self.minute < 10:
-			minute_str = f'0{self.minute}'
-		else:
-			minute_str = str(self.minute)
+		hour_str = str(self.hour) if self.hour >= 10 else f'0{self.hour}'
+		minute_str = str(self.minute) if self.minute >= 10 else f'0{self.minute}'
 		result = f'{hour_str}:{minute_str}'
 		if second >= 0 and second < 60:
-			if second < 10:
-				second_str = f'0{second}'
-			else:
-				second_str = str(second)
+			second_str = str(second) if second >= 10 else f'0{second}'
 			result += f':{second_str}'
 		return result
 
@@ -103,7 +97,7 @@ class Transaction(object):
 	def from_string(string : str):
 		obj = Transaction(None, None, None, None, 0)
 		loaded_dict = simplejson.loads(string)
-		obj.__dict__ = loaded_dict
+		obj.__dict__.update(loaded_dict)
 		obj.timestamp : PostTimestamp = PostTimestamp.from_string(loaded_dict['timestamp'])
 		return obj
 
@@ -124,32 +118,18 @@ class Transaction(object):
 			)
 
 
-class ChannelIdentifier(object):
-	def __init__(self, discord_channel_id : str = None, chat_channel_name : str = None):
-		self.discord_channel_id = discord_channel_id
-		self.chat_channel_name = chat_channel_name
-
-	@staticmethod
-	def from_string(string : str):
-		obj = ChannelIdentifier()
-		obj.__dict__ = simplejson.loads(string)
-		return obj
-
-	def to_string(self):
-		return simplejson.dumps(self.__dict__)
-
-
 class Actor(object):
 	def __init__(
 		self,
 		role_name : str,
 		actor_id : str,
+		guild_id: int,
 		finance_channel_id : int,
 		finance_stmt_msg_id : int,
 		chat_channel_id : int):
 		self.role_name = role_name
-		self.role_name = role_name
 		self.actor_id = actor_id
+		self.guild_id = guild_id
 		self.finance_channel_id = finance_channel_id
 		self.finance_stmt_msg_id = finance_stmt_msg_id
 		self.chat_channel_id = chat_channel_id
@@ -164,8 +144,8 @@ class Actor(object):
 
 	@staticmethod
 	def from_string(string : str):
-		obj = Actor(None, None, 0, 0, 0)
-		obj.__dict__ = simplejson.loads(string)
+		obj = Actor(None, None, 0, 0, 0, 0)
+		obj.__dict__.update(simplejson.loads(string))
 		return obj
 
 	def to_string(self):
@@ -176,18 +156,20 @@ class PlayerData(object):
 	def __init__(
 		self,
 		player_id : str,
+		category_index: int,
 		cmd_line_channel_id : int,
 		shops : List[str] = None,
 		groups : List[str] = None):
 		self.player_id = player_id
+		self.category_index = category_index
 		self.cmd_line_channel_id = cmd_line_channel_id
 		self.shops = [] if shops is None else shops
 		self.groups = [] if groups is None else groups
 
 	@staticmethod
 	def from_string(string : str):
-		obj = PlayerData(None, 0)
-		obj.__dict__ = simplejson.loads(string)
+		obj = PlayerData(None, 0, 0)
+		obj.__dict__.update(simplejson.loads(string))
 		return obj
 
 	def to_string(self):
@@ -208,15 +190,17 @@ class Handle(object):
 		self,
 		handle_id : str,
 		handle_type : HandleTypes = HandleTypes.Unused,
-		actor_id : str=None):
+		actor_id : str=None,
+		auto_respond_message=None):
 		self.handle_id = handle_id.lower() if handle_id is not None else None
 		self.handle_type = handle_type
 		self.actor_id = actor_id
+		self.auto_respond_message = auto_respond_message
 
 	@staticmethod
 	def from_string(string : str):
 		obj = Handle(None)
-		obj.__dict__ = simplejson.loads(string)
+		obj.__dict__.update(simplejson.loads(string))
 		return obj
 
 	def to_string(self):
