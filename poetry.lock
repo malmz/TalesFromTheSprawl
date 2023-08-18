@@ -456,6 +456,16 @@ files = [
 ]
 
 [[package]]
+name = "peewee"
+version = "3.16.3"
+description = "a little orm"
+optional = false
+python-versions = "*"
+files = [
+    {file = "peewee-3.16.3.tar.gz", hash = "sha256:12b30e931193bc37b11f7c2ac646e3f67125a8b1a543ad6ab37ad124c8df7d16"},
+]
+
+[[package]]
 name = "python-dotenv"
 version = "1.0.0"
 description = "Read key-value pairs from a .env file and set them as environment variables"
@@ -581,4 +591,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "9ca88a4c86a6e1b3e4ddbe2ccfea8aa4d904fdb7e1febc3b6594e53b9906a465"
+content-hash = "dcf899c92cdd4be1006f2d46eb2dae96a53f15f6d95636588411aef162688ea4"

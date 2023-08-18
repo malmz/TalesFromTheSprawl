@@ -1,6 +1,6 @@
 # shops.py
 
-from interactions import OptionType, slash_command, SlashContext, slash_option
+from interactions import Extension, OptionType, has_role, slash_command, SlashContext, slash_option
 import asyncio
 import simplejson
 import datetime
@@ -42,27 +42,11 @@ from custom_types import (
     PostTimestamp,
 )
 
+#main_shop = os.getenv("MAIN_SHOP_NAME")
 
-load_dotenv()
-# Note: for the .table command to work, you must manually set up
-# the in-game bar/restaurant as a shop, using .create_shop etc.
-main_shop = os.getenv("MAIN_SHOP_NAME")
-
-
-# TODO: add role check: GMs can do anything to any shop
-# TODO: change so that a shop does not have to have an owner to function
-
-
-class ShoppingCog(commands.Cog, name="shopping"):
+class ShopExtension(Extension, name="shop"):
     """Commands related to buying and ordering at stores and restaurants.
     If you work at a store/restaurant, see \".help employee\" instead."""
-
-    def __init__(self, bot):
-        self.bot = bot
-        self._last_member = None
-
-    # Commands related to ordering
-    # These only work in cmd_line channels
 
     @slash_command(
         name="order",
@@ -93,85 +77,69 @@ class ShoppingCog(commands.Cog, name="shopping"):
             report = "Unknown error. Contact system admin."
         await ctx.send(report, ephemeral=True)
 
-    @app_commands.command(
+    @has_role(role="gm")
+    @slash_command(
         name="order_other",
         description="Admin-only. Order a product from a shop for someone else.",
     )
-    @app_commands.checks.has_role("gm")
-    async def order_other_command(
+    @slash_option(
+        name="buyer",
+        description="Name of the buyer",
+        required=True,
+        opt_type=OptionType.STRING,
+    )
+    @slash_option(
+        name="product_name",
+        description="Name of the product to order",
+        required=True,
+        opt_type=OptionType.STRING,
+    )
+    @slash_option(
+        name="shop_name",
+        description="Name of the shop to order from",
+        opt_type=OptionType.STRING,
+    )
+    async def order_other(
         self,
-        interaction: Interaction,
+        ctx: SlashContext,
         buyer: str,
         product_name: str,
         shop_name: str = "trinity_taskbar",
     ):
-        await interaction.response.defer(ephemeral=True)
+        await ctx.defer(ephemeral=True)
         buyer_handle: Handle = handles.get_handle(buyer)
         report = await order_product_for_buyer(shop_name, product_name, buyer_handle)
         if report is None:
             report = "Unknown error. Contact system admin"
-        await interaction.followup.send(report, ephemeral=True)
+        await ctx.send(report, ephemeral=True)
 
 
-"""
-	@app_commands.command(
-		name='set_delivery_id',
-		description='Set your delivery option at a shop. E.g. your table number, your delivery address, or your alias.',
-#		help=(
-#			'Set your delivery option at a shop. ' +
-#			'This can be e.g. your table number, your delivery address, or your alias. ' +
-#			'If several items are ordered for the same delivery option (e.g. to the same ' +
-#			'table or same address) around the same time, they will likely be together.'
-#			)
-		)
-	async def set_delivery_id_command(self, interaction: Interaction, delivery_id: str, shop_name: str='trinity_taskbar'):
-		await interaction.response.defer(ephemeral=True)
-		report = set_delivery_id_from_command(str(interaction.user.id), delivery_id, shop_name)
-		if report is None:
-			report = 'Unknown error. Contact system admin'
-		await interaction.followup.send(report, ephemeral=True)
-"""
-
-"""	@app_commands.command(
-		name='table',
-		description=f'Tell {main_shop} where to bring your order. Valid options are table numbers, \"bar\", and \"call\".'
-		)
-	async def set_delivery_id_command_table(self, interaction: Interaction, option: str):
-		report = set_delivery_table_from_command(str(interaction.user.id), option, main_shop)
-		if report is None:
-			report = 'Unknown error. Contact system admin'
-		await interaction.followup.send(report, ephemeral=True)
-
-	@app_commands.command(name='clear_all_shops', description='Admin-only: Delete all shops.')
-	@app_commands.checks.has_role('gm')
-	async def clear_shops_command(self, interaction: Interaction):
-		await interaction.response.defer(ephemeral=True)
-		await init(clear_all=True)
-		await interaction.followup.send('Done.', ephemeral=True)
-"""
-
-
-class EmployeeCog(commands.Cog, name="employee"):
+class EmployeeExtension(Extension, name="employee"):
     """Commands related to working at a store or restaurant.
     For all of these commands, the "shop_name" argument is optional! The system will find the store you work at, as long as you don't work at more than one.
     If you want to order from a store/restaurant, see \".help shopping\" instead."""
 
-    def __init__(self, bot):
-        self.bot = bot
-        self._last_member = None
-
-    # Commands related to managing a shop
-    # These only work in cmd_line channels
-
-    @app_commands.command(
+    @has_role("gm")
+    @slash_command(
         name="create_shop",
         description="Admin-only: create a new shop, run by a certain player.",
     )
-    @app_commands.checks.has_role("gm")
-    async def create_shop_command(
-        self, interaction: Interaction, shop_name: str, player_id: str
+    @slash_option(
+        name="shop_name",
+        description="Name of the shop",
+        required=True,
+        opt_type=OptionType.STRING,
+    )
+    @slash_option(
+        name="player_id",
+        description="ID of the player who will run the shop",
+        required=True,
+        opt_type=OptionType.STRING,
+    )
+    async def create_shop(
+        self, ctx: SlashContext, shop_name: str, player_id: str
     ):
-        await interaction.response.defer(ephemeral=True)
+        await ctx.defer(ephemeral=True)
         async with handles.semaphore():
             result: ActionResult = await create_shop(
                 shop_name, player_id, is_owner=True
@@ -180,7 +148,7 @@ class EmployeeCog(commands.Cog, name="employee"):
                 report = result.report
             else:
                 report = "Unknown error. Contact system admin."
-        await interaction.followup.send(report, ephemeral=True)
+        await ctx.send(report, ephemeral=True)
 
     @app_commands.command(name="employ", description="Add a new employee to your shop.")
     async def employ_command(
@@ -1244,7 +1212,7 @@ async def clear_order_data(shop_name: str):
 ### Creating a new shop:
 
 
-async def create_shop(shop_name: str, handle_id: str, is_owner: bool = False):
+async def create_shop(shop_name: str, handle_id: str, is_owner: bool = False) -> ActionResult:
     main_guild = server.get_guild(None)
     result = ActionResult()
     if shop_name is None:
