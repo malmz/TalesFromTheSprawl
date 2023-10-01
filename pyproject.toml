@@ -4,13 +4,15 @@ version = "0.1.0"
 description = ""
 authors = ["Carl Malmz <callem217@gmail.com>"]
 readme = "README.md"
-packages = [{ include = "discord" }]
+packages = [{ include = "talesbot" }]
 
 [tool.poetry.dependencies]
 python = "^3.11"
 discord-py-interactions = "^5.9.2"
 python-dotenv = "^1.0.0"
 peewee = "^3.16.3"
+pydantic = "^2.2.1"
+pydantic-settings = "^2.0.3"
 
 
 [build-system]

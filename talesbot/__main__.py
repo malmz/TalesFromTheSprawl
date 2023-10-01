@@ -1,31 +1,34 @@
+import pkgutil
 from interactions import Client, Intents, listen
-from interactions.api.events import MessageCreate
-from dotenv import load_dotenv
-import os
+from interactions.api.events import MessageCreate, Ready
+
+from .conf import ClientExtension, Config, exts, set_exts
 
 # from . import channels
 from .db import Player
 from .logger import init_bot_logger
 
 
-class Config:
-    def __init__(self):
-        self.token = os.getenv("DISCORD_TOKEN")
-        self.application_id = os.getenv("APPLICATION_ID")
-        self.guild_id = os.getenv("GUILD_ID")
-        self.gm_role = os.getenv("GM_ROLE_NAME")
-
-
-load_dotenv()
-config = Config()
 logger = init_bot_logger()
 
-bot = Client(intents=Intents.DEFAULT, logger=logger)
+client_extensions = ClientExtension()
+
+bot = Client(
+    intents=Intents.GUILDS
+    | Intents.GUILD_MESSAGES
+    | Intents.GUILD_WEBHOOKS
+    | Intents.MESSAGE_CONTENT,
+    logger=logger,
+)
+
+set_exts(bot, client_extensions)
 
 
-@listen
-async def on_ready(event):
-    print(f"Bot connected as {bot.user.tag}")
+@listen()
+async def on_ready(event: Ready):
+    meta = exts(bot)
+    print(f"Bot connected as {bot.user.tag}, owner: {bot.owner}")
+    await meta.impersonator.setup(bot)
 
 
 """ @listen
@@ -37,5 +40,8 @@ async def process_messages(event: MessageCreate):
 
 print("Starting bot...")
 
-# bot.load_extension("artifacts")
-bot.start(config.token)
+for extension_name in pkgutil.iter_modules(["talesbot.exts"], "talesbot.exts."):
+    print(f"Loading extension {extension_name.name}")
+    bot.load_extension(extension_name.name)
+
+bot.start(client_extensions.config.token)

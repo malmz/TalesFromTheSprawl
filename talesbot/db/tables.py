@@ -16,17 +16,15 @@ class BaseModel(Model):
         database = database
 
 
+class Handle(BaseModel):
+    name = TextField(unique=True)
+    balance = IntegerField(default=0)
+
+
 class Player(BaseModel):
     player_id = IntegerField(unique=True)
     discord_id = TextField(unique=True)
-
-    def handles(self):
-        return (
-            Handle.select(Handle)
-            .join(PlayerHandle)
-            .join(Player)
-            .where(PlayerHandle.player == self)
-        )
+    active_handle = ForeignKeyField(Handle)
 
 
 class Shop(BaseModel):
@@ -47,11 +45,6 @@ class GroupMember(BaseModel):
     group = ForeignKeyField(Group)
 
 
-class Handle(BaseModel):
-    name = TextField(unique=True)
-    balance = IntegerField(default=0)
-
-
 class PlayerHandle(BaseModel):
-    player = ForeignKeyField(Player)
-    handle = ForeignKeyField(Handle)
+    player = ForeignKeyField(Player, backref="handles")
+    handle = ForeignKeyField(Handle, backref="players")

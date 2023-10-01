@@ -1,0 +1,5 @@
+[groups]
+
+[channels.init.offline]
+general = "Diskussion utanför spelet"
+"teknikhjälp" = "Hjälp med tekniska problem"

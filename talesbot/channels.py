@@ -1,13 +1,14 @@
 from typing import Optional
 
 from interactions import TYPE_MESSAGEABLE_CHANNEL, ChannelType
-from configobj import ConfigObj
 import datetime
 import os
-import discord
 
-from custom_types import PostTimestamp
-from common import (
+# from configobj import ConfigObj
+# import discord
+
+from .custom_types import PostTimestamp
+from .common import (
     get_all_categories,
     personal_category_base,
     shops_category_name,
@@ -22,9 +23,9 @@ from common import (
     testing_category_name,
 )
 
-import server
+from . import server
+from . import players
 import asyncio
-import players
 
 ### Module channels.py
 # This module tracks and handles state related to channels

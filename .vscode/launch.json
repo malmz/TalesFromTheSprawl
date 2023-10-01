@@ -8,7 +8,7 @@
             "name": "Python: Discord module",
             "type": "python",
             "request": "launch",
-            "module": "discord",
+            "module": "talesbot",
             "justMyCode": true
         },
         {
