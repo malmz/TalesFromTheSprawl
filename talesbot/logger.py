@@ -57,7 +57,7 @@ def init_bot_logger() -> logging.Logger:
     fh.setFormatter(formatter)
 
     ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
+    ch.setLevel(logging.DEBUG)
     ch.setFormatter(formatter)
 
     logger.addHandler(fh)

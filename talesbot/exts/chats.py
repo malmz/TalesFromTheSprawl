@@ -1,32 +1,106 @@
+import io
 from typing import Optional
 from interactions import (
     Attachment,
+    AutocompleteContext,
     ChannelType,
     Client,
+    Embed,
     Extension,
     File,
     GuildText,
     Message,
+    OptionType,
+    SlashContext,
     listen,
+    slash_command,
+    slash_option,
 )
 from interactions.api.events import MessageCreate, Startup
 
-from ..db import Player
-from ..conf import ClientExtension, exts
+from ..conf import exts
+from ..db import Handle, Player, PlayerHandle
 
 
-class Chats(Extension, name="chats"):
+class Chats(Extension):
     """Extension that handles resending player messages as anonymous messages."""
 
-    def exts(self) -> ClientExtension:
-        return exts(self.bot)
+    def __init__(self, bot: Client):
+        self.ext = exts(self.bot)
 
-    @listen()
+    @slash_command(name="handle", description="Show or switch current handle")
+    @slash_option(
+        name="handle",
+        description="Handle to switch to",
+        opt_type=OptionType.STRING,
+        autocomplete=True,
+    )
+    async def handle(self, ctx: SlashContext, handle: Optional[str] = None):
+        if handle == None:
+            handles = [
+                player.active_handle
+                for player in Player.select(Player, Handle)
+                .join(Handle)
+                .where(Player.discord_id == ctx.author_id)
+            ]
+            await ctx.send(f"Current handle is {handles[0].name}", ephemeral=True)
+            return
+
+        player = Player.get(discord_id=ctx.author_id)
+        if player == None:
+            await ctx.send("You are not registerd", ephemeral=True)
+            return
+
+        existing_handle = Handle.get(name=handle)
+
+        if existing_handle != None:
+            player_handle = PlayerHandle.get(
+                player=player.id, handle=existing_handle.id
+            )
+
+        await ctx.send("Haha", ephemeral=True)
+
+    @handle.autocomplete("handle")
+    async def autocomplete_handle(self, ctx: AutocompleteContext):
+        text = ctx.input_text
+        choices = []
+
+        query = (
+            Player.select(Player, Handle)
+            .join(PlayerHandle)
+            .join(Handle)
+            .where(Player.discord_id == ctx.author_id, Handle.name.contains(text))
+            .sql()
+        )
+
+        print(query)
+
+        for player in (
+            Player.select(Player, Handle)
+            .join(PlayerHandle)
+            .join(Handle)
+            .where(Player.discord_id == ctx.author_id, Handle.name.contains(text))
+        ):
+            print("player", player)
+            for playerhandle in player.handles:
+                print("ph", playerhandle.handle.name)
+                choices.append(
+                    {
+                        "name": playerhandle.handle.name,
+                        "value": playerhandle.handle.name,
+                    }
+                )
+
+        if text != "":
+            choices.append({"name": f"{text} (new)", "value": text})
+
+        await ctx.send(choices=choices)
+
+    @listen(MessageCreate)
     async def process_messages(self, event: MessageCreate):
-        checks = self.exts().checks
+        checks = self.ext.checks
         message = event.message
 
-        game_started = True
         if (
             message.author.bot
             or not isinstance(message.channel, GuildText)
@@ -38,8 +112,15 @@ class Chats(Extension, name="chats"):
             await self.send_as(message)
 
         elif checks.channels.is_pseudonymous(message.channel):
-            player = Player.get(discord_id=message.author.id)
-            await self.send_as(message, name=player.active_handle.name)
+            query = (
+                Player.select(Player, Handle)
+                .join(Handle)
+                .where(Player.discord_id == message.author.id)
+                .limit(1)
+            )
+
+            for player in query:
+                await self.send_as(message, name=player.active_handle.name)
 
         elif checks.channels.is_chat(message.channel):
             # await chats.process_message(message)
@@ -48,23 +129,24 @@ class Chats(Extension, name="chats"):
     async def send_as(
         self,
         message: Message,
-        name: Optional[str],
-        avatar: Optional[str],
-        channel: Optional[GuildText],
+        name: Optional[str] = None,
+        avatar: Optional[str] = None,
+        channel: Optional[GuildText] = None,
     ):
         """Send a message as a user with webhook."""
-        meta = exts(self.bot)
         if channel == None:
             if isinstance(message.channel, GuildText):
                 channel = message.channel
             else:
                 raise Exception("")
 
-        name = name or meta.config.impersonator.anon_name
-        avatar = avatar or meta.config.impersonator.anon_avatar
+        await message.delete()
+
+        name = name or self.ext.config.impersonator.anon_name
+        avatar = avatar or self.ext.config.impersonator.anon_avatar
 
         files = [await self.attach_to_file(a) for a in message.attachments]
-        webhook = await meta.impersonator.webhook(channel)
+        webhook = await self.ext.impersonator.webhook(channel)
         await webhook.send(
             message.content,
             username=name,
@@ -78,7 +160,7 @@ class Chats(Extension, name="chats"):
         """Convert an attachment to a file."""
         buffer = await self.bot.http.request_cdn(attachment.url, attachment.filename)
         return File(
-            file=buffer,
-            filename=attachment.filename,
+            file=io.BytesIO(buffer),
+            file_name=attachment.filename,
             content_type=attachment.content_type,
         )

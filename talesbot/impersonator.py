@@ -23,12 +23,10 @@ class Impersonator:
         """Get the webhook for the given channel. If it doesn't exist, create it."""
         webhook = self.webooks.get(channel.guild.id)
         if not webhook:
-            webhook = await channel.create_webhook(
-                name=self.defaults.name, avatar=self.defaults.avatar
-            )
+            webhook = await channel.create_webhook(name=self.name, avatar=self.avatar)
             self.webooks[channel.guild.id] = webhook
 
-        if webhook.channel_id != channel.id:
-            await webhook.edit(channel_id=channel.id)
+        if webhook.channel_id != str(channel.id):
+            await webhook.edit(name=webhook.name, channel_id=channel.id)
 
         return webhook

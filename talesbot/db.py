@@ -22,7 +22,6 @@ class Handle(BaseModel):
 
 
 class Player(BaseModel):
-    player_id = IntegerField(unique=True)
     discord_id = TextField(unique=True)
     active_handle = ForeignKeyField(Handle)
 

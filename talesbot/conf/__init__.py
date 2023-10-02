@@ -27,8 +27,8 @@ class ClientExtension:
         self.config = load_config()
         self.env_settings = EnvSettings(env_file=".env")
         self.impersonator = Impersonator(
-            name=self.config.impersonator.anon_name,
-            avatar=self.config.impersonator.anon_avatar,
+            name="Impersonator",
+            avatar="assets/Anon.jpeg",
         )
         self.checks = Checks(self.config)
 

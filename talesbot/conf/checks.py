@@ -1,5 +1,15 @@
 from interactions import GuildText
-from .base import BaseChecks
+from .models import Config
+
+
+class Checks:
+    def __init__(self, config: Config):
+        self.channels = ChannelChecks(config)
+
+
+class BaseChecks:
+    def __init__(self, config: Config):
+        self.config = config
 
 
 class ChannelChecks(BaseChecks):

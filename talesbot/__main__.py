@@ -7,9 +7,11 @@ from .conf import ClientExtension, Config, exts, set_exts
 # from . import channels
 from .db import Player
 from .logger import init_bot_logger
+from talesbot import db
 
 
 logger = init_bot_logger()
+db.create_tables()
 
 client_extensions = ClientExtension()
 
@@ -31,17 +33,10 @@ async def on_ready(event: Ready):
     await meta.impersonator.setup(bot)
 
 
-""" @listen
-async def process_messages(event: MessageCreate):
-    if event.message.author.bot or channels.is_offline_channel(event.message.channel):
-        return
-
-    player_name = Player.get(Player.discord_id == event.message.author.id).player_id """
-
 print("Starting bot...")
 
-for extension_name in pkgutil.iter_modules(["talesbot.exts"], "talesbot.exts."):
-    print(f"Loading extension {extension_name.name}")
-    bot.load_extension(extension_name.name)
+bot.load_extension("interactions.ext.debug_extension")
+bot.load_extension("interactions.ext.jurigged")
+bot.load_extensions("talesbot/exts")
 
-bot.start(client_extensions.config.token)
+bot.start(client_extensions.env_settings.discord_token)

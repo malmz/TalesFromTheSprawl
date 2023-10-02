@@ -1,5 +1,6 @@
 from interactions import (
     ChannelType,
+    Client,
     Extension,
     Guild,
     GuildCategory,
@@ -10,20 +11,21 @@ from interactions import (
     slash_command,
 )
 
+
 from ..conf import ClientExtension, exts
 
-base_command = SlashCommand(name="admin", description="Administrative commands.")
-channels_group = base_command.group(name="channels", description="Channel commands.")
 
-
-class Admin(Extension, name="admin"):
+class Admin(Extension):
     """Extension that handles administrative commands."""
 
-    def __init__(self) -> None:
-        self.add_ext_check(is_owner())
+    base_command = SlashCommand(name="admin", description="Administrative commands.")
+    channels_group = base_command.group(
+        name="channels", description="Channel commands."
+    )
 
-    def exts(self) -> ClientExtension:
-        return exts(self.bot)
+    def __init__(self, bot: Client) -> None:
+        self.ext = exts(self.bot)
+        self.add_ext_check(is_owner())
 
     @check(is_owner())
     @channels_group.subcommand(
@@ -31,7 +33,7 @@ class Admin(Extension, name="admin"):
     )
     async def init_channels(self, ctx: SlashContext):
         """Initialise channels and groups."""
-        channels = self.exts().config.channels.init
+        channels = self.ext.config.channels.init
         for category, channels in channels.items():
             category = await ctx.guild.create_category(category)
             for channel, description in channels.items():

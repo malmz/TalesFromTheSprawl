@@ -5,7 +5,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class EnvSettings(BaseSettings):
     discord_token: str
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_file=".env", case_sensitive=False, extra="ignore"
+    )
 
 
 class ImpersonatorConfig(BaseModel):
@@ -56,7 +58,7 @@ class RolesConfig(BaseModel):
 
 class Config(BaseModel):
     payment_unit: str = "¥"
-    channels: ChannelsConfig = {}
-    categories: CategoriesConfig = {}
-    roles: RolesConfig = {}
-    impersonator: ImpersonatorConfig = {}
+    channels: ChannelsConfig = ChannelsConfig()
+    categories: CategoriesConfig = CategoriesConfig()
+    roles: RolesConfig = RolesConfig()
+    impersonator: ImpersonatorConfig = ImpersonatorConfig()
