@@ -1,4 +1,3 @@
-# bot.py
 import os
 import discord
 import asyncio
@@ -8,21 +7,21 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 # Custom imports
-import handles
-import channels
-import posting
-import reactions
-import actors
-import players
-import finances
-import chats
-import server
-import shops
-import groups
-import game
-import artifacts
-import gm
-import logger
+from . import handles
+from . import channels
+from . import posting
+from . import reactions
+from . import actors
+from . import players
+from . import finances
+from . import chats
+from . import server
+from . import shops
+from . import groups
+from . import game
+from . import artifacts
+from . import gm
+from . import logger
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
