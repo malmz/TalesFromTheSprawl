@@ -25,27 +25,30 @@ import gm
 import logger
 
 load_dotenv()
-TOKEN = os.getenv('DISCORD_TOKEN')
-guild_name = os.getenv('GUILD_NAME')
+TOKEN = os.getenv("DISCORD_TOKEN")
+guild_name = os.getenv("GUILD_NAME")
 
 intents = discord.Intents.all()
-#intents.members = True
+# intents.members = True
 
 logger.setup_command_logger()
 
 # Change only the no_category default string
-help_command = commands.DefaultHelpCommand(
-    no_category = 'Commands'
-)
-bot = commands.Bot(
-    command_prefix='.',
-    intents=intents,
-    help_command = help_command
-)
+help_command = commands.DefaultHelpCommand(no_category="Commands")
+bot = commands.Bot(command_prefix=".", intents=intents, help_command=help_command)
 
 # Below cogs represents our folder our cogs are in. Following is the file name. So 'meme.py' in cogs, would be cogs.meme
 # Think of it like a dot path import
-initial_extensions = ['handles', 'finances', 'admin', 'chats', 'shops', 'gm', 'artifacts']
+initial_extensions = [
+    "handles",
+    "finances",
+    "admin",
+    "chats",
+    "shops",
+    "gm",
+    "artifacts",
+]
+
 
 async def _destroy_all():
     for guild in bot.guilds:
@@ -62,20 +65,25 @@ async def _destroy_all():
                 print("Removing role %s" % role.name)
                 await role.delete()
 
+
 @bot.event
 async def on_ready():
     global guild_name
-    clear_all = (os.getenv('CLEAR_ALL') == 'true')
-    destroy_all = (os.getenv('DESTROY_ALL') == 'true')
+    clear_all = os.getenv("CLEAR_ALL") == "true"
+    destroy_all = os.getenv("DESTROY_ALL") == "true"
     if destroy_all:
         await _destroy_all()
         print("Cleaned up all channels, categories and roles")
         await bot.close()
         return
 
-        
     # Here we load our extensions(cogs) listed above in [initial_extensions].
-    await asyncio.gather(*(asyncio.create_task(bot.load_extension(extension)) for extension in initial_extensions))
+    await asyncio.gather(
+        *(
+            asyncio.create_task(bot.load_extension(extension))
+            for extension in initial_extensions
+        )
+    )
     await bot.tree.sync()
 
     # TODO: move some of the initialisation to the cogs instead
@@ -92,44 +100,63 @@ async def on_ready():
     artifacts.init(clear_all=clear_all)
     await gm.init(clear_all=clear_all)
     game.init()
-    print('Initialization complete.')
+    print("Initialization complete.")
     report = game.start_game()
+
 
 @bot.event
 async def on_command_error(ctx, error):
-    if isinstance(error, commands.errors.BadArgument) and 'Converting to "int" failed for parameter "amount"' in str(error):
+    if isinstance(
+        error, commands.errors.BadArgument
+    ) and 'Converting to "int" failed for parameter "amount"' in str(error):
         await ctx.send("Error: amount must be an integer greater than 0.")
-    elif isinstance(error, commands.errors.BadArgument) and 'Converting to "int" failed for parameter "price"' in str(error):
+    elif isinstance(
+        error, commands.errors.BadArgument
+    ) and 'Converting to "int" failed for parameter "price"' in str(error):
         await ctx.send("Error: price must be an integer greater than 0.")
     elif isinstance(error, commands.errors.CommandNotFound):
         await ctx.send("Error: that is not a known command.")
     else:
         await ctx.send("Error: unknown system error. Contact administrator.")
-        raise(error)
+        raise (error)
+
 
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error):
     print(f"Got error on command: {error}")
     if isinstance(error, Exception):
         import traceback
+
         traceback.print_exc()
 
     if isinstance(error, discord.app_commands.BotMissingPermissions):
         await interaction.response.send_message(error, ephemeral=True)
     elif isinstance(error, discord.app_commands.errors.MissingRole):
-        await interaction.response.send_message(f'You are not allowed to run this command.', ephemeral=True)
-    elif isinstance(error, discord.app_commands.errors.CommandInvokeError) and isinstance(error.__cause__, RuntimeError):
+        await interaction.response.send_message(
+            f"You are not allowed to run this command.", ephemeral=True
+        )
+    elif isinstance(
+        error, discord.app_commands.errors.CommandInvokeError
+    ) and isinstance(error.__cause__, RuntimeError):
         try:
-            await interaction.response.send_message(f'Error: {error.__cause__}', ephemeral=True)
+            await interaction.response.send_message(
+                f"Error: {error.__cause__}", ephemeral=True
+            )
         except discord.errors.InteractionResponded:
-            await interaction.followup.send(f'Error: {error.__cause__}', ephemeral=True)
+            await interaction.followup.send(f"Error: {error.__cause__}", ephemeral=True)
     else:
         try:
-            await interaction.response.send_message(f'Failed command. Contact system administrator.', ephemeral=True)
+            await interaction.response.send_message(
+                f"Failed command. Contact system administrator.", ephemeral=True
+            )
         except discord.errors.InteractionResponded:
-            await interaction.followup.send(f'Failed command. Contact system administrator.', ephemeral=True)
+            await interaction.followup.send(
+                f"Failed command. Contact system administrator.", ephemeral=True
+            )
+
 
 # General message processing (reposting for anonymity/pseudonymity)
+
 
 @bot.event
 async def on_message(message):
@@ -143,26 +170,30 @@ async def on_message(message):
 
     try:
         player_name = players.get_player_id(message.author.id, False)
-        logger.log_command(message.author.id, player_name, message.channel.name, message.content)
+        logger.log_command(
+            message.author.id, player_name, message.channel.name, message.content
+        )
     except:
         print("Failed to log command to file")
 
     # "Off messages" means starting and replying to chats with GM and similar
     only_off_messages = not game.can_process_messages()
-    #await server.swallow(message, alert=False)
-    #return
+    # await server.swallow(message, alert=False)
+    # return
 
     if channels.is_cmd_line(message.channel.name):
         if only_off_messages and not has_chat_command(message):
-                await server.swallow(message, alert=False)
-                return
+            await server.swallow(message, alert=False)
+            return
         await bot.process_commands(message)
         return
 
-    if channels.is_chat_hub(message.channel.name) or channels.is_landing_page(message.channel.name):
+    if channels.is_chat_hub(message.channel.name) or channels.is_landing_page(
+        message.channel.name
+    ):
         if only_off_messages and not has_chat_command(message):
-                await server.swallow(message, alert=False)
-                return
+            await server.swallow(message, alert=False)
+            return
         # TODO: fix custom help command to avoid this hack
         # The .help command does not discern between channels, so we must check for it specifically since
         # we want it to work in cmd_line but not in chat_hub
@@ -182,15 +213,18 @@ async def on_message(message):
 
     if only_off_messages:
         # Only chats with certain handles are okay
-        allowed = channels.is_chat_channel(message.channel) and game.is_out_of_game_chat(message.channel)
+        allowed = channels.is_chat_channel(
+            message.channel
+        ) and game.is_out_of_game_chat(message.channel)
         if not allowed:
             await server.swallow(message, alert=False)
             return
 
-    alert_checking = asyncio.create_task(game.check_alerts(message.content, message.channel, str(message.author.id)))
+    alert_checking = asyncio.create_task(
+        game.check_alerts(message.content, message.channel, str(message.author.id))
+    )
     processing = asyncio.create_task(process_message(message))
     await asyncio.gather(alert_checking, processing)
-
 
 
 async def process_message(message):
@@ -202,29 +236,33 @@ async def process_message(message):
         await posting.process_open_message(message)
 
     if channels.is_chat_channel(message.channel):
-        await chats.process_message(message)   
+        await chats.process_message(message)
 
 
 def has_any_command(message):
-    alphanumeric_regex = re.compile(f'^\.[a-z]+')
+    alphanumeric_regex = re.compile(f"^\.[a-z]+")
     matches = re.search(alphanumeric_regex, message.content)
     return matches is not None
 
+
 def has_help_command(message):
-    help_regex = re.compile(f'^\.help')
+    help_regex = re.compile(f"^\.help")
     matches = re.search(help_regex, message.content)
     return matches is not None
 
+
 def has_chat_command(message):
-    chat_regex = re.compile(f'^\.chat')
+    chat_regex = re.compile(f"^\.chat")
     matches = re.search(chat_regex, message.content)
     if matches is not None:
         return True
-    chat_regex = re.compile(f'^\.gm_chat')
+    chat_regex = re.compile(f"^\.gm_chat")
     matches = re.search(chat_regex, message.content)
     return matches is not None
 
+
 # General reaction handling
+
 
 @bot.event
 async def on_raw_reaction_add(payload):
@@ -237,16 +275,19 @@ async def on_raw_reaction_add(payload):
         # No bot shenanigans in the off channels
         return
 
-    await reactions.process_reaction_add(payload.message_id, payload.user_id, channel, payload.emoji)
+    await reactions.process_reaction_add(
+        payload.message_id, payload.user_id, channel, payload.emoji
+    )
+
 
 # New players
+
 
 @bot.event
 async def on_member_join(member):
     # TODO: put the player in a special setup area, and force them to join (claim a handle) before they can continue
     await server.set_user_as_new_player(member)
-    #return await players.create_player(member)
-
+    # return await players.create_player(member)
 
 
 bot.run(TOKEN)

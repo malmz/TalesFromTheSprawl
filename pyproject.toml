@@ -8,7 +8,7 @@ packages = [{ include = "discord" }]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-discord-py-interactions = "^5.9.2"
+"discord.py" = "^1.7.3"
 python-dotenv = "^1.0.0"
 
 
