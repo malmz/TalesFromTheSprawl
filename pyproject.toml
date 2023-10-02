@@ -8,8 +8,10 @@ packages = [{ include = "discord" }]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-"discord.py" = "^1.7.3"
 python-dotenv = "^1.0.0"
+configobj = "^5.0.8"
+simplejson = "^3.19.1"
+discord-py = "^2.3.2"
 
 
 [build-system]
