@@ -27,8 +27,8 @@ load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 guild_name = os.getenv("GUILD_NAME")
 
-intents = discord.Intents.all()
-# intents.members = True
+intents = discord.Intents.default()
+intents.message_content = True
 
 logger.setup_command_logger()
 
@@ -39,13 +39,13 @@ bot = commands.Bot(command_prefix=".", intents=intents, help_command=help_comman
 # Below cogs represents our folder our cogs are in. Following is the file name. So 'meme.py' in cogs, would be cogs.meme
 # Think of it like a dot path import
 initial_extensions = [
-    "handles",
-    "finances",
-    "admin",
-    "chats",
-    "shops",
-    "gm",
-    "artifacts",
+    "talesbot.handles",
+    "talesbot.finances",
+    "talesbot.admin",
+    "talesbot.chats",
+    "talesbot.shops",
+    "talesbot.gm",
+    "talesbot.artifacts",
 ]
 
 

@@ -1,13 +1,3 @@
-from . import finances
-from . import players
-from . import actors
-from . import chats
-from . import server
-from . import channels
-from . import game
-from common import coin
-from custom_types import Handle, HandleTypes, ActionResult
-
 from discord.ext import commands
 from discord import app_commands, Interaction
 from configobj import ConfigObj
@@ -15,6 +5,18 @@ from typing import List
 from enum import Enum
 import re
 import asyncio
+
+from . import finances
+from . import players
+from . import actors
+from . import chats
+from . import server
+from . import channels
+from . import game
+from .config import config_dir
+from .common import coin
+from .custom_types import Handle, HandleTypes, ActionResult
+
 
 ### Module handles.py
 # This module tracks and handles state related to handles, e.g. in-game names/accounts that
@@ -157,7 +159,7 @@ handles_index = "___all_handles"
 
 
 def get_handles_confobj():
-    handles = ConfigObj(handles_conf_dir + "/__handles.conf")
+    handles = ConfigObj(str(config_dir / handles_conf_dir / "__handles.conf"))
     if not handles_to_actors in handles:
         handles[handles_to_actors] = {}
         handles.write()
@@ -232,7 +234,7 @@ async def clear_handle(handle: Handle):
     if handle.handle_id in handles[handles_to_actors]:
         del handles[handles_to_actors][handle.handle_id]
         handles.write()
-        file_name = f"{handles_conf_dir}/{handle.actor_id}.conf"
+        file_name = str(config_dir / handles_conf_dir / f"{handle.actor_id}.conf")
         actor_handles_conf = ConfigObj(file_name)
         if handles_index in actor_handles_conf:
             if handle.handle_id in actor_handles_conf[handles_index]:
@@ -249,7 +251,7 @@ async def init_handles_for_actor(
     if overwrite or actor_id not in handles[actors_index]:
         handles[actors_index][actor_id] = {}
         handles.write()
-        file_name = f"{handles_conf_dir}/{actor_id}.conf"
+        file_name = str(config_dir / handles_conf_dir / f"{actor_id}.conf")
         actor_handles_conf = ConfigObj(file_name)
         for entry in actor_handles_conf:
             del actor_handles_conf[entry]
@@ -267,7 +269,7 @@ def store_handle(handle: Handle):
     handles[handles_to_actors][handle.handle_id] = handle.actor_id
     handles.write()
 
-    file_name = f"{handles_conf_dir}/{handle.actor_id}.conf"
+    file_name = str(config_dir / handles_conf_dir / f"{handle.actor_id}.conf")
     actor_handles_conf = ConfigObj(file_name)
     actor_handles_conf[handles_index][handle.handle_id] = handle.to_string()
     actor_handles_conf.write()
@@ -310,7 +312,7 @@ def read_handle(actor_handles, handle_id: str):
 def get_active_handle_id(actor_id: str):
     handles = get_handles_confobj()
     if actor_id in handles[actors_index]:
-        file_name = f"{handles_conf_dir}/{actor_id}.conf"
+        file_name = str(config_dir / handles_conf_dir / f"{actor_id}.conf")
         actor_handles_conf = ConfigObj(file_name)
         if active_index in actor_handles_conf:
             return actor_handles_conf[active_index]
@@ -319,7 +321,7 @@ def get_active_handle_id(actor_id: str):
 def get_active_handle(actor_id: str):
     handles = get_handles_confobj()
     if actor_id in handles[actors_index]:
-        file_name = f"{handles_conf_dir}/{actor_id}.conf"
+        file_name = str(config_dir / handles_conf_dir / f"{actor_id}.conf")
         actor_handles_conf = ConfigObj(file_name)
         if active_index in actor_handles_conf:
             active_id = actor_handles_conf[active_index]
@@ -331,7 +333,7 @@ def get_active_handle(actor_id: str):
 def get_last_regular_id(actor_id: str):
     handles = get_handles_confobj()
     if actor_id in handles[actors_index]:
-        file_name = f"{handles_conf_dir}/{actor_id}.conf"
+        file_name = str(config_dir / handles_conf_dir / f"{actor_id}.conf")
         actor_handles_conf = ConfigObj(file_name)
         if last_regular_index in actor_handles_conf:
             return actor_handles_conf[last_regular_index]
@@ -340,7 +342,7 @@ def get_last_regular_id(actor_id: str):
 def get_last_regular(actor_id: str):
     handles = get_handles_confobj()
     if actor_id in handles[actors_index]:
-        file_name = f"{handles_conf_dir}/{actor_id}.conf"
+        file_name = str(config_dir / handles_conf_dir / f"{actor_id}.conf")
         actor_handles_conf = ConfigObj(file_name)
         if last_regular_index in actor_handles_conf:
             last_regular_id = actor_handles_conf[last_regular_index]
@@ -366,7 +368,7 @@ def get_handle(handle_name: str):
 
 
 def switch_to_handle(handle: Handle):
-    file_name = f"{handles_conf_dir}/{handle.actor_id}.conf"
+    file_name = str(config_dir / handles_conf_dir / f"{handle.actor_id}.conf")
     actor_handles_conf = ConfigObj(file_name)
     actor_handles_conf[active_index] = handle.handle_id
     if handle.handle_type == HandleTypes.Regular:
@@ -386,7 +388,7 @@ def get_handles_for_actor(
 
 
 def get_handles_for_actor_of_types(actor_id: str, types_list: List[HandleTypes]):
-    file_name = f"{handles_conf_dir}/{actor_id}.conf"
+    file_name = str(config_dir / handles_conf_dir / f"{actor_id}.conf")
     actor_handles_conf = ConfigObj(file_name)
     for handle_id in actor_handles_conf[handles_index]:
         handle = read_handle(actor_handles_conf, handle_id)
