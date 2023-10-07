@@ -582,11 +582,11 @@ def is_landing_page(channel_name: str):
 
 
 def generate_setup_channel_welcome_msg():
-    content = "Welcome to the in-game matrix system! In order to join the game, you must select your first **handle**. "
+    content = "Welcome to the in-game matrix system! In order for you to join the game, we must know your main **handle**. "
     content += (
         "Your starting money, access to private networks etc. are tied to this.\n\n"
     )
-    content += 'To select your handle, type "**/join** *handle*" below.\n'
+    content += 'To join, type "**/join** *handle*" below.\n'
     content += 'For example, if you are shadow_weaver, type "/join shadow_weaver"\n\n'
     content += (
         "If you are not sure what your main handle is, please contact the organizers.\n"

@@ -166,10 +166,11 @@ class EmployeeCog(commands.Cog, name="employee"):
             result: ActionResult = await create_shop(
                 shop_name, player_id, is_owner=True
             )
-            if result.report is None:
-                report = result.report
-            else:
-                report = "Unknown error. Contact system admin."
+            report = (
+                result.report
+                if result.report is not None
+                else "Unknown error. Contact system admin."
+            )
         await interaction.followup.send(report, ephemeral=True)
 
     @app_commands.command(name="employ", description="Add a new employee to your shop.")
@@ -334,7 +335,9 @@ class EmployeeCog(commands.Cog, name="employee"):
         self, user_id: int, product_name: str = None, shop_name: str = None
     ):
         if product_name is not None:
-            report = await post_catalogue_item(str(user_id), product_name, shop_name)
+            report = await _update_storefront_channel(
+                str(user_id), product_name, shop_name
+            )
         else:
             report = await update_storefront(str(user_id), shop_name)
         if report is None:

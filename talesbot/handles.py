@@ -13,6 +13,7 @@ from . import chats
 from . import server
 from . import channels
 from . import game
+from . import gm
 from .config import config_dir
 from .common import coin
 from .custom_types import Handle, HandleTypes, ActionResult
@@ -418,8 +419,7 @@ async def process_remove_handle_command(handle_id: str):
 
 
 def current_handle_report(actor_id: str):
-    import gm
-
+    # import gm
     is_gm_actor = gm.gm_actor_id == actor_id
     cmd = "/handle" if not is_gm_actor else "/gm_handle"
     current_handle: Handle = get_active_handle(actor_id)
@@ -558,7 +558,7 @@ async def process_handle_command(
     use_gm_actor: bool = False,
 ):
     if use_gm_actor:
-        import gm
+        # import gm
 
         actor_id = gm.gm_actor_id
     else:

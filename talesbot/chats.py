@@ -450,7 +450,7 @@ def chat_exists(chat_name: str):
 
 def get_chat_state(chat_name: str):
     chat_file_name = f"{chat_name}.conf"
-    return ConfigObj(str(config_dir / chats_dir / "{chat_file_name}"))
+    return ConfigObj(str(config_dir / chats_dir / chat_file_name))
 
 
 def get_chats_for_handle(handle: Handle):

@@ -4,6 +4,7 @@ import asyncio
 import re
 
 from discord.ext import commands
+from discord import app_commands
 from dotenv import load_dotenv
 
 # Custom imports
@@ -29,6 +30,7 @@ guild_name = os.getenv("GUILD_NAME")
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 
 logger.setup_command_logger()
 
@@ -67,6 +69,9 @@ async def _destroy_all():
 
 @bot.event
 async def on_ready():
+    # await bot.tree.sync()
+    # guild = bot.guilds[0]
+
     global guild_name
     clear_all = os.getenv("CLEAR_ALL") == "true"
     destroy_all = os.getenv("DESTROY_ALL") == "true"
