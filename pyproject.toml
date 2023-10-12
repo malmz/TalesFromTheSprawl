@@ -4,7 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["Carl Malmz <callem217@gmail.com>"]
 readme = "README.md"
-packages = [{ include = "discord" }]
+packages = [{ include = "talesbot" }]
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -12,6 +12,7 @@ python-dotenv = "^1.0.0"
 configobj = "^5.0.8"
 simplejson = "^3.19.1"
 discord-py = "^2.3.2"
+emoji = "^2.8.0"
 
 
 [build-system]
