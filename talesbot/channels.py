@@ -433,11 +433,20 @@ async def get_all_chat_hub_channels(channel_suffix: str = None):
 
 
 async def create_personal_channel(
-    guild, role, channel_name: str, actor_id: str, read_only: bool = False
+    guild,
+    role,
+    channel_name: str,
+    actor_id: str,
+    category_index: Optional[int] = None,
+    read_only: bool = False,
 ):
     overwrites = server.generate_overwrites_own_new_private_channel(role, read_only)
-    category_index = players.get_player_category_index(actor_id)
-    category_name = "%s%d" % (personal_category_base, category_index)
+    real_category_index = (
+        category_index
+        if category_index is not None
+        else players.get_player_category_index(actor_id)
+    )
+    category_name = "%s%d" % (personal_category_base, real_category_index)
     return await create_discord_channel(guild, overwrites, channel_name, category_name)
 
 
