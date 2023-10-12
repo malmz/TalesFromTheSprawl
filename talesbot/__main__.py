@@ -23,6 +23,7 @@ from . import game
 from . import artifacts
 from . import gm
 from . import logger
+from .config import config_dir
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -32,11 +33,28 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
+config_folders = [
+    "actors",
+    "artifacts",
+    "chats",
+    "finances",
+    "groups",
+    "handles",
+    "logs",
+    "players",
+    "scenarios",
+    "shops",
+]
+
+for folder in config_folders:
+    os.makedirs(config_dir / folder, exist_ok=True)
+
 logger.setup_command_logger()
 
 # Change only the no_category default string
 help_command = commands.DefaultHelpCommand(no_category="Commands")
 bot = commands.Bot(command_prefix=".", intents=intents, help_command=help_command)
+
 
 # Below cogs represents our folder our cogs are in. Following is the file name. So 'meme.py' in cogs, would be cogs.meme
 # Think of it like a dot path import
