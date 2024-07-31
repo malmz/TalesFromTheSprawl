@@ -135,7 +135,7 @@ class Artifact:
 
 
 def find_artifact(name):
-    with open(artifacts_conf_file) as f:
+    with open(artifacts_conf_file, "r+") as f:
         data = json.load(f)
     if name in data:
         return Artifact(name, data[name])
