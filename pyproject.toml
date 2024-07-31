@@ -1,20 +1,33 @@
-[tool.poetry]
-name = "talesfromthesprawl"
-version = "0.1.0"
-description = ""
-authors = ["Carl Malmz <callem217@gmail.com>"]
+[project]
+name = "talesbot"
+version = "1.0.0"
+description = "Discord bot for Tales from the Sprawl"
+authors = [{ name = "Carl Malmgren", email = "callem217@gmail.com" }]
+dependencies = []
 readme = "README.md"
-packages = [{ include = "talesbot" }]
+requires-python = ">= 3.8"
 
-[tool.poetry.dependencies]
-python = "^3.11"
-discord-py-interactions = {extras = ["jurigged"], version = "^5.10.0"}
-python-dotenv = "^1.0.0"
-peewee = "^3.16.3"
-pydantic = "^2.2.1"
-pydantic-settings = "^2.0.3"
-
+[project.scripts]
+"talesbot" = "talesbot:main"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.rye]
+managed = true
+dev-dependencies = []
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/talesbot"]
+
+#[tool.poetry.dependencies]
+#python = "^3.11"
+#discord-py-interactions = {extras = ["jurigged"], version = "^5.10.0"}
+#python-dotenv = "^1.0.0"
+#peewee = "^3.16.3"
+#pydantic = "^2.2.1"
+#pydantic-settings = "^2.0.3"
