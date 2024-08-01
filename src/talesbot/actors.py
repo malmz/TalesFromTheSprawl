@@ -13,10 +13,10 @@ import players
 from custom_types import Transaction, Actor, TransTypes
 from common import emoji_cancel, emoji_open
 
-# import discord
+import discord
 import asyncio
 
-# from configobj import ConfigObj
+from configobj import ConfigObj
 
 actors_conf_dir = "actors"
 finance_channel_mapping_index = "___finance_channels"
@@ -124,9 +124,9 @@ def actor_index_in_use(actor_index: str):
 def store_actor(actor: Actor):
     actors = get_actors_confobj()
     actors[actor.actor_id] = actor.to_string()
-    actors[finance_channel_mapping_index][
-        str(actor.finance_channel_id)
-    ] = actor.actor_id
+    actors[finance_channel_mapping_index][str(actor.finance_channel_id)] = (
+        actor.actor_id
+    )
     actors.write()
 
 

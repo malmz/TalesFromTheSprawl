@@ -3,7 +3,11 @@ name = "talesbot"
 version = "1.0.0"
 description = "Discord bot for Tales from the Sprawl"
 authors = [{ name = "Carl Malmgren", email = "callem217@gmail.com" }]
-dependencies = []
+dependencies = [
+    "discord-py>=2.4.0",
+    "pydantic>=2.8.2",
+    "pydantic-settings>=2.4.0",
+]
 readme = "README.md"
 requires-python = ">= 3.8"
 

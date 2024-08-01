@@ -1,52 +1,42 @@
-import actors
-import players
-import groups
-import channels
-import server
-import handles
-import common
+"""
+Module the holds the admin commands
+"""
 
-# from discord.ext import commands
-# from discord import app_commands, Interaction
-# import discord
+from ..actors import actors
+from ..players import players
+from ..groups import groups
+from ..server import server
+from ..handles import handles
+from ..common import common
 
-### Module admin.py
-# This module holds the admin cog, which is used to
-
+import discord
+from discord.ext import commands
+from discord import app_commands, Interaction
 
 # TODO: change these to be admin-only (currently they are actually GM-only)
 # TODO: grab the name of the admin role from env file
 
 
-class AdminCog(commands.Cog, name="admin"):
+@app_commands.default_permissions(administrator=True)
+class AdminCog(commands.GroupCog, group_name="admin"):
     """Admin-only commands, hidden by default. To view documentation, use \"help <command>\". The commands are:
     init_all_players, fake_join, fake_join_name, fake_join_nick, clear_all_players, clear_all_actors, clear_actor, ping
     """
 
     def __init__(self, bot):
         self.bot = bot
-        self._last_member = None
-
-    # Admin-only commands for testing etc.
 
     # This command is not safe right now.
     @app_commands.command(
-        name="init_all_players",
-        description="Admin-only. Initialise all current members of the server as players.",
+        description="Initialise all current members of the server as players",
     )
-    @app_commands.checks.has_role("gm")
-    async def init_all_players_command(self, interaction: Interaction):
+    async def init_all_players(self, interaction: Interaction):
         await interaction.response.defer(ephemeral=True)
         await players.initialise_all_users()
         await interaction.followup.send("Done.", ephemeral=True)
 
-    @app_commands.command(
-        name="fake_join", description="Admin-only. Initialise a user as a player."
-    )
-    @app_commands.checks.has_role("gm")
-    async def fake_join_command(
-        self, interaction: Interaction, user_id: int, handle: str
-    ):
+    @app_commands.command(description="Initialise a user as a player")
+    async def fake_join(self, interaction: Interaction, user_id: int, handle: str):
         await interaction.response.defer(ephemeral=True)
         member_to_fake_join = await interaction.guild.fetch_member(user_id)
         if member_to_fake_join is None:
@@ -65,13 +55,9 @@ class AdminCog(commands.Cog, name="admin"):
             await interaction.followup.send(report, ephemeral=True)
 
     @app_commands.command(
-        name="fake_join_name",
-        description="Admin-only. Initialise a user as a player (based on discord name).",
+        description="Initialise a user as a player (based on discord name)",
     )
-    @app_commands.checks.has_role("gm")
-    async def fake_join_name_command(
-        self, interaction: Interaction, name: str, handle: str
-    ):
+    async def fake_join_name(self, interaction: Interaction, name: str, handle: str):
         await interaction.response.defer(ephemeral=True)
         member_to_fake_join = None
         async for member in interaction.guild.fetch_members(limit=100):
@@ -94,13 +80,9 @@ class AdminCog(commands.Cog, name="admin"):
             await interaction.followup.send(report, ephemeral=True)
 
     @app_commands.command(
-        name="fake_join_nick",
-        description="Admin-only. Initialise a user as a player (based on server nick).",
+        description="Initialise a user as a player (based on server nick)",
     )
-    @app_commands.checks.has_role("gm")
-    async def fake_join_nick_command(
-        self, interaction: Interaction, nick: str, handle: str
-    ):
+    async def fake_join_nick(self, interaction: Interaction, nick: str, handle: str):
         await interaction.response.defer(ephemeral=True)
         member_to_fake_join = await server.get_member_from_nick(nick)
         if member_to_fake_join is None:
@@ -122,11 +104,10 @@ class AdminCog(commands.Cog, name="admin"):
     # Note: no other commands work in the landing page channel!
     # TODO: semaphore for joining
     @app_commands.command(
-        name="join",
-        description="Claim a handle and join the game. Only for players who have not yet joined.",
+        description="Claim a handle and join the game. Only for players who have not yet joined",
     )
     @app_commands.checks.has_role(common.new_player_role_name)
-    async def join_command(self, interaction: Interaction, handle: str):
+    async def join(self, interaction: Interaction, handle: str):
         await interaction.response.defer(ephemeral=True)
         member = await interaction.guild.fetch_member(interaction.user.id)
         if member is None:
@@ -152,59 +133,50 @@ class AdminCog(commands.Cog, name="admin"):
                     ephemeral=True,
                 )
 
-    @app_commands.command(
-        name="clear_all_players", description="Admin-only. De-initialise all players."
-    )
-    @app_commands.checks.has_role("gm")
-    async def clear_all_players_command(self, interaction: Interaction):
+    @app_commands.command(description="De-initialise all players.")
+    async def clear_all_players(self, interaction: Interaction):
         await interaction.response.defer(ephemeral=True)
         await players.init(clear_all=True)
         try:
             await interaction.followup.send("Done.", ephemeral=True)
         except discord.errors.NotFound:
             print(
-                "Cleared all players. Could not send report because channel is missing – "
+                "Cleared all players. Could not send report because channel is missing - "
                 + "the command was probably given in a player-only command line that was deleted."
             )
 
     @app_commands.command(
-        name="clear_all_actors",
         description="Admin-only: de-initialise all actors (players and shops).",
     )
-    @app_commands.checks.has_role("gm")
-    async def clear_all_actors_command(self, interaction: Interaction):
+    async def clear_all_actors(self, interaction: Interaction):
         await interaction.response.defer(ephemeral=True)
         await actors.init(clear_all=True)
         try:
             await interaction.followup.send("Done.", ephemeral=True)
         except discord.errors.NotFound:
             print(
-                "Cleared all actors. Could not send report because channel is missing – "
+                "Cleared all actors. Could not send report because channel is missing - "
                 + "the command was probably given in a player-only command line that was deleted."
             )
 
     @app_commands.command(
-        name="clear_actor",
         description="Admin-only: de-initialise an actor (player or shop).",
     )
-    @app_commands.checks.has_role("gm")
-    async def clear_actor_command(self, interaction: Interaction, actor_id: str):
+    async def clear_actor(self, interaction: Interaction, actor_id: str):
         await interaction.response.defer(ephemeral=True)
         report = await actors.clear_actor(actor_id)
         try:
             await interaction.followup.send(report, ephemeral=True)
         except discord.errors.NotFound:
             print(
-                f"Cleared actor {actor_id}. Could not send report because channel is missing – "
+                f"Cleared actor {actor_id}. Could not send report because channel is missing - "
                 + "the command was probably given in a player-only command line that was deleted."
             )
 
     @app_commands.command(
-        name="ping",
-        description="Admin-only. Send a ping to a player's cmd_line channel.",
+        description="Send a ping to a player's cmd_line channel",
     )
-    @app_commands.checks.has_role("gm")
-    async def ping_command(self, interaction: Interaction, player_id: str):
+    async def ping(self, interaction: Interaction, player_id: str):
         await interaction.response.defer(ephemeral=True)
         channel = players.get_cmd_line_channel(player_id)
         if channel is not None:
@@ -216,13 +188,8 @@ class AdminCog(commands.Cog, name="admin"):
                 ephemeral=True,
             )
 
-    @app_commands.command(
-        name="add_member", description="Admin-only. Add a member to a group."
-    )
-    @app_commands.checks.has_role("gm")
-    async def add_member_command(
-        self, interaction: Interaction, handle_id: str, group_id: str
-    ):
+    @app_commands.command(description="Add a member to a group")
+    async def add_member(self, interaction: Interaction, handle_id: str, group_id: str):
         await interaction.response.defer(ephemeral=True)
         report = await groups.add_member_from_handle(
             interaction.guild, group_id, handle_id
@@ -235,21 +202,16 @@ class AdminCog(commands.Cog, name="admin"):
             )
 
     @app_commands.command(
-        name="create_group",
-        description="Admin-only. Create a group with yourself as initial member.",
+        description="Create a group with yourself as initial member",
     )
-    @app_commands.checks.has_role("gm")
-    async def create_group_command(self, interaction: Interaction, group_name: str):
+    async def create_group(self, interaction: Interaction, group_name: str):
         await interaction.response.defer(ephemeral=True)
         report = await groups.create_group_from_command(interaction.user.id, group_name)
         if report is not None:
             await interaction.followup.send(report, ephemeral=True)
 
-    @app_commands.command(
-        name="clear_all_groups", description="Admin-only. Delete all groups."
-    )
-    @app_commands.checks.has_role("gm")
-    async def clear_all_groups_command(self, interaction: Interaction):
+    @app_commands.command(description="Delete all groups")
+    async def clear_all_groups(self, interaction: Interaction):
         await interaction.response.defer(ephemeral=True)
         await groups.init(clear_all=True)
         await interaction.followup.send("Done.", ephemeral=True)

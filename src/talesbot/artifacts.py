@@ -1,15 +1,15 @@
-# module artifacts.py
-
-# This module handles the creation and execution of in-game artifacts, which are items that can be accessed through
-# logging in with codes.
+"""
+This module handles the creation and execution of in-game artifacts, which are items that can be accessed through
+logging in with codes.
+"""
 
 import json
 import os
 
-# from discord.ext import commands
-# from discord import app_commands, Interaction
+from discord.ext import commands
+from discord import app_commands, Interaction
 
-import channels
+from .channels import channels
 
 # TODO: reinitialise?
 

@@ -1,12 +1,5 @@
-from dataclasses import dataclass
-import os
 import tomllib
-from typing import cast
-
-from interactions import Client
-
 from .checks import Checks
-
 from .models import Config, EnvSettings
 from ..impersonator import Impersonator
 
@@ -33,9 +26,4 @@ class ClientExtension:
         self.checks = Checks(self.config)
 
 
-def exts(bot: Client) -> ClientExtension:
-    return cast(ClientExtension, bot.custom_data)
-
-
-def set_exts(bot: Client, exts: ClientExtension):
-    bot.custom_data = exts
+config = load_config()
