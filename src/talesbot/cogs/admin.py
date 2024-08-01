@@ -40,7 +40,7 @@ class AdminCog(commands.GroupCog, group_name="admin"):
             )
         elif handle is None:
             await interaction.followup.send(
-                f"Failed: you must give the player's main handle.", ephemeral=True
+                "Failed: you must give the player's main handle.", ephemeral=True
             )
         else:
             async with handles.semaphore():
@@ -65,7 +65,7 @@ class AdminCog(commands.GroupCog, group_name="admin"):
             )
         elif handle is None:
             await interaction.followup.send(
-                f"Failed: you must give the player's main handle.", ephemeral=True
+                "Failed: you must give the player's main handle.", ephemeral=True
             )
         else:
             async with handles.semaphore():
@@ -86,7 +86,7 @@ class AdminCog(commands.GroupCog, group_name="admin"):
             )
         elif handle is None:
             await interaction.followup.send(
-                f"Failed: you must give the player's main handle.", ephemeral=True
+                "Failed: you must give the player's main handle.", ephemeral=True
             )
         else:
             async with handles.semaphore():

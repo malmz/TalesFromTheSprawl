@@ -336,7 +336,7 @@ async def refresh_financial_statement(actor_id: str):
     actor = read_actor(actor_id)
     if actor is None:
         raise RuntimeError(
-            f"Trying to write financial record but could not find which actor it belongs to."
+            "Trying to write financial record but could not find which actor it belongs to."
         )
     channel = channels.get_discord_channel(actor.finance_channel_id, actor.guild_id)
     await update_financial_statement(channel, actor)
@@ -384,7 +384,7 @@ async def send_financial_record_for_actor(actor_id: str, record: str, last_in_se
         actor = read_actor(actor_id)
         if actor is None:
             raise RuntimeError(
-                f"Trying to write financial record but could not find which actor it belongs to."
+                "Trying to write financial record but could not find which actor it belongs to."
             )
         channel = channels.get_discord_channel(actor.finance_channel_id, actor.guild_id)
         message = await channel.send(record)

@@ -1,29 +1,29 @@
 # bot.py
-import os
-
 # import discord
 import asyncio
+import os
 import re
 
-# from discord.ext import commands
-from dotenv import load_dotenv
+import actors
+import artifacts
+import channels
+import chats
+import finances
+import game
+import gm
+import groups
 
 # Custom imports
 import handles
-import channels
+import logger
+import players
 import posting
 import reactions
-import actors
-import players
-import finances
-import chats
 import server
 import shops
-import groups
-import game
-import artifacts
-import gm
-import logger
+
+# from discord.ext import commands
+from dotenv import load_dotenv
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -134,7 +134,7 @@ async def on_app_command_error(interaction: discord.Interaction, error):
         await interaction.response.send_message(error, ephemeral=True)
     elif isinstance(error, discord.app_commands.errors.MissingRole):
         await interaction.response.send_message(
-            f"You are not allowed to run this command.", ephemeral=True
+            "You are not allowed to run this command.", ephemeral=True
         )
     elif isinstance(
         error, discord.app_commands.errors.CommandInvokeError
@@ -148,11 +148,11 @@ async def on_app_command_error(interaction: discord.Interaction, error):
     else:
         try:
             await interaction.response.send_message(
-                f"Failed command. Contact system administrator.", ephemeral=True
+                "Failed command. Contact system administrator.", ephemeral=True
             )
         except discord.errors.InteractionResponded:
             await interaction.followup.send(
-                f"Failed command. Contact system administrator.", ephemeral=True
+                "Failed command. Contact system administrator.", ephemeral=True
             )
 
 
@@ -241,23 +241,23 @@ async def process_message(message):
 
 
 def has_any_command(message):
-    alphanumeric_regex = re.compile(f"^\.[a-z]+")
+    alphanumeric_regex = re.compile("^\.[a-z]+")
     matches = re.search(alphanumeric_regex, message.content)
     return matches is not None
 
 
 def has_help_command(message):
-    help_regex = re.compile(f"^\.help")
+    help_regex = re.compile("^\.help")
     matches = re.search(help_regex, message.content)
     return matches is not None
 
 
 def has_chat_command(message):
-    chat_regex = re.compile(f"^\.chat")
+    chat_regex = re.compile("^\.chat")
     matches = re.search(chat_regex, message.content)
     if matches is not None:
         return True
-    chat_regex = re.compile(f"^\.gm_chat")
+    chat_regex = re.compile("^\.gm_chat")
     matches = re.search(chat_regex, message.content)
     return matches is not None
 

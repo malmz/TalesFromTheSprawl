@@ -70,7 +70,7 @@ def get_json_from_row(row):
 
     try:
         money = int(money_str)
-    except Exception as e:
+    except Exception:
         money = 0
         log_warning(f"Unable to parse money amount: '{money_str}'")
 
@@ -87,7 +87,7 @@ def get_json_from_row(row):
             # Empty, let's skip it!
             continue
 
-        name, money_str = [x.strip() for x in handle_data.split(":")]
+        name, money_str = (x.strip() for x in handle_data.split(":"))
         if name in alt_handles_names:
             alt_handles.append((name, int(money_str)))
             alt_handles_names.remove(name)
@@ -153,7 +153,7 @@ if __name__ == "__main__":
         if os.path.basename(os.getcwd()) != "prepare"
         else "source.csv"
     )
-    with open(input_file, "r") as file:
+    with open(input_file) as file:
         lines = file.readlines()
     create_conf_file("known_handles.conf", lines)
 

@@ -1,5 +1,4 @@
 from interactions import (
-    ChannelType,
     Client,
     Extension,
     Guild,
@@ -8,11 +7,9 @@ from interactions import (
     SlashContext,
     check,
     is_owner,
-    slash_command,
 )
 
-
-from ..conf import ClientExtension, exts
+from ..conf import exts
 
 
 class Admin(Extension):

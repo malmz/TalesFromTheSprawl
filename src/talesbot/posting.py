@@ -1,14 +1,14 @@
+import asyncio
+import re
+
 import channels
 import handles
+import players
+import server
 
 # import discord
 from common import forbidden_content, hard_space
 from custom_types import PostTimestamp
-import players
-import server
-
-import re
-import asyncio
 
 ### Module posting.py
 # General message processing (non-command) for system bot.

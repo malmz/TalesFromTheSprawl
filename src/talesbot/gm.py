@@ -1,16 +1,14 @@
-import actors
-import player_setup
-import scenarios
-import artifacts
-import channels
-import server
-import handles
-
-from discord.ext import commands
-from discord import app_commands, Interaction
-from dotenv import load_dotenv
 import os
 
+import actors
+import artifacts
+import handles
+import player_setup
+import scenarios
+import server
+from discord import Interaction, app_commands
+from discord.ext import commands
+from dotenv import load_dotenv
 
 ### Module gm.py
 # This module holds the gm cog, which is used to set up in-game content and track resources shared by all GMs

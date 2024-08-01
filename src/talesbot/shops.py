@@ -1,52 +1,47 @@
 # shops.py
 
-from interactions import (
-    Extension,
-    OptionType,
-    has_role,
-    slash_command,
-    SlashContext,
-    slash_option,
-)
 import asyncio
-import simplejson
 import datetime
-import random
-import os
-
-from configobj import ConfigObj
-from typing import Dict, List, Tuple
 from copy import deepcopy
 from enum import Enum
-from discord.ext import commands
-from discord import app_commands, Interaction
-from dotenv import load_dotenv
+from typing import Dict, List, Tuple
+
+import actors
+import channels
 
 # Custom imports
 import common
-import handles
-import channels
-import players
-import actors
 import finances
+import handles
+import players
 import server
-
+import simplejson
 from common import (
     coin,
-    emoji_unavail,
-    shop_role_start,
-    highest_ever_index,
-    emoji_alert,
     emoji_accept,
+    emoji_alert,
+    emoji_unavail,
+    highest_ever_index,
     number_emojis,
+    shop_role_start,
 )
+from configobj import ConfigObj
 from custom_types import (
-    Transaction,
-    TransTypes,
     ActionResult,
     Handle,
     HandleTypes,
     PostTimestamp,
+    Transaction,
+    TransTypes,
+)
+from discord import Interaction, app_commands
+from interactions import (
+    Extension,
+    OptionType,
+    SlashContext,
+    has_role,
+    slash_command,
+    slash_option,
 )
 
 # main_shop = os.getenv("MAIN_SHOP_NAME")
@@ -411,7 +406,7 @@ max_table_number = 10
 ### Classes, init and utilities:
 
 
-class Employee(object):
+class Employee:
     def __init__(self, player_id: str, handle_for_tips: str = None, emoji: str = None):
         self.player_id = player_id
         self.handle_for_tips = handle_for_tips
@@ -427,7 +422,7 @@ class Employee(object):
         return simplejson.dumps(self.__dict__)
 
 
-class Shop(object):
+class Shop:
     def __init__(
         self,
         name: str,
@@ -518,13 +513,13 @@ class Shop(object):
         return tips_tuples
 
 
-class FindShopResult(object):
+class FindShopResult:
     def __init__(self, shop: Shop = None, error_report: str = None):
         self.shop = shop
         self.error_report = error_report
 
 
-class Product(object):
+class Product:
     def __init__(
         self,
         name: str,
@@ -571,7 +566,7 @@ class OrderStatus(str, Enum):
 
 
 # Used to represent an order: one or more items bought/reserved that will be delivered together
-class Order(object):
+class Order:
     def __init__(
         self,
         order_id: str,
@@ -642,7 +637,7 @@ class Order(object):
 
 
 # Used to represent an order: one or more items bought/reserved that will be delivered together
-class MsgOrderMapping(object):
+class MsgOrderMapping:
     def __init__(
         self,
         identifier: str,  # For active orders: delivery_id. For inactive orders: order_id
@@ -673,7 +668,7 @@ class StorefrontActionTypes(str, Enum):
     Chat = "c"
 
 
-class StorefrontAction(object):
+class StorefrontAction:
     def __init__(
         self,
         action_type: StorefrontActionTypes,
@@ -780,7 +775,7 @@ async def reinitialize(user_id: str, shop_name: str):
 
     order_flow_channel = channels.get_discord_channel(shop.order_flow_channel_id)
     tasks = [asyncio.create_task(order_flow_channel.purge())]
-    tasks.extend((asyncio.create_task(ch.purge()) for ch in shop.storefront_channels()))
+    tasks.extend(asyncio.create_task(ch.purge()) for ch in shop.storefront_channels())
     await asyncio.gather(*tasks)
     delete_storefront_msg_mappings_for_shop(shop.shop_id)
     await clear_order_data(shop.shop_id)
@@ -968,7 +963,7 @@ def get_delivery_choice_message(shop_name: str, guild_id: int):
 def store_delivery_choice_message(shop_name: str, msg_id: str, guild_id: int):
     if shop_exists(shop_name):
         storefront = get_storefront(shop_name)
-        if not delivery_choice_msg_index in storefront:
+        if delivery_choice_msg_index not in storefront:
             storefront[delivery_choice_msg_index] = {}
         storefront[delivery_choice_msg_index][str(guild_id)] = msg_id
         action = StorefrontAction(StorefrontActionTypes.SetDeliveryOption)
@@ -987,7 +982,7 @@ def get_tipping_message(shop_name: str, guild_id: int):
 def store_tipping_message(shop_name: str, msg_id: str, guild_id: int):
     if shop_exists(shop_name):
         storefront = get_storefront(shop_name)
-        if not tipping_msg_index in storefront:
+        if tipping_msg_index not in storefront:
             storefront[tipping_msg_index] = {}
         storefront[tipping_msg_index][str(guild_id)] = msg_id
         action = StorefrontAction(StorefrontActionTypes.Tip)
@@ -1398,15 +1393,15 @@ async def process_employ_command(user_id: str, handle_id: str, shop_name: str):
         else:
             await channel.send(
                 f"Congratulations **{handle.handle_id}**—you have been added as an employee at **{shop.name}**! You now have access to its finances, chat, and order channels.\n"
-                + f"You can add products to the menu/catalogue:\n"
-                + f'> /add_product Beer "A description of the beer!" 10 :beer:\n'
+                + "You can add products to the menu/catalogue:\n"
+                + '> /add_product Beer "A description of the beer!" 10 :beer:\n'
                 + f'  ("10" is the cost in {coin})\n'
-                + f"You can edit products,:\n"
-                + f"> /edit_product Beer price 5\n"
-                + f"  The following fields can be edited: description, price, symbol, available, in_stock.\n"
-                + f'  "available" and "in_stock" can be set to "0" or "1". Available means the product is shown in the storefront channel; in_stock means it can be ordered.\n'
-                + f"To make your added/edited products appear in the public storefront channel:\n"
-                + f"> /publish_menu"
+                + "You can edit products,:\n"
+                + "> /edit_product Beer price 5\n"
+                + "  The following fields can be edited: description, price, symbol, available, in_stock.\n"
+                + '  "available" and "in_stock" can be set to "0" or "1". Available means the product is shown in the storefront channel; in_stock means it can be ordered.\n'
+                + "To make your added/edited products appear in the public storefront channel:\n"
+                + "> /publish_menu"
             )
     return result.report
 
@@ -1494,7 +1489,7 @@ async def set_tips_for_user(user_id: str, handle_id: str, shop_name: str):
 
     if shop.edit_tips_handle(player_id, handle_id):
         store_shop(shop)
-        return f"Done."
+        return "Done."
     else:
         return f"Error: could not update tip handle for {player_id} because they do not work at {shop.name}."
 
@@ -1526,7 +1521,7 @@ async def add_product(
     shop: Shop = result.shop
 
     if product_name is None:
-        return f'Error: must give a product name; use "/add_product <product_name> [Optional: description, price, type/symbol]"'
+        return 'Error: must give a product name; use "/add_product <product_name> [Optional: description, price, type/symbol]"'
     if product_exists(shop.shop_id, product_name):
         existing_product = read_product(shop.shop_id, product_name)
         if existing_product.name == product_name:
@@ -1559,7 +1554,7 @@ async def remove_product(user_id: str, product_name: str, shop_name: str):
     shop: Shop = result.shop
 
     if product_name is None:
-        return f'Error: must give a product name; use "/remove_product <product_name>"'
+        return 'Error: must give a product name; use "/remove_product <product_name>"'
     if not product_exists(shop.shop_id, product_name):
         return f"Error: shop {shop.shop_id} has no product called {product_name}."
 
@@ -1689,7 +1684,7 @@ async def update_storefront_delivery_choice_message(shop: Shop, channel):
 async def update_storefront_delivery_choice_message_old(shop: Shop, channel):
     # TODO: track whether this shop is actually a restaurant, and otherwise edit this message
     content = (
-        f"Please select your table using the buttons:\n"
+        "Please select your table using the buttons:\n"
         + f"{number_emojis[0]}–{number_emojis[max_table_number]}: serve at this table number\n"
         + f"{bar_emoji}: serve at the bar\n"
         + f"{call_emoji}: call out my current handle when the order is ready (note: you need to click this again if you switch handle)"
@@ -1926,7 +1921,7 @@ async def process_reaction_in_order_flow(channel_id: str, msg_id: str, emoji: st
         return result
     mapping: MsgOrderMapping = get_order_mapping_from_msg(shop.shop_id, msg_id)
     if mapping is None:
-        result.report = f"Error: tried to edit order, but could not map the message to a recent order; it has been delivered or aborted."
+        result.report = "Error: tried to edit order, but could not map the message to a recent order; it has been delivered or aborted."
         return result
 
     if emoji not in get_actionable_emojis(mapping.status):
@@ -2004,7 +1999,7 @@ async def order_product_for_buyer(
         print(f"Trying to order {product_name} from {shop_name}, found none")
         if product_name is None:
             return (
-                f'Error: no product name given. Use /order <product_name> <shop_name>"'
+                'Error: no product name given. Use /order <product_name> <shop_name>"'
             )
         elif shop_name is None:
             return f'Error: no shop name given. Use "/order {product_name} <shop_name>"'
@@ -2197,7 +2192,7 @@ async def attempt_refund(transaction: Transaction, initiator_id: str):
     shop: Shop = read_shop(shop_id)
     if shop is None:
         transaction.report = (
-            f"Error: could not refund purchase becase shop no longer exists."
+            "Error: could not refund purchase becase shop no longer exists."
         )
         # Unsuccessful -- shop no longer exists!
         return
@@ -2226,12 +2221,12 @@ async def attempt_refund(transaction: Transaction, initiator_id: str):
         if delivery_id is None:
             if initiated_by_shop:
                 transaction.report = (
-                    f"Error: could not find order to refund. If the buyer has switched their delivery option "
+                    "Error: could not find order to refund. If the buyer has switched their delivery option "
                     + "(e.g. table, address, handle), they need to switch back in order to map the transaction to the order."
                 )
             else:
                 transaction.report = (
-                    f"Error: could not find order to refund. If you have switched your delivery option "
+                    "Error: could not find order to refund. If you have switched your delivery option "
                     + "(e.g. table, address, handle), try switching back to the one you had when you ordered. 1"
                 )
             return
@@ -2241,13 +2236,13 @@ async def attempt_refund(transaction: Transaction, initiator_id: str):
         if order is None:
             if initiated_by_shop:
                 transaction.report = (
-                    f"Error: could not find order to refund. Perhaps it has already been locked in or delivered. "
+                    "Error: could not find order to refund. Perhaps it has already been locked in or delivered. "
                     + "Otherwise, if the buyer has switched their delivery option (e.g. table, address, handle), "
                     "they need to switch back in order to map the transaction to the order."
                 )
             else:
                 transaction.report = (
-                    f"Error: could not find order to refund. If you have switched your delivery option "
+                    "Error: could not find order to refund. If you have switched your delivery option "
                     + "(e.g. table, address, handle), try switching back to the one you had when you ordered. 2"
                 )
             return
@@ -2260,7 +2255,7 @@ async def attempt_refund(transaction: Transaction, initiator_id: str):
             # This typically means the refund is too late -- perhaps it was clicked right at the same time when staff
             # marked the order as "locked" or "delivered". Both those options should remove the undo option from the
             # buyer's side, though.
-            transaction.report = f"Error: could not refund. Order has been delivered, is in preparation, or this item has already been refunded."
+            transaction.report = "Error: could not refund. Order has been delivered, is in preparation, or this item has already been refunded."
             return
 
         # attempt to transfer back money
@@ -2414,12 +2409,12 @@ def set_delivery_table(player_id: str, option: str, shop_name: str):
     result = ActionResult()
     if option == "bar":
         delivery_id = "the bar"
-        delivery_str = f"served at the **bar**"
+        delivery_str = "served at the **bar**"
     elif option == "call":
         # Call out the order for their current handle
         handle_id = handles.get_active_handle_id(player_id)
         if handle_id is None:
-            result.report = f'Error: Tried to set delivery option to "call out my name", but could not determine your current handle!'
+            result.report = 'Error: Tried to set delivery option to "call out my name", but could not determine your current handle!'
             return result
         delivery_id = f"{handle_id} (call out)"
         delivery_str = f"called out to **{handle_id}**"

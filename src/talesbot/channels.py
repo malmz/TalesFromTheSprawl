@@ -213,7 +213,7 @@ async def _init_discord_channel(discord_channel):
 
 
 async def _verify_category_exists(guild, category_name: str, channels: list):
-    if not category_name in [cat.name for cat in guild.categories]:
+    if category_name not in [cat.name for cat in guild.categories]:
         print("Did not find category %s, will create it" % category_name)
         await guild.create_category(category_name)
     else:
@@ -227,7 +227,7 @@ async def _verify_category_exists(guild, category_name: str, channels: list):
 
 
 async def _verify_channel_exists(category, channel_name: str):
-    if not channel_name in [ch.name for ch in category.channels]:
+    if channel_name not in [ch.name for ch in category.channels]:
         await category.create_text_channel(channel_name)
     else:
         print("Channel already exists %s:%s" % (category.guild.name, channel_name))
@@ -328,7 +328,7 @@ def _set_last_poster(channel_name: str, poster_id: str):
 
 
 def _get_last_poster(channel_name: str):
-    if not last_poster_index in channel_states[channel_name]:
+    if last_poster_index not in channel_states[channel_name]:
         return ""
     else:
         return channel_states[channel_name][last_poster_index]

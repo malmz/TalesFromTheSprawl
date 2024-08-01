@@ -1,11 +1,10 @@
 import io
 from typing import Optional
+
 from interactions import (
     Attachment,
     AutocompleteContext,
-    ChannelType,
     Client,
-    Embed,
     Extension,
     File,
     GuildText,
@@ -16,7 +15,7 @@ from interactions import (
     slash_command,
     slash_option,
 )
-from interactions.api.events import MessageCreate, Startup
+from interactions.api.events import MessageCreate
 
 from ..conf import exts
 from ..db import Handle, Player, PlayerHandle

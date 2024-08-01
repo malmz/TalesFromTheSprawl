@@ -4,11 +4,11 @@ import asyncio
 from typing import List
 
 from common import (
-    system_role_name,
     admin_role_name,
     all_players_role_name,
     gm_role_name,
     new_player_role_name,
+    system_role_name,
 )
 
 guilds = []
@@ -80,14 +80,14 @@ def get_guilds():
 async def give_role_access(channel, role):
     if channel.guild.id != role.guild.id:
         print(
-            f"Warning: Trying to set role permissions on a channel from a different guild"
+            "Warning: Trying to set role permissions on a channel from a different guild"
         )
     await channel.set_permissions(role, overwrite=normal_access)
 
 
 async def give_member_role(member, role):
     if member.guild.id != role.guild.id:
-        print(f"Warning: Trying to give member a role from a different guild")
+        print("Warning: Trying to give member a role from a different guild")
     new_roles = member.roles
     if role not in member.roles:
         new_roles.append(role)

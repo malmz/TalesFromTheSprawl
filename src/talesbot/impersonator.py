@@ -1,5 +1,4 @@
-from interactions import Client, Extension, GuildText, Snowflake, Webhook, listen
-from interactions.api.events import Ready
+from interactions import Client, GuildText, Snowflake, Webhook
 
 
 class Impersonator:

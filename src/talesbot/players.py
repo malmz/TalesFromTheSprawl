@@ -1,27 +1,23 @@
-import channels
-import common
-import server
-import actors
-import shops
-import player_setup
-from groups import Group
-
-from common import (
-    highest_ever_index,
-    player_personal_role_start,
-    admin_role_name,
-    gm_role_name,
-)
-
-from custom_types import PlayerData, Handle
-
 # import discord
 import asyncio
-import math
 
 # from configobj import ConfigObj
 from typing import List
 
+import actors
+import channels
+import common
+import player_setup
+import server
+import shops
+from common import (
+    admin_role_name,
+    gm_role_name,
+    highest_ever_index,
+    player_personal_role_start,
+)
+from custom_types import Handle, PlayerData
+from groups import Group
 
 players_conf_dir = "players"
 user_id_mappings_index = "___user_id_to_player_id"
@@ -30,10 +26,10 @@ guild_to_user_count_index = "__guild_to_user_count"
 
 def get_players_confobj():
     players = ConfigObj(players_conf_dir + "/__players.conf")
-    if not user_id_mappings_index in players:
+    if user_id_mappings_index not in players:
         players[user_id_mappings_index] = {}
         players.write()
-    if not guild_to_user_count_index in players:
+    if guild_to_user_count_index not in players:
         players[guild_to_user_count_index] = {}
         players.write()
     return players
@@ -42,11 +38,11 @@ def get_players_confobj():
 # TODO: loop through all users, find their player_ids and re-map personal channels if not available
 async def init(clear_all=False):
     players = get_players_confobj()
-    if not user_id_mappings_index in players or clear_all:
+    if user_id_mappings_index not in players or clear_all:
         players[user_id_mappings_index] = {}
-    if not guild_to_user_count_index in players or clear_all:
+    if guild_to_user_count_index not in players or clear_all:
         players[guild_to_user_count_index] = {}
-    if not highest_ever_index in players[user_id_mappings_index] or clear_all:
+    if highest_ever_index not in players[user_id_mappings_index] or clear_all:
         players[user_id_mappings_index][highest_ever_index] = str(
             player_personal_role_start
         )
@@ -101,7 +97,7 @@ async def initialise_all_users():
 def get_all_players():
     players = get_players_confobj()
     for player in players:
-        if not player in [
+        if player not in [
             highest_ever_index,
             user_id_mappings_index,
             guild_to_user_count_index,
@@ -131,11 +127,11 @@ def read_player_data(player_id: str):
 
 def get_player_id(user_id: str, expect_to_find=True):
     players = get_players_confobj()
-    if not user_id in players[user_id_mappings_index]:
+    if user_id not in players[user_id_mappings_index]:
         if expect_to_find:
             print(f"WARNING: User {user_id} has not been initialized as a player")
             raise RuntimeError(
-                f"User has not been initialized as a player. Did you run /join?"
+                "User has not been initialized as a player. Did you run /join?"
             )
         return None
     return players[user_id_mappings_index][user_id]

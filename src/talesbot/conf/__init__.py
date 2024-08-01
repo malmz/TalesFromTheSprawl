@@ -1,7 +1,8 @@
 import tomllib
+
+from ..impersonator import Impersonator
 from .checks import Checks
 from .models import Config, EnvSettings
-from ..impersonator import Impersonator
 
 
 def load_config() -> Config:

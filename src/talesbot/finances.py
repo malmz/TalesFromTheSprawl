@@ -1,16 +1,14 @@
-import channels
-import handles
-import actors
-import players
-from custom_types import Transaction, TransTypes, Handle, HandleTypes, PostTimestamp
-from common import coin, transaction_collector, transaction_collected
-
-from discord.ext import commands
-from discord import app_commands, Interaction
-from configobj import ConfigObj
 from copy import deepcopy
-import asyncio
+
+import actors
+import handles
+import players
 import simplejson
+from common import coin, transaction_collected, transaction_collector
+from configobj import ConfigObj
+from custom_types import Handle, HandleTypes, PostTimestamp, Transaction, TransTypes
+from discord import Interaction, app_commands
+from discord.ext import commands
 
 ### Module finances.py
 # This module tracks and handles money and transactions between handles
@@ -123,7 +121,7 @@ async def setup(bot):
     await bot.add_cog(FinancesCog(bot))
 
 
-class InternalTransRecord(object):
+class InternalTransRecord:
     def __init__(
         self,
         other_handle: str,
@@ -426,7 +424,7 @@ async def try_to_pay_from_actor(
 def find_transaction_parties(transaction: Transaction):
     if transaction.payer is None:
         if transaction.payer_actor is None:
-            transaction.report = f"Error: Attempted transaction without knowing either the handle or the user ID of the payer."
+            transaction.report = "Error: Attempted transaction without knowing either the handle or the user ID of the payer."
         else:
             transaction.payer = handles.get_active_handle(
                 transaction.payer_actor
@@ -446,7 +444,7 @@ def find_transaction_parties(transaction: Transaction):
 
     if transaction.recip is None:
         if transaction.recip_actor is None:
-            transaction.report = f"Error: Attempted transaction without knowing either the handle or the user ID of the recipient."
+            transaction.report = "Error: Attempted transaction without knowing either the handle or the user ID of the recipient."
         else:
             transaction.recip = handles.get_active_handle(
                 transaction.recip_actor

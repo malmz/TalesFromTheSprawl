@@ -5,13 +5,13 @@ from typing import List
 import simplejson
 
 
-class ActionResult(object):
+class ActionResult:
     def __init__(self, success: bool = False, report: str = None):
         self.success = success
         self.report = report
 
 
-class PostTimestamp(object):
+class PostTimestamp:
     def __init__(self, hour: int, minute: int):
         self.hour = hour % 24  # Sometimes we need to adjust for DST manually
         self.minute = minute
@@ -65,7 +65,7 @@ class TransTypes(str, Enum):
     ShopRefund = "sr"
 
 
-class Transaction(object):
+class Transaction:
     def __init__(
         self,
         payer: str,  # handle ID
@@ -126,7 +126,7 @@ class Transaction(object):
         ]
 
 
-class Actor(object):
+class Actor:
     def __init__(
         self,
         role_name: str,
@@ -162,7 +162,7 @@ class Actor(object):
         return simplejson.dumps(self.__dict__)
 
 
-class PlayerData(object):
+class PlayerData:
     def __init__(
         self,
         player_id: str,
@@ -197,7 +197,7 @@ class HandleTypes(str, Enum):
     NPC = "npc"
 
 
-class Handle(object):
+class Handle:
     def __init__(
         self,
         handle_id: str,
