@@ -4,9 +4,11 @@ version = "1.0.0"
 description = "Discord bot for Tales from the Sprawl"
 authors = [{ name = "Carl Malmgren", email = "callem217@gmail.com" }]
 dependencies = [
-    "discord-py>=2.4.0",
-    "pydantic>=2.8.2",
-    "pydantic-settings>=2.4.0",
+	"discord-py>=2.4.0",
+	"pydantic>=2.8.2",
+	"pydantic-settings>=2.4.0",
+	"configobj>=5.0.8",
+	"peewee>=3.17.6",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
@@ -28,9 +30,11 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = ["src/talesbot"]
 
+[tool.ruff.lint]
+extend-select = ["I"]
+
 [tool.ruff.format]
 docstring-code-format = true
-indent-style = "tab"
 
 #[tool.poetry.dependencies]
 #python = "^3.11"

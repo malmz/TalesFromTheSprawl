@@ -1,5 +1,6 @@
-import emoji
 import itertools
+
+import emoji
 
 highest_ever_index = "___highest_ever"
 system_role_name = "system"
@@ -41,9 +42,9 @@ number_emojis = ["0️⃣", "1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣
 
 
 def letter_emoji(letter: str):
-	initial = letter.lower()[0]
-	string = f":regional_indicator_{initial}:"
-	return emoji.emojize(string, use_aliases=True)
+    initial = letter.lower()[0]
+    string = f":regional_indicator_{initial}:"
+    return emoji.emojize(string, use_aliases=True)
 
 
 # Channels
@@ -59,31 +60,31 @@ testing_category_name = "testing"
 personal_category_base = "personal_account_"
 chats_category_base = "chats_"
 num_per_player_category_groups = (
-	12  # 11 for regular players, one for non-player entities
+    12  # 11 for regular players, one for non-player entities
 )
 
 
 base_categories = [
-	(off_category_name, ["off_general", "off_teknikhjälp"]),
-	(setup_category_name, ["landing_page"]),
-	(announcements_category_name, [gm_announcements_name]),
-	(testing_category_name, ["cmd_line_gm", "off_intrig"]),
-	(shadowlands_category_name, ["seattle_news", "open_channel", "anon"]),
-	(public_open_category_name, ["marketplace", "you_are_drunk"]),
-	(shops_category_name, []),
-	(groups_category_name, []),
+    (off_category_name, ["off_general", "off_teknikhjälp"]),
+    (setup_category_name, ["landing_page"]),
+    (announcements_category_name, [gm_announcements_name]),
+    (testing_category_name, ["cmd_line_gm", "off_intrig"]),
+    (shadowlands_category_name, ["seattle_news", "open_channel", "anon"]),
+    (public_open_category_name, ["marketplace", "you_are_drunk"]),
+    (shops_category_name, []),
+    (groups_category_name, []),
 ]
 
 pa_categories = [
-	(personal_category_base + str(i), []) for i in range(num_per_player_category_groups)
+    (personal_category_base + str(i), []) for i in range(num_per_player_category_groups)
 ]
 chats_categories = [
-	(chats_category_base + str(i), []) for i in range(num_per_player_category_groups)
+    (chats_category_base + str(i), []) for i in range(num_per_player_category_groups)
 ]
 
 
 def get_all_categories():
-	return itertools.chain(base_categories, pa_categories, chats_categories)
+    return itertools.chain(base_categories, pa_categories, chats_categories)
 
 
 # Roles
@@ -97,24 +98,24 @@ group_role_start = 2900
 
 
 def is_shop_role(name: str):
-	try:
-		number = int(name)
-		return number >= shop_role_start and number < player_personal_role_start
-	except ValueError:
-		return False
+    try:
+        number = int(name)
+        return number >= shop_role_start and number < player_personal_role_start
+    except ValueError:
+        return False
 
 
 def is_player_role(name: str):
-	try:
-		number = int(name)
-		return number >= player_personal_role_start and number < group_role_start
-	except ValueError:
-		return False
+    try:
+        number = int(name)
+        return number >= player_personal_role_start and number < group_role_start
+    except ValueError:
+        return False
 
 
 def is_group_role(name: str):
-	try:
-		number = int(name)
-		return number >= group_role_start
-	except ValueError:
-		return False
+    try:
+        number = int(name)
+        return number >= group_role_start
+    except ValueError:
+        return False

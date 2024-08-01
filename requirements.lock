@@ -20,6 +20,8 @@ annotated-types==0.7.0
     # via pydantic
 attrs==23.2.0
     # via aiohttp
+configobj==5.0.8
+    # via talesbot
 discord-py==2.4.0
     # via talesbot
 frozenlist==1.4.1
@@ -30,6 +32,8 @@ idna==3.7
 multidict==6.0.5
     # via aiohttp
     # via yarl
+peewee==3.17.6
+    # via talesbot
 pydantic==2.8.2
     # via pydantic-settings
     # via talesbot
@@ -39,6 +43,8 @@ pydantic-settings==2.4.0
     # via talesbot
 python-dotenv==1.0.1
     # via pydantic-settings
+six==1.16.0
+    # via configobj
 typing-extensions==4.12.2
     # via pydantic
     # via pydantic-core
