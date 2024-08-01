@@ -28,6 +28,10 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = ["src/talesbot"]
 
+[tool.ruff.format]
+docstring-code-format = true
+indent-style = "tab"
+
 #[tool.poetry.dependencies]
 #python = "^3.11"
 #discord-py-interactions = {extras = ["jurigged"], version = "^5.10.0"}

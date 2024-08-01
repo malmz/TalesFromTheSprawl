@@ -1,4 +1,5 @@
 import discord
+from discord.ext import commands
 
 from .conf import ClientExtension, Config, exts, set_exts
 
@@ -8,18 +9,21 @@ from .logger import init_bot_logger
 from talesbot import db
 
 intents = discord.Intents.default()
-client = discord.Client(intents=intents)
+bot = commands.Bot(intents=intents)
 
 
-@client.event
-async def on_ready():
-    print(f"Bot connected as {client.user.name}")
+class TalesBot(commands.Bot):
+	async def on_ready():
+		print(f"Bot connected as {bot.user.name}")
+
+	async def on_guild_available(guild: discord.Guild):
+		pass
 
 
 def main() -> int:
-    db.create_tables()
+	db.create_tables()
 
-    client_extensions = ClientExtension()
+	client_extensions = ClientExtension()
 
-    print("Starting bot...")
-    client.run(client_extensions.env_settings.discord_token)
+	print("Starting bot...")
+	bot.run(client_extensions.env_settings.discord_token)
