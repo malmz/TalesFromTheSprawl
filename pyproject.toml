@@ -4,11 +4,11 @@ version = "1.0.0"
 description = "Discord bot for Tales from the Sprawl"
 authors = [{ name = "Carl Malmgren", email = "callem217@gmail.com" }]
 dependencies = [
-	"discord-py>=2.4.0",
-	"pydantic>=2.8.2",
-	"pydantic-settings>=2.4.0",
-	"configobj>=5.0.8",
-	"peewee>=3.17.6",
+    "discord-py>=2.4.0",
+    "pydantic>=2.8.2",
+    "pydantic-settings>=2.4.0",
+    "configobj>=5.0.8",
+    "peewee>=3.17.6",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
@@ -31,7 +31,20 @@ allow-direct-references = true
 packages = ["src/talesbot"]
 
 [tool.ruff.lint]
-extend-select = ["I"]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
 
 [tool.ruff.format]
 docstring-code-format = true
