@@ -1,5 +1,32 @@
 [groups]
 
-[channels.init.offline]
+[categories]
+metagame = "offline"
+setup = "setup"
+announcements = "announcements"
+general = "shadowlands"
+public = "local_network"
+shops = "public_buisness"
+groups = "private_networks"
+
+[special_channels]
+anonymous = "anon"
+
+[channels.metagame]
 general = "Diskussion utanför spelet"
 "teknikhjälp" = "Hjälp med tekniska problem"
+
+[channels.setup]
+landing_page = "Välkommen till Tales from the Sprawl"
+
+[channels.announcements]
+gm_alerts = "GM-annonseringar"
+
+[channels.general]
+seattle_news = "Seattle News"
+open_channel = "Open Channel"
+anon = "Anonomous Channel"
+
+[channels.public]
+marketplace = "Marketplace"
+you_are_drunk = "Yoou ar vry drumk"

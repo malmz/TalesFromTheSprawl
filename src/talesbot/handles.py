@@ -3,18 +3,13 @@ import re
 from enum import Enum
 from typing import List
 
-import actors
-
-# import player_setup
-import chats
-import finances
-import game
-import players
-from common import coin
 from configobj import ConfigObj
-from custom_types import ActionResult, Handle, HandleTypes
 from discord import Interaction, app_commands
 from discord.ext import commands
+
+from . import actors, chats, finances, game, players
+from .common import coin
+from .custom_types import ActionResult, Handle, HandleTypes
 
 ### Module handles.py
 # This module tracks and handles state related to handles, e.g. in-game names/accounts that
@@ -73,7 +68,7 @@ class HandlesCog(commands.Cog, name="handles"):
     async def handle_command_internal(
         self,
         interaction: Interaction,
-        new_handle: str = None,
+        new_handle: str | None = None,
         burner: bool = False,
         use_gm_actor: bool = False,
     ):
@@ -548,19 +543,19 @@ async def create_handle_and_switch(
 
 async def process_handle_command(
     user_id: int,
-    new_handle_id: str = None,
+    new_handle_id: str | None = None,
     burner: bool = False,
     npc: bool = False,
     use_gm_actor: bool = False,
 ):
     if use_gm_actor:
-        import gm
+        from . import gm
 
         actor_id = gm.gm_actor_id
     else:
         actor_id = players.get_player_id(str(user_id))
 
-    if new_handle_id == None:
+    if new_handle_id is None:
         response = current_handle_report(actor_id)
         if burner:
             response += ' To create a new burner, use "/burner <new_name>".'

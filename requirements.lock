@@ -16,6 +16,8 @@ aiohttp==3.10.0
     # via discord-py
 aiosignal==1.3.1
     # via aiohttp
+alembic==1.13.2
+    # via talesbot
 annotated-types==0.7.0
     # via pydantic
 attrs==23.2.0
@@ -29,6 +31,10 @@ frozenlist==1.4.1
     # via aiosignal
 idna==3.7
     # via yarl
+mako==1.3.5
+    # via alembic
+markupsafe==2.1.5
+    # via mako
 multidict==6.0.5
     # via aiohttp
     # via yarl
@@ -45,8 +51,15 @@ python-dotenv==1.0.1
     # via pydantic-settings
 six==1.16.0
     # via configobj
+sqlalchemy==2.0.31
+    # via alembic
+    # via talesbot
+types-peewee==3.17.6.20240722
+    # via talesbot
 typing-extensions==4.12.2
+    # via alembic
     # via pydantic
     # via pydantic-core
+    # via sqlalchemy
 yarl==1.9.4
     # via aiohttp

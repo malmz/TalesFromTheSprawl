@@ -11,5 +11,5 @@ wheels/
 *.conf
 *.csv
 .env
-config
+/config
 .DS_Store

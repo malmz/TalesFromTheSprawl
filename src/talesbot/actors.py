@@ -108,10 +108,7 @@ def actor_exists(actor_id: str):
 
 
 def actor_index_in_use(actor_index: str):
-    for actor in get_all_actors():
-        if actor.role_name == actor_index:
-            return True
-    return False
+    return any(actor.role_name == actor_index for actor in get_all_actors())
 
 
 def store_actor(actor: Actor):
@@ -432,7 +429,7 @@ async def remove_tentative_transaction(actor_id: str, msg_id: str):
 async def process_reaction_in_finance_channel(channel_id: str, msg_id: str, emoji: str):
     actor_id = get_owner_of_finance_channel(channel_id)
 
-    transaction: Transaction = read_transaction(actor_id, msg_id)
+    transaction = read_transaction(actor_id, msg_id)
     if transaction is None or emoji != emoji_cancel:
         # Either this message cannot trigger any actions based on emoji, or the wrong emoji was used
         return

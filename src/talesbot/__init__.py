@@ -4,8 +4,8 @@ import logging
 import discord
 from discord.ext import commands
 
-from . import db
-from .conf import ClientExtension
+from . import data
+from .config import EnvSettings
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +24,8 @@ class TalesBot(commands.Bot):
 
     async def on_guild_available(self, guild: discord.Guild):
         print(f"Guild connected: {guild.name}({guild.id})")
-        self.tree.copy_global_to(guild=guild.id)
-        await self.tree.sync(guild=guild.id)
+        self.tree.copy_global_to(guild=guild)
+        await self.tree.sync(guild=guild)
 
 
 extensions = [
@@ -41,16 +41,16 @@ extensions = [
 
 def main() -> int:
     logging.basicConfig(level=logging.DEBUG)
+    env = EnvSettings()  # type: ignore
 
-    db.create_tables()
-
-    client_extensions = ClientExtension()
+    data.create_tables()
 
     intents = discord.Intents.default()
     intents.message_content = True
     intents.members = True
 
-    bot = TalesBot(intents=intents)
+    bot = TalesBot(intents=intents)  # type: ignore
 
     logger.debug("Starting bot...")
-    bot.run(client_extensions.env_settings.discord_token)
+    bot.run(env.discord_token, reconnect=True)
+    return 0

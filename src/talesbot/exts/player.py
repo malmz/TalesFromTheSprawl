@@ -7,8 +7,8 @@ from interactions import (
     slash_option,
 )
 
-from ..conf import exts
-from ..db import Handle, Player, PlayerHandle, database
+from ..config import exts
+from ..data.schema import Handle, Player, PlayerHandle, database
 
 
 class Chats(Extension):

@@ -5,6 +5,7 @@ from typing import Optional
 
 import discord
 from configobj import ConfigObj
+from discord import TextChannel
 
 from . import players, server
 from .common import (
@@ -21,12 +22,13 @@ from .common import (
     shops_category_name,
     testing_category_name,
 )
+from .config import config
 from .custom_types import PostTimestamp
 
 ### Module channels.py
 # This module tracks and handles state related to channels
 
-public_anon_channel_name = "anon"
+public_anon_channel_name = config.special_channels.anonymous
 
 last_poster_index = "___last_poster"
 last_full_post_index = "___last_full_post_time"
@@ -42,59 +44,54 @@ channel_states = ConfigObj("channel_states.conf")
 ### Utilities:
 
 
-def clickable_channel_ref(discord_channel):
-    return clickable_channel_id_ref(discord_channel.id)
+def clickable_channel_ref(channel: TextChannel):
+    return clickable_channel_id_ref(channel.id)
 
 
 def clickable_channel_id_ref(channel_id: str):
     return f"<#{channel_id}>"
 
 
-def _category_name(channel: TYPE_MESSAGEABLE_CHANNEL) -> str | None:
+def _category_name(channel: TextChannel) -> str | None:
     return channel.category.name if channel.category else None
 
 
-def is_offline_channel(channel: TYPE_MESSAGEABLE_CHANNEL) -> bool:
+def is_offline_channel(channel: TextChannel) -> bool:
     return _category_name(channel) == off_category_name
 
 
-def is_public_channel(discord_channel):
+def is_public_channel(channel: TextChannel):
     return (
-        _category_name(discord_channel) == public_open_category_name
-        or _category_name(discord_channel) == shadowlands_category_name
+        _category_name(channel) == public_open_category_name
+        or _category_name(channel) == shadowlands_category_name
     )
 
 
-def is_announcement_channel(discord_channel):
-    return _category_name(discord_channel) == announcements_category_name
+def is_announcement_channel(channel: TextChannel):
+    return _category_name(channel) == announcements_category_name
 
 
-def is_chat_channel(discord_channel):
-    if discord_channel.category == None:
-        return False
-    else:
-        return discord_channel.category.name.startswith(chats_category_base)
+def is_chat_channel(channel: TextChannel):
+    return (_category_name(channel) or "").startswith(chats_category_base)
 
 
-def is_personal_channel(discord_channel, channel_suffix: str = None):
+def is_personal_channel(discord_channel, channel_suffix: str | None = None):
     return is_category_channel(discord_channel, personal_category_base, channel_suffix)
 
 
-def is_group_channel(discord_channel, channel_suffix: str = None):
+def is_group_channel(discord_channel, channel_suffix: str | None = None):
     return is_category_channel(discord_channel, groups_category_name, channel_suffix)
 
 
 def is_category_channel(
-    discord_channel, category_name: str, channel_suffix: str = None
+    channel: TextChannel, category_name: str, channel_suffix: str | None = None
 ):
-    if discord_channel.category == None:
-        return False
-    else:
-        if discord_channel.category.name.startswith(category_name):
-            if channel_suffix is None:
-                return True
-            else:
-                return discord_channel.name.endswith(channel_suffix)
+    if (_category_name(channel) or "").startswith(category_name):
+        return (
+            channel.name.endswith(channel_suffix)
+            if channel_suffix is not None
+            else True
+        )
 
 
 # TODO: allow for "manual shops",
@@ -159,7 +156,7 @@ async def init():
 
     print("Found %d guilds" % len(server.get_guilds()))
     for guild in server.get_guilds():
-        print("Processing guild %s" % guild.name)
+        print(f"Processing guild {guild.name}")
         await init_channels_and_categories(guild)
 
 
@@ -168,7 +165,7 @@ async def init_channels_and_categories(guild):
         await _verify_category_exists(guild, cat, channels)
 
     for c in guild.channels:
-        print("Setting roles for %s" % c.name)
+        print(f"Setting roles for {c.name}")
         await _init_discord_channel(c)
 
 
@@ -214,10 +211,10 @@ async def _init_discord_channel(discord_channel):
 
 async def _verify_category_exists(guild, category_name: str, channels: list):
     if category_name not in [cat.name for cat in guild.categories]:
-        print("Did not find category %s, will create it" % category_name)
+        print(f"Did not find category {category_name}, will create it")
         await guild.create_category(category_name)
     else:
-        print("Category already exists %s:%s" % (guild.name, category_name))
+        print(f"Category already exists {guild.name}:{category_name}")
 
     category = next(
         (cat for cat in guild.categories if cat.name == category_name), None

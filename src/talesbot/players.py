@@ -1,23 +1,17 @@
-# import discord
 import asyncio
-
-# from configobj import ConfigObj
 from typing import List
 
-import actors
-import channels
-import common
-import player_setup
-import server
-import shops
-from common import (
+from configobj import ConfigObj
+
+from . import actors, channels, common, discord, player_setup, server, shops
+from .common import (
     admin_role_name,
     gm_role_name,
     highest_ever_index,
     player_personal_role_start,
 )
-from custom_types import Handle, PlayerData
-from groups import Group
+from .custom_types import Handle, PlayerData
+from .groups import Group
 
 players_conf_dir = "players"
 user_id_mappings_index = "___user_id_to_player_id"

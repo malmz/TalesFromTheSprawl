@@ -6,17 +6,13 @@ from copy import deepcopy
 from enum import Enum
 from typing import Dict, List, Tuple
 
-import actors
-import channels
+import simplejson
+from configobj import ConfigObj
+from discord import Interaction, app_commands
 
 # Custom imports
-import common
-import finances
-import handles
-import players
-import server
-import simplejson
-from common import (
+from . import actors, channels, common, finances, handles, players, server
+from .common import (
     coin,
     emoji_accept,
     emoji_alert,
@@ -25,23 +21,13 @@ from common import (
     number_emojis,
     shop_role_start,
 )
-from configobj import ConfigObj
-from custom_types import (
+from .custom_types import (
     ActionResult,
     Handle,
     HandleTypes,
     PostTimestamp,
     Transaction,
     TransTypes,
-)
-from discord import Interaction, app_commands
-from interactions import (
-    Extension,
-    OptionType,
-    SlashContext,
-    has_role,
-    slash_command,
-    slash_option,
 )
 
 # main_shop = os.getenv("MAIN_SHOP_NAME")

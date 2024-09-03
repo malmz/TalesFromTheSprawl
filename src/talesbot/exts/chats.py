@@ -17,8 +17,8 @@ from interactions import (
 )
 from interactions.api.events import MessageCreate
 
-from ..conf import exts
-from ..db import Handle, Player, PlayerHandle
+from ..config import exts
+from ..data.schema import Handle, Player, PlayerHandle
 
 
 class Chats(Extension):

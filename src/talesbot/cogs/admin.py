@@ -14,10 +14,6 @@ from .. import actors, common, groups, handles, players, server
 
 @app_commands.default_permissions(administrator=True)
 class AdminCog(commands.GroupCog, group_name="admin"):
-    """Admin-only commands, hidden by default. To view documentation, use \"help <command>\". The commands are:
-    init_all_players, fake_join, fake_join_name, fake_join_nick, clear_all_players, clear_all_actors, clear_actor, ping
-    """
-
     def __init__(self, bot):
         self.bot = bot
 
@@ -212,5 +208,5 @@ class AdminCog(commands.GroupCog, group_name="admin"):
         await interaction.followup.send("Done.", ephemeral=True)
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(AdminCog(bot))

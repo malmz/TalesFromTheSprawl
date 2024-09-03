@@ -9,6 +9,9 @@ dependencies = [
     "pydantic-settings>=2.4.0",
     "configobj>=5.0.8",
     "peewee>=3.17.6",
+    "types-peewee>=3.17.6.20240722",
+    "sqlalchemy>=2.0.31",
+    "alembic>=1.13.2",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"

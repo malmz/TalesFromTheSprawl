@@ -9,7 +9,7 @@ from interactions import (
     is_owner,
 )
 
-from ..conf import exts
+from ..config import exts
 
 
 class Admin(Extension):
