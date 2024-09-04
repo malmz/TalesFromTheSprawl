@@ -9,6 +9,8 @@ dependencies = [
     "configobj>=5.0.8",
     "simplejson>=3.19.1",
     "emoji>=2.8.0",
+    "fastapi>=0.112.2",
+    "uvicorn[standard]>=0.30.6",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
