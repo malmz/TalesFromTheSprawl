@@ -107,7 +107,7 @@ async def init(clear_all: bool = False):
 
 
 async def create_gm_actor():
-    actor: actors.Actor = await actors.create_gm_actor(
+    await actors.create_gm_actor(
         server.get_guild(),  # always use the first guild for gm
         role_name=gm_role_name,
         actor_id=gm_actor_id,

@@ -34,7 +34,7 @@ def init():
 
 async def remove_reaction(message, emoji, user_id: int):
     member = await message.channel.guild.fetch_member(user_id)
-    if member == None:
+    if member is None:
         print(
             f"Error: tried to remove reaction but member not found, user_id is {user_id}"
         )
@@ -71,11 +71,11 @@ async def find_reaction_recipient_and_message(message_id: int, channel):
     async for message in channel.history(limit=20, before=timestamp):
         if message.id == message_id:
             result.message = message
-        if result.message == None:
+        if result.message is None:
             # We fetched a few messages that actually came after the original one (within 500 ms)
             continue
         match = posting.read_handle_from_post(message.content)
-        if match != None:
+        if match is not None:
             # print(f'Recorded reaction on post by {match}')
             result.recipient = match
             break
@@ -145,7 +145,7 @@ async def process_reaction_in_finance_channel(
 
 
 async def process_reaction_in_order_flow(message_id: int, user_id: int, channel, emoji):
-    message = await channel.fetch_message(message_id)
+    await channel.fetch_message(message_id)
     result: ActionResult = await shops.process_reaction_in_order_flow(
         str(channel.id), str(message_id), str(emoji)
     )

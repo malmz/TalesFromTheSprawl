@@ -34,7 +34,7 @@ class FinancesCog(commands.Cog, name="finances"):
     async def create_money_command(
         self, interaction: Interaction, handle_id: str, amount: int
     ):
-        if handle_id == None:
+        if handle_id is None:
             response = "Error: no handle specified."
         elif amount <= 0:
             response = f"Error: cannot create less than {coin} 1."
@@ -54,7 +54,7 @@ class FinancesCog(commands.Cog, name="finances"):
     async def set_money_command(
         self, interaction: Interaction, handle_id: str, amount: int
     ):
-        if handle_id == None:
+        if handle_id is None:
             response = "Error: no handle specified."
         elif amount < 0:
             response = "Error: you must set a new balance."
@@ -81,7 +81,7 @@ class FinancesCog(commands.Cog, name="finances"):
         self, interaction: Interaction, target_handle: str, amount: int
     ):
         await interaction.response.defer(ephemeral=True)
-        if target_handle == None:
+        if target_handle is None:
             response = 'Error: no recipient specified. Use "/pay <recipient> <amount>", e.g. "/pay shadow_weaver 500".'
         elif amount <= 0:
             response = f'Error: cannot transfer less than {coin} 1. Use "/pay <recipient> <amount>", e.g. "/pay {target_handle} 500".'

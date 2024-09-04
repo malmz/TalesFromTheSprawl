@@ -88,7 +88,7 @@ class ChatsCog(commands.Cog, name="chats"):
         from_handle = from_handle.lower()
         to_handle = to_handle.lower()
         report = await create_2party_chat_from_handle_id(from_handle, to_handle)
-        if report != None:
+        if report is not None:
             await interaction.followup.send(report, ephemeral=True)
         else:
             await interaction.followup.send(
@@ -110,7 +110,7 @@ class ChatsCog(commands.Cog, name="chats"):
         my_handle = gm.get_gm_active_handle()
         other_handle = other_handle.lower()
         report = await create_2party_chat_from_handle_id(my_handle, other_handle)
-        if report != None:
+        if report is not None:
             await interaction.followup.send(report, ephemeral=True)
         else:
             await interaction.followup.send(
@@ -703,7 +703,7 @@ async def add_participant_to_chat(
 
     guild = actors.get_guild_for_actor(handle.actor_id)
     participant: ChatParticipant = read_participant(chat_state, handle.handle_id)
-    if participant == None:
+    if participant is None:
         # This is a newly added participant
         participant = create_new_participant(
             chat_name, channel_name, session_status_inactive, handle
@@ -1001,7 +1001,7 @@ async def process_reaction_in_chat_hub(message, emoji: str):
     chat_connection: ChatConnectionMapping = read_chat_connection_from_hub_msg(
         message_id
     )
-    if chat_connection == None:
+    if chat_connection is None:
         # Error: reacted to old message in chat hub, not connected to any active chat.
         return f"Error: reacted on msg {message_id} chat hub, but it was not connected to any existing chat."
 
@@ -1315,7 +1315,7 @@ async def auto_respond_if_needed(
                 )
             )
             if chat_channel_data_2:
-                print("Sending auto respond message for %s" % participant.handle)
+                print(f"Sending auto respond message for {participant.handle}")
                 await process_message_data(
                     chat_channel_data_2,
                     posting.MessageData(
@@ -1346,7 +1346,7 @@ async def process_message_data(
     poster_id = poster_id if full_post else None
     post = posting.create_post(msg_data, poster_id, attachments_supported=False)
     entry = ChatLogEntry(post, full_post)
-    chat_state = get_chat_state(chat_name)
+    get_chat_state(chat_name)
     write_new_chat_log_entry(chat_name, entry)
 
 

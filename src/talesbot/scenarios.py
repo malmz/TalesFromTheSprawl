@@ -342,7 +342,7 @@ def store_scenario(scenario: Scenario):
     file_name = str(config_dir / scenarios_conf_dir / f"{scenario.name}.conf")
     scenario_conf = ConfigObj(file_name)
     scenario_conf[name_index] = scenario.name
-    for i, step in enumerate(scenario.steps):
+    for i, _step in enumerate(scenario.steps):
         scenario_conf[str(i)] = scenario.steps[i].to_string()
     scenario_conf.write()
 

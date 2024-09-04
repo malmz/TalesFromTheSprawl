@@ -107,10 +107,7 @@ def actor_exists(actor_id: str):
 
 
 def actor_index_in_use(actor_index: str):
-    for actor in get_all_actors():
-        if actor.role_name == actor_index:
-            return True
-    return False
+    return any(actor.role_name == actor_index for actor in get_all_actors())
 
 
 def store_actor(actor: Actor):

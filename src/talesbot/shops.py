@@ -541,11 +541,13 @@ class Product:
         description: str,
         price: int,
         file_name: str = None,
-        storefront_msg_ids: Dict[str, str] = {},
+        storefront_msg_ids: Dict[str, str] = None,
         in_stock: bool = True,
         available: bool = True,
         emoji: str = emoji_shopping,
     ):
+        if storefront_msg_ids is None:
+            storefront_msg_ids = {}
         self.name = name
         self.product_id = name.lower() if name is not None else None
         self.description = description
@@ -591,8 +593,10 @@ class Order:
         order_flow_msg_id: str = None,
         time_created: PostTimestamp = None,
         undo_hooks: List[Tuple[str, str]] = None,
-        items_ordered={},
+        items_ordered=None,
     ):
+        if items_ordered is None:
+            items_ordered = {}
         self.order_id = order_id
         self.delivery_id = delivery_id
         self.price_total = price_total
@@ -2358,7 +2362,7 @@ async def tip_staff_from_reaction(shop: Shop, player_id: str, emoji: str):
                 player_id, employee.handle_for_tips, amount=1, from_reaction=True
             )
             result.success = transaction.success
-            if transaction.report != None:
+            if transaction.report is not None:
                 result.report = transaction.report
             break
     # If we do not find the employee, we just fail silently.

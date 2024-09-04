@@ -296,7 +296,7 @@ async def create_handle(
 
 
 def read_handle(actor_handles, handle_id: str):
-    handles = get_handles_confobj()
+    get_handles_confobj()
     # Unprotected -- only use for handles that you know exist
     return Handle.from_string(actor_handles[handles_index][handle_id])
 
@@ -345,8 +345,7 @@ def get_last_regular(actor_id: str):
 def get_all_handles():
     handles = get_handles_confobj()
     for actor_id in handles[actors_index]:
-        for handle in get_handles_for_actor(actor_id, include_burnt=True):
-            yield handle
+        yield from get_handles_for_actor(actor_id, include_burnt=True)
 
 
 def get_handle(handle_name: str):
@@ -555,7 +554,7 @@ async def process_handle_command(
     else:
         actor_id = players.get_player_id(str(user_id))
 
-    if new_handle_id == None:
+    if new_handle_id is None:
         response = current_handle_report(actor_id)
         if burner:
             response += ' To create a new burner, use "/burner <new_name>".'
@@ -644,7 +643,7 @@ async def destroy_burner(burner: Handle):
 
 
 async def process_burn_command(user_id: int, burner_id: str = None):
-    if burner_id == None:
+    if burner_id is None:
         response = 'Error: No burner handle specified. Use "/burn <handle>"'
     else:
         actor_id = players.get_player_id(str(user_id))

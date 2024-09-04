@@ -14,7 +14,7 @@ def setup_command_logger():
 
 
 def log_command(author_id, player_name, channel, content):
-    cmd_logger.info("%s : %s : %s : %s" % (author_id, player_name, channel, content))
+    cmd_logger.info(f"{author_id} : {player_name} : {channel} : {content}")
 
 
 def failed_to_log():

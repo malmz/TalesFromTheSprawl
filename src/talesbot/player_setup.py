@@ -46,8 +46,7 @@ class PlayerSetupInfo:
             yield handle_id
         for handle_id in only_firsts_no_examples(self.burners):
             yield handle_id
-        for group_name in remove_examples(self.groups):
-            yield group_name
+        yield from remove_examples(self.groups)
         for shop_name in remove_examples(self.shops_owner):
             yield shop_name
         for shop_name in remove_examples(self.shops_employee):
@@ -105,8 +104,7 @@ def get_all_reserved():
     known_handles = get_known_handles_configobj()
     for handle_id in known_handles:
         info = PlayerSetupInfo.from_string(known_handles[handle_id])
-        for entry in info.get_all_reserved():
-            yield entry
+        yield from info.get_all_reserved()
 
 
 def can_setup_new_player_with_handle(main_handle: str):
@@ -315,7 +313,7 @@ async def setup_groups(actor_id: str, group_names: List[str]):
 
 async def setup_group_for_new_member(group_name: str, actor_id: str):
     if Group.exists(group_name):
-        report = await groups.add_member_from_player_id(group_name, actor_id)
+        await groups.add_member_from_player_id(group_name, actor_id)
     else:
         await groups.create_new_group(group_name, [actor_id])
 

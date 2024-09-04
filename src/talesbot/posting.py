@@ -18,7 +18,9 @@ from .custom_types import PostTimestamp
 
 class MessageData:
     # Contains message data to be processed
-    def __init__(self, content, created_at, attachments=[]):
+    def __init__(self, content, created_at, attachments=None):
+        if attachments is None:
+            attachments = []
         self.content = content
         self.created_at = created_at
         self.attachments = attachments
@@ -37,7 +39,7 @@ post_header_regex = re.compile(f"^[*][*](.*)[*][*]{double_hard_space}")
 
 def read_handle_from_post(post: str):
     matches = re.search(post_header_regex, post.lower())
-    if matches != None:
+    if matches is not None:
         return matches.group(1).lower()
     else:
         return None
@@ -56,10 +58,7 @@ def sanitize_bold(content: str):
 
 
 def create_header(timestamp, sender: str, recip: str = None):
-    if recip == None:
-        sender_info = f"**{sender}**"
-    else:
-        sender_info = f"**{sender}** to {recip}"
+    sender_info = f"**{sender}**" if recip is None else f"**{sender}** to {recip}"
     # Manual DST fix:
     post_timestamp = PostTimestamp(timestamp.hour + 2, timestamp.minute)
     timestamp_str = f"({post_timestamp.pretty_print(second=timestamp.second)})"
