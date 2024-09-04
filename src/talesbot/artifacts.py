@@ -5,8 +5,9 @@
 
 import json
 import os
+
+from discord import Interaction, app_commands
 from discord.ext import commands
-from discord import app_commands, Interaction
 
 from . import channels
 from .config import config_dir
@@ -82,10 +83,10 @@ class ArtifactsCog(commands.Cog, name="network"):
         self, user_id: str, code: str, password: str, announcement: str = None
     ):
         try:
-            import players
-            import handles
-            import server
             import common
+            import handles
+            import players
+            import server
 
             player_id = players.get_player_id(user_id)
             handle = handles.get_active_handle(player_id)
@@ -125,7 +126,7 @@ class Artifact:
         if pw in self.codes:
             path = config_dir / artifacts_conf_dir / self.codes[pw]
             if os.path.exists(path):
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     return f.read()
             return "Unable to find artifact data. Contact system admin"
         return f'Error trying to access {self.name}: incorrect credentials "{pw}".'
@@ -158,7 +159,7 @@ def create_artifact(name: str, content: str = None):
         out_file.write(content)
 
     # Add data to config file
-    with open(artifacts_conf_file, "r") as f:
+    with open(artifacts_conf_file) as f:
         data = json.load(f)
     data[name] = {"codes": {"default": filename}}
 
@@ -172,7 +173,7 @@ def create_artifact(name: str, content: str = None):
 def access_artifact(name: str, code: str):
     if name is None:
         return (
-            f"Error: you must give the name of the entity you want to access.",
+            "Error: you must give the name of the entity you want to access.",
             None,
         )
     artifact = find_artifact(name)

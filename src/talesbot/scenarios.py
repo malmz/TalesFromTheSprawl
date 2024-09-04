@@ -4,16 +4,14 @@
 # A scenario could be for example a simulated network crash, automated spam messages, or creation of a new group.
 
 import asyncio
-import simplejson
-from configobj import ConfigObj
+from copy import deepcopy
 from enum import Enum
 from typing import List
-from copy import deepcopy
 
-from . import players
-from . import handles
-from . import groups
-from . import game
+import simplejson
+from configobj import ConfigObj
+
+from . import game, groups, handles, players
 from .config import config_dir
 
 
@@ -34,7 +32,7 @@ async def send_message_to_channels(message: str, channel_list):
     await asyncio.gather(*task_list)
 
 
-class WaitEvent(object):
+class WaitEvent:
     def __init__(self, time_in_seconds: int = 60):
         self.time_in_seconds = time_in_seconds
 
@@ -54,7 +52,7 @@ class WaitEvent(object):
         await asyncio.sleep(self.time_in_seconds)
 
 
-class NetworkOutageEvent(object):
+class NetworkOutageEvent:
     def __init__(self, time_in_seconds: int = 60):
         self.time_in_seconds = time_in_seconds
 
@@ -78,7 +76,7 @@ class NetworkOutageEvent(object):
         await restored.execute()
 
 
-class NetworkDownEvent(object):
+class NetworkDownEvent:
     def __init__(self):
         pass
 
@@ -104,7 +102,7 @@ class NetworkDownEvent(object):
         game.set_network_down()
 
 
-class NetworkRestoredEvent(object):
+class NetworkRestoredEvent:
     def __init__(self):
         pass
 
@@ -130,7 +128,7 @@ class NetworkRestoredEvent(object):
         )
 
 
-class MessagePlayersByHandleEvent(object):
+class MessagePlayersByHandleEvent:
     def __init__(self, message: str, handles: List[str] = None):
         self.message = message
         self.handles = [] if handles is None else handles
@@ -152,7 +150,7 @@ class MessagePlayersByHandleEvent(object):
         await send_message_to_channels(self.message, channel_list)
 
 
-class MessagePlayersExceptHandlesEvent(object):
+class MessagePlayersExceptHandlesEvent:
     def __init__(self, message: str, handles: List[str] = None):
         self.message = message
         self.handles = [] if handles is None else handles
@@ -184,7 +182,7 @@ class MessagePlayersExceptHandlesEvent(object):
 # groups:
 
 
-class MessageGroupsEvent(object):
+class MessageGroupsEvent:
     def __init__(self, message: str, groups: List[str] = None):
         self.message = message
         self.groups = [] if groups is None else handles
@@ -211,7 +209,7 @@ class MessageGroupsEvent(object):
         await send_message_to_channels(self.message, channel_list)
 
 
-class MessageExceptGroupsEvent(object):
+class MessageExceptGroupsEvent:
     def __init__(self, message: str, groups: List[str] = None):
         self.message = message
         self.groups = [] if groups is None else groups
@@ -241,7 +239,7 @@ class MessageExceptGroupsEvent(object):
         await send_message_to_channels(self.message, channel_list)
 
 
-class Event(object):
+class Event:
     def __init__(
         self,
         event_type: EventType,
@@ -302,7 +300,7 @@ class Event(object):
             await asyncio.sleep(self.spacing)
 
 
-class Scenario(object):
+class Scenario:
     def __init__(self, name: str, steps: List[Event] = None):
         self.name = name
         self.steps = [] if steps is None else steps

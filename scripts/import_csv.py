@@ -1,7 +1,8 @@
 import csv
 from typing import TypedDict
-from configobj import ConfigObj
+
 import simplejson
+from configobj import ConfigObj
 
 
 class KnownHandle(TypedDict):

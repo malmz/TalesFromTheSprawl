@@ -1,21 +1,14 @@
-import simplejson
-from configobj import ConfigObj
 from typing import List
 
-from . import handles
-from . import channels
-from . import server
-from . import finances
-from . import groups
-from . import reactions
-from . import shops
-from . import actors
+import simplejson
+from configobj import ConfigObj
+
+from . import actors, channels, finances, groups, handles, reactions, shops
+from .common import coin, emoji_accept
 from .config import config_dir
+from .custom_types import ActionResult, Actor, Handle, HandleTypes, PlayerData
 from .groups import Group
 from .shops import Shop
-from .custom_types import Handle, HandleTypes, Actor, ActionResult, PlayerData
-from .common import coin, emoji_accept
-
 
 # Known_handles is meant to be read-only during the event
 # It can be edited manually
@@ -23,7 +16,7 @@ from .common import coin, emoji_accept
 # TODO: re-write this to integrate the output with the general welcome message!
 
 
-class PlayerSetupInfo(object):
+class PlayerSetupInfo:
     def __init__(self, handle_id: str):
         self.handles = [
             (handle_id, 0),
@@ -89,7 +82,7 @@ def add_known_handle(handle_id: str):
         known_handles.write()
     else:
         print(
-            f"Trying to edit player setup info for a handle that is already in the database. Please edit the file manually instead."
+            "Trying to edit player setup info for a handle that is already in the database. Please edit the file manually instead."
         )
 
 
@@ -345,7 +338,7 @@ async def setup_shops(actor_id: str, shop_names: List[str], is_owner: bool):
                     report += f"You are the owner of the shop **{shop_name}**.\n"
             else:
                 report += f"You are employed at **{shop_name}**.\n"
-            report += f'Use ".help employee" to see the commands you can use to manage the business.\n'
+            report += 'Use ".help employee" to see the commands you can use to manage the business.\n'
             report += f"  Public storefront: {channels.clickable_channel_id_ref(shop.get_storefront_channel_id(guild))}.\n"
             report += f"  Order status: {channels.clickable_channel_id_ref(shop.order_flow_channel_id)}.\n"
             shop_actor: Actor = actors.read_actor(shop.shop_id)

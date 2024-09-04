@@ -1,14 +1,8 @@
-from . import actors
-from . import players
-from . import groups
-from . import channels
-from . import server
-from . import handles
-from . import common
-
-from discord.ext import commands
-from discord import app_commands, Interaction
 import discord
+from discord import Interaction, app_commands
+from discord.ext import commands
+
+from . import actors, common, groups, handles, players, server
 
 ### Module admin.py
 # This module holds the admin cog, which is used to
@@ -55,7 +49,7 @@ class AdminCog(commands.Cog, name="admin"):
             )
         elif handle is None:
             await interaction.followup.send(
-                f"Failed: you must give the player's main handle.", ephemeral=True
+                "Failed: you must give the player's main handle.", ephemeral=True
             )
         else:
             async with handles.semaphore():
@@ -84,7 +78,7 @@ class AdminCog(commands.Cog, name="admin"):
             )
         elif handle is None:
             await interaction.followup.send(
-                f"Failed: you must give the player's main handle.", ephemeral=True
+                "Failed: you must give the player's main handle.", ephemeral=True
             )
         else:
             async with handles.semaphore():
@@ -109,7 +103,7 @@ class AdminCog(commands.Cog, name="admin"):
             )
         elif handle is None:
             await interaction.followup.send(
-                f"Failed: you must give the player's main handle.", ephemeral=True
+                "Failed: you must give the player's main handle.", ephemeral=True
             )
         else:
             async with handles.semaphore():

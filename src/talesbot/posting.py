@@ -1,12 +1,9 @@
-import discord
-import re
 import asyncio
+import re
 
+import discord
 
-from . import players
-from . import server
-from . import channels
-from . import handles
+from . import channels, handles, players, server
 from .common import forbidden_content, hard_space
 from .custom_types import PostTimestamp
 

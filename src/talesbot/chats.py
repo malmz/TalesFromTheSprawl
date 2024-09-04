@@ -1,34 +1,24 @@
-from typing import Optional
-import discord
 import asyncio
+from enum import Enum
+
+import discord
 import simplejson
 from configobj import ConfigObj
-from enum import Enum
+from discord import Interaction, app_commands
 from discord.ext import commands
-from discord import app_commands, Interaction
-from discord.enums import AppCommandPermissionType
 
-
-from . import actors
-from . import players
-from . import handles
-from . import channels
-from . import server
-from . import posting
-from . import gm
-from . import game
-from .config import config_dir
+from . import actors, channels, game, gm, handles, players, posting
 from .common import (
     emoji_cancel,
-    emoji_open,
     emoji_green,
-    emoji_red,
     emoji_green_book,
+    emoji_open,
+    emoji_red,
     emoji_red_book,
     emoji_unread,
 )
+from .config import config_dir
 from .custom_types import Handle, PostTimestamp
-
 
 ### Module chats.py
 # This module handles chats between handles
@@ -63,7 +53,7 @@ class ChatsCog(commands.Cog, name="chats"):
     )
     async def chat_command(self, interaction: Interaction, handle: str):
         if handle is None:
-            response = f'Error: you must say who you want to chat with. Example: "/chat shadow_weaver"'
+            response = 'Error: you must say who you want to chat with. Example: "/chat shadow_weaver"'
             await interaction.response.send_message(response, ephemeral=True)
         else:
             await interaction.response.defer(ephemeral=True)
@@ -112,7 +102,7 @@ class ChatsCog(commands.Cog, name="chats"):
     @app_commands.checks.has_role("gm")
     async def gm_chat_command(self, interaction: Interaction, other_handle: str):
         if other_handle is None:
-            report = f"Error: you must give the handle to chat with."
+            report = "Error: you must give the handle to chat with."
             await interaction.response.send_message(report, ephemeral=True)
             return
 
@@ -137,7 +127,7 @@ class ChatsCog(commands.Cog, name="chats"):
     )
     async def close_chat_command(self, interaction: Interaction, handle: str):
         if handle is None:
-            response = f'Error: you must say which chat you want to close. Example: "/close_chat shadow_weaver"'
+            response = 'Error: you must say which chat you want to close. Example: "/close_chat shadow_weaver"'
             await interaction.response.send_message(response, ephemeral=True)
         else:
             await interaction.response.defer(ephemeral=True)
@@ -211,7 +201,7 @@ session_status_open_archive = "___open_archive"
 
 
 # This is stored indexed by handle, and points out the various connections that handle has to the chat
-class ChatParticipant(object):
+class ChatParticipant:
     def __init__(
         self,
         chat_name: str,
@@ -244,7 +234,7 @@ class ChatParticipant(object):
 
 
 # This is stored per channel/msg ID, and maps back to the chat
-class ChatConnectionMapping(object):
+class ChatConnectionMapping:
     def __init__(self, chat_name: str, actor_id: str, handle: str):
         self.chat_name = chat_name
         self.actor_id = actor_id
@@ -260,7 +250,7 @@ class ChatConnectionMapping(object):
         return simplejson.dumps(self.__dict__)
 
 
-class ChatLogEntry(object):
+class ChatLogEntry:
     def __init__(
         self,
         message: str,
@@ -287,7 +277,7 @@ class ChatLogEntry(object):
 # - Channel for messages
 # - The chat hub message with open/close commands
 # This is not meant to be stored in any configobj
-class ChatUI(object):
+class ChatUI:
     def __init__(
         self,
         chat_name: str,
@@ -316,11 +306,11 @@ class Activation(str, Enum):
 def init_chats_confobj():
     global chats
     chats = ConfigObj(str(config_dir / chats_dir / "chats.conf"))
-    if not chat_channel_data_index in chats:
+    if chat_channel_data_index not in chats:
         chats[chat_channel_data_index] = {}
-    if not chat_hub_msg_data_index in chats:
+    if chat_hub_msg_data_index not in chats:
         chats[chat_hub_msg_data_index] = {}
-    if not chats_with_logs_index in chats:
+    if chats_with_logs_index not in chats:
         chats[chats_with_logs_index] = {}
     chats.write()
 
@@ -349,7 +339,7 @@ async def init(clear_all: bool = False):
             # Re-init the chats (posting-wise) like any open channel
             channels.init_chat_channel(chat_name)
             # Keep the participants data but reset the channel IDs, to indicate that all discord channels are deleted
-            if not chat_participants_index in chat_state:
+            if chat_participants_index not in chat_state:
                 init_chat_state(chat_state)
             for participant in get_participants(chat_state):
                 # Close all chat sessions. If the discord and config files are still in sync,
@@ -546,7 +536,7 @@ def get_participant_handle_ids(channel):
 # Returns True if the chat was newly created, False if it already existed
 def init_chat_log(chat_name: str):
     init_chats_confobj()
-    if not chat_name in chats[chats_with_logs_index]:
+    if chat_name not in chats[chats_with_logs_index]:
         chats[chats_with_logs_index][chat_name] = 0
         chats.write()
         chat_state = get_chat_state(chat_name)
@@ -557,7 +547,7 @@ def init_chat_log(chat_name: str):
 
 
 def init_chat_state(chat_state):
-    if not chat_participants_index in chat_state:
+    if chat_participants_index not in chat_state:
         chat_state[chat_participants_index] = {}
         chat_state[chat_content_index] = {}
         chat_state.write()
@@ -850,10 +840,10 @@ async def create_channel_for_chat_session(
         category_index=category_index,
     )
     await channel.send(
-        (
+        
             f"```This is the start of {participant.channel_name}. "
             + f'In this chat, you will always appear as "{participant.handle}", even if you switch handles elsewhere.```'
-        )
+        
     )
 
     await repost_message_history(channel, chat_state, participant)

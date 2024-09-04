@@ -1,4 +1,3 @@
-import emoji
 import itertools
 
 highest_ever_index = "___highest_ever"
@@ -76,7 +75,7 @@ letter_emojis = [
     "🇻",
     "🇽",
     "🇾",
-    "🇿"
+    "🇿",
 ]
 
 
@@ -84,6 +83,7 @@ letter_emojis = [
     initial = letter.lower()[0]
     string = f":regional_indicator_{initial}:"
     return emoji.emojize(string, language="alias") """
+
 
 def letter_emoji(letter: str) -> str:
     code = ord(letter.lower()[0])

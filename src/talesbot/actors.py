@@ -1,20 +1,14 @@
 ### This module collects everything that is common to actors and shops.
 
-import discord
 import asyncio
+
+import discord
 from configobj import ConfigObj
 
-from . import channels
-from . import handles
-from . import finances
-from . import common
-from . import server
-from . import shops
-from . import players
-from .config import config_dir
-from .custom_types import Transaction, Actor, TransTypes
+from . import channels, common, finances, handles, players, server, shops
 from .common import emoji_cancel, emoji_open
-
+from .config import config_dir
+from .custom_types import Actor, Transaction, TransTypes
 
 actors_conf_dir = "actors"
 finance_channel_mapping_index = "___finance_channels"
@@ -22,7 +16,7 @@ finance_channel_mapping_index = "___finance_channels"
 
 def get_actors_confobj():
     actors = ConfigObj(str(config_dir / actors_conf_dir / "__actors.conf"))
-    if not finance_channel_mapping_index in actors:
+    if finance_channel_mapping_index not in actors:
         actors[finance_channel_mapping_index] = {}
         actors.write()
     return actors
@@ -122,9 +116,9 @@ def actor_index_in_use(actor_index: str):
 def store_actor(actor: Actor):
     actors = get_actors_confobj()
     actors[actor.actor_id] = actor.to_string()
-    actors[finance_channel_mapping_index][
-        str(actor.finance_channel_id)
-    ] = actor.actor_id
+    actors[finance_channel_mapping_index][str(actor.finance_channel_id)] = (
+        actor.actor_id
+    )
     actors.write()
 
 
@@ -341,7 +335,7 @@ async def refresh_financial_statement(actor_id: str):
     actor = read_actor(actor_id)
     if actor is None:
         raise RuntimeError(
-            f"Trying to write financial record but could not find which actor it belongs to."
+            "Trying to write financial record but could not find which actor it belongs to."
         )
     channel = channels.get_discord_channel(actor.finance_channel_id, actor.guild_id)
     await update_financial_statement(channel, actor)
@@ -389,7 +383,7 @@ async def send_financial_record_for_actor(actor_id: str, record: str, last_in_se
         actor = read_actor(actor_id)
         if actor is None:
             raise RuntimeError(
-                f"Trying to write financial record but could not find which actor it belongs to."
+                "Trying to write financial record but could not find which actor it belongs to."
             )
         channel = channels.get_discord_channel(actor.finance_channel_id, actor.guild_id)
         message = await channel.send(record)

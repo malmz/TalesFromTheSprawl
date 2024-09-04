@@ -1,23 +1,16 @@
-from discord.ext import commands
-from discord import app_commands, Interaction
-from configobj import ConfigObj
-from typing import List
-from enum import Enum
-import re
 import asyncio
+import re
+from enum import Enum
+from typing import List
 
-from . import finances
-from . import players
-from . import actors
-from . import chats
-from . import server
-from . import channels
-from . import game
-from . import gm
-from .config import config_dir
+from configobj import ConfigObj
+from discord import Interaction, app_commands
+from discord.ext import commands
+
+from . import actors, chats, finances, game, gm, players
 from .common import coin
-from .custom_types import Handle, HandleTypes, ActionResult
-
+from .config import config_dir
+from .custom_types import ActionResult, Handle, HandleTypes
 
 ### Module handles.py
 # This module tracks and handles state related to handles, e.g. in-game names/accounts that
@@ -161,10 +154,10 @@ handles_index = "___all_handles"
 
 def get_handles_confobj():
     handles = ConfigObj(str(config_dir / handles_conf_dir / "__handles.conf"))
-    if not handles_to_actors in handles:
+    if handles_to_actors not in handles:
         handles[handles_to_actors] = {}
         handles.write()
-    if not actors_index in handles:
+    if actors_index not in handles:
         handles[actors_index] = {}
         handles.write()
     return handles
@@ -172,7 +165,7 @@ def get_handles_confobj():
 
 # May contain letters, numbers and underscores
 # Must start and end with letter or number
-alphanumeric_regex = re.compile(f"^[a-zA-Z0-9][a-zA-Z0-9_]*$")
+alphanumeric_regex = re.compile("^[a-zA-Z0-9][a-zA-Z0-9_]*$")
 double_underscore = "__"
 
 
@@ -185,9 +178,7 @@ class HandleAllowedResult(str, Enum):
 def is_forbidden_handle(new_handle: str):
     handle_to_check = new_handle.lower()
     matches = re.search(alphanumeric_regex, handle_to_check)
-    if matches is None:
-        return HandleAllowedResult.Invalid
-    elif (
+    if matches is None or (
         double_underscore in handle_to_check
         or handle_to_check.startswith("_")
         or handle_to_check.endswith("_")
@@ -405,7 +396,7 @@ async def process_remove_handle_command(handle_id: str):
         return "Error: you must say which handle you want to clear."
     handle: Handle = get_handle(handle_id)
     if handle.handle_id == handle.actor_id:
-        return f"Error: cannot destroy this user's base handle."
+        return "Error: cannot destroy this user's base handle."
     elif handle.handle_type == HandleTypes.Unused:
         return f"Error: cannot clear handle {handle_id} because it does not exist."
     else:

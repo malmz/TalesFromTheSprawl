@@ -7,24 +7,18 @@
 # and "finance and chat capabilities", which only players and shops have
 # (this would avoid the double-implementation of access roles that currently exists between groups and actors)
 
-import discord
 import asyncio
-import simplejson
-
-from configobj import ConfigObj
 from typing import Dict, List
 
+import discord
+import simplejson
+from configobj import ConfigObj
+
 # Custom imports
-from . import common
-from . import channels
-from . import server
-from . import players
-from . import handles
-
-from .config import config_dir
+from . import channels, common, handles, players, server
 from .common import group_role_start, highest_ever_index
+from .config import config_dir
 from .custom_types import Handle, HandleTypes
-
 
 # TODO: show members?
 
@@ -32,7 +26,7 @@ groups_conf_dir = "groups"
 groups_file_name = str(config_dir / groups_conf_dir / "groups.conf")
 
 
-class Group(object):
+class Group:
     def __init__(
         self,
         group_index: str,
@@ -198,7 +192,7 @@ def get_main_channel(guild, group_name: str):
 
 async def create_group_from_command(user_id: int, group_name: str):
     if group_name is None:
-        return f"Error: must give a group name."
+        return "Error: must give a group name."
 
     player_id = players.get_player_id(str(user_id))
     if player_id is not None:
@@ -254,7 +248,7 @@ async def create_new_group(
 
 async def add_member_from_handle(guild, group_id: str, handle_id: str):
     if handle_id is None:
-        return f'Error: you must give a handle ID and group name. Use "/add_member <handle> <group>"'
+        return 'Error: you must give a handle ID and group name. Use "/add_member <handle> <group>"'
     handle: Handle = handles.get_handle(handle_id)
     if handle.handle_type == HandleTypes.Unused:
         return f"Error: handle {handle_id} does not exist."
@@ -281,12 +275,12 @@ async def add_member_from_handle(guild, group_id: str, handle_id: str):
 
 async def add_member_from_player_id(group_id: str, player_id: str):
     if player_id is None:
-        return f"Error: you must give a player ID."
+        return "Error: you must give a player ID."
     member = await server.get_member_from_nick(player_id)
     if member is None:
         return f"Error: actor {player_id} is not a player, or does not follow the server nick scheme."
     if group_id is None:
-        return f"Error: you must give a group name."
+        return "Error: you must give a group name."
     group: Group = Group.read(group_id)
     if group is None:
         return f"Error: could not find group {group_id}."

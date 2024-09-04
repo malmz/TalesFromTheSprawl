@@ -1,28 +1,28 @@
-from typing import Optional
-from configobj import ConfigObj
+import asyncio
 import datetime
 import os
-import discord
-import asyncio
+from typing import Optional
 
-from .config import config_dir
-from .custom_types import PostTimestamp
+import discord
+from configobj import ConfigObj
+
+from . import players, server
 from .common import (
-    get_all_categories,
-    personal_category_base,
-    shops_category_name,
-    chats_category_base,
-    off_category_name,
-    public_open_category_name,
-    shadowlands_category_name,
-    groups_category_name,
     announcements_category_name,
+    chats_category_base,
+    get_all_categories,
     gm_announcements_name,
+    groups_category_name,
+    off_category_name,
+    personal_category_base,
+    public_open_category_name,
     setup_category_name,
+    shadowlands_category_name,
+    shops_category_name,
     testing_category_name,
 )
-from . import server
-from . import players
+from .config import config_dir
+from .custom_types import PostTimestamp
 
 ### Module channels.py
 # This module tracks and handles state related to channels
@@ -214,7 +214,7 @@ async def _init_discord_channel(discord_channel):
 
 
 async def _verify_category_exists(guild, category_name: str, channels: list):
-    if not category_name in [cat.name for cat in guild.categories]:
+    if category_name not in [cat.name for cat in guild.categories]:
         print("Did not find category %s, will create it" % category_name)
         await guild.create_category(category_name)
     else:
@@ -228,7 +228,7 @@ async def _verify_category_exists(guild, category_name: str, channels: list):
 
 
 async def _verify_channel_exists(category, channel_name: str):
-    if not channel_name in [ch.name for ch in category.channels]:
+    if channel_name not in [ch.name for ch in category.channels]:
         await category.create_text_channel(channel_name)
     else:
         print("Channel already exists %s:%s" % (category.guild.name, channel_name))
@@ -329,7 +329,7 @@ def _set_last_poster(channel_name: str, poster_id: str):
 
 
 def _get_last_poster(channel_name: str):
-    if not last_poster_index in channel_states[channel_name]:
+    if last_poster_index not in channel_states[channel_name]:
         return ""
     else:
         return channel_states[channel_name][last_poster_index]
