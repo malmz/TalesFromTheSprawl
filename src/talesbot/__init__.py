@@ -1,8 +1,11 @@
 import asyncio
+import logging
 import os
 
 import discord
 import uvicorn
+
+from .logger import init_loggers
 
 from .api import app
 from .bot import TalesBot
@@ -36,6 +39,8 @@ async def start_api():
 
 
 async def main() -> int:
+    init_loggers()
+
     async with asyncio.TaskGroup() as tg:
         tg.create_task(start_bot())
         tg.create_task(start_api())

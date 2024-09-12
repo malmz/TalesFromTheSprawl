@@ -1,21 +1,10 @@
 import logging
 
-cmd_logger = None
 
+def init_loggers():
+    logging.basicConfig("config/logs/app.log", level=logging.DEBUG)
 
-def setup_command_logger():
-    global cmd_logger
-    logpath = "config/logs/all_commands.log"
-    cmd_logger = logging.getLogger("log")
-    cmd_logger.setLevel(logging.INFO)
-    ch = logging.FileHandler(logpath)
-    ch.setFormatter(logging.Formatter("%(message)s"))
-    cmd_logger.addHandler(ch)
-
-
-def log_command(author_id, player_name, channel, content):
-    cmd_logger.info(f"{author_id} : {player_name} : {channel} : {content}")
-
-
-def failed_to_log():
-    cmd_logger.warn("Failed to log command (something went wrong)")
+    cmd_logger = logging.getLogger("talesbot.messages")
+    cmd_handler = logging.FileHandler("config/logs/messages.log")
+    cmd_handler.setFormatter(logging.Formatter("%(messages)s"))
+    cmd_logger.addHandler(cmd_handler)

@@ -31,6 +31,7 @@ clear_all = os.getenv("CLEAR_ALL") == "true"
 destroy_all = os.getenv("DESTROY_ALL") == "true"
 
 logger = logging.getLogger(__name__)
+cmd_logger = logging.getLogger("talesbot.messages")
 
 
 class TalesCommandTree(discord.app_commands.CommandTree):
@@ -117,8 +118,8 @@ class TalesBot(commands.Bot):
 
         try:
             player_name = players.get_player_id(message.author.id, False)
-            logger.log_command(
-                message.author.id, player_name, message.channel.name, message.content
+            cmd_logger.info(
+                f"{message.author.id} : {player_name} : {message.channel.name} : {message.content}"
             )
         except Exception:
             logger.error("Failed to log command to file")
