@@ -1,19 +1,20 @@
 import asyncio
+import contextlib
 import logging
 import os
 
 import discord
 import uvicorn
-
-from .logger import init_loggers
+import uvloop
+from dotenv import load_dotenv
 
 from .api import app
 from .bot import TalesBot
-
-TOKEN = os.getenv("DISCORD_TOKEN")
+from .logger import init_loggers
 
 
 async def start_bot():
+    TOKEN = os.getenv("DISCORD_TOKEN")
     exts = [
         "talesbot.handles",
         "talesbot.finances",
@@ -38,9 +39,15 @@ async def start_api():
     await server.serve()
 
 
-async def main() -> int:
-    init_loggers()
-
+async def start() -> int:
     async with asyncio.TaskGroup() as tg:
-        tg.create_task(start_bot())
+        # tg.create_task(start_bot())
         tg.create_task(start_api())
+
+
+def main() -> int:
+    load_dotenv()
+    init_loggers()
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    with contextlib.suppress(KeyboardInterrupt):
+        return asyncio.run(start())
