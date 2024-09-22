@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import List
 
 import discord
@@ -18,6 +19,7 @@ from .groups import Group
 players_conf_dir = "players"
 user_id_mappings_index = "___user_id_to_player_id"
 guild_to_user_count_index = "__guild_to_user_count"
+logger = logging.getLogger(__name__)
 
 
 def get_players_confobj():
@@ -67,13 +69,13 @@ async def delete_if_player_role(role, spare_used: bool):
 
 
 async def _clear_player(player_id: str):
-    print(f"Clearing player {player_id}")
+    logger.debug(f"Clearing player {player_id}")
     await actors.clear_actor(player_id)
     await channels.delete_all_personal_channels(player_id)
     player: PlayerData = read_player_data(player_id)
     for shop_id in player.shops:
         await shops.remove_employee_player(shop_id, player_id)
-    print(f"Removing {player_id} from all groups: {player.groups}")
+    logger.debug(f"Removing {player_id} from all groups: {player.groups}")
     for group_id in player.groups:
         group = Group.read(group_id)
         if group is not None:
@@ -125,7 +127,7 @@ def get_player_id(user_id: str, expect_to_find=True):
     players = get_players_confobj()
     if user_id not in players[user_id_mappings_index]:
         if expect_to_find:
-            print(f"WARNING: User {user_id} has not been initialized as a player")
+            logger.warning(f"User {user_id} has not been initialized as a player")
             raise RuntimeError(
                 "User has not been initialized as a player. Did you run /join?"
             )
@@ -136,7 +138,7 @@ def get_player_id(user_id: str, expect_to_find=True):
 def get_player_category_index(player_id: str):
     player = read_player_data(player_id)
     if player is None:
-        print(f"Using default category index 0 for non-player {player_id}")
+        logger.debug(f"Using default category index 0 for non-player {player_id}")
         return 0
     return player.category_index
 
@@ -208,7 +210,7 @@ async def create_player(member, handle_id: str = None):
     try:
         await member.edit(nick=new_player_id)
     except discord.Forbidden:
-        print(
+        logger.error(
             f"Probably tried to edit server owner, which doesn't work. Please make sure user {member.name} has nickname {new_player_id}."
         )
 
@@ -277,7 +279,7 @@ def get_shops(player_id: str):
 
 def add_group(player_id: str, group_id: str):
     player: PlayerData = read_player_data(player_id)
-    print(
+    logger.debug(
         f"Trying to add {player_id} to {group_id}; existing groups are {player.groups}"
     )
     if player is not None and group_id not in player.groups:
@@ -307,5 +309,5 @@ async def is_admin(player_id: str):
 async def is_gm_or_admin(player_id: str):
     if player_exists(player_id):
         member = await server.get_member_from_nick(player_id)
-        print(f"Checking if {player_id} is gm or admin")
+        logger.debug(f"Checking if {player_id} is gm or admin")
         return server.check_member_has_role(member, [gm_role_name, admin_role_name])

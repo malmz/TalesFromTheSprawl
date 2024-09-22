@@ -2,6 +2,7 @@
 
 import asyncio
 import datetime
+import logging
 import os
 from copy import deepcopy
 from enum import Enum
@@ -35,7 +36,8 @@ from .custom_types import (
     TransTypes,
 )
 
-load_dotenv()
+logger = logging.getLogger(__name__)
+
 # Note: for the .table command to work, you must manually set up
 # the in-game bar/restaurant as a shop, using .create_shop etc.
 main_shop = os.getenv("MAIN_SHOP_NAME")
@@ -519,8 +521,8 @@ class Shop:
                 if not use_initials:
                     index += 1
                     if index == len(number_emojis):
-                        print(
-                            f"Warning: shop {self.name} has too many employees, "
+                        logger.warning(
+                            f"shop {self.name} has too many employees, "
                             + f"all cannot be showed in the tipping menu. Including the first {index}."
                         )
                         break
@@ -1847,7 +1849,7 @@ async def update_storefront_tipping_message(shop: Shop, channel):
         if message is not None:
             store_tipping_message(shop.shop_id, str(message.id), channel.guild.id)
             for _, emoji in tipping_tuples:
-                print(f"Adding reaction: {emoji}")
+                logger.debug(f"Adding reaction: {emoji}")
                 await message.add_reaction(emoji)
         else:
             raise RuntimeError(
@@ -1946,7 +1948,9 @@ async def process_reaction_in_order_flow(channel_id: str, msg_id: str, emoji: st
         return result
 
     async with get_order_semaphore(shop.shop_id, mapping.identifier):
-        print(f"Trying to mark order {mapping.identifier}, {mapping.status} as {emoji}")
+        logger.debug(
+            f"Trying to mark order {mapping.identifier}, {mapping.status} as {emoji}"
+        )
         order = None
         if mapping.status == OrderStatus.Active:
             order = fetch_active_order(shop.shop_id, mapping.identifier)
@@ -2013,7 +2017,7 @@ async def order_product_for_buyer(
         shop_name, product_name
     )  # This implicitly checks that shop exists
     if product is None:
-        print(f"Trying to order {product_name} from {shop_name}, found none")
+        logger.debug(f"Trying to order {product_name} from {shop_name}, found none")
         if product_name is None:
             return (
                 'Error: no product name given. Use /order <product_name> <shop_name>"'
@@ -2021,7 +2025,7 @@ async def order_product_for_buyer(
         elif shop_name is None:
             return f'Error: no shop name given. Use "/order {product_name} <shop_name>"'
     else:
-        print(
+        logger.debug(
             f"Trying to order {product_name} from {shop_name}, found {product.to_string()}"
         )
 
@@ -2090,7 +2094,7 @@ async def order_product(shop: Shop, product: Product, buyer_handle: Handle):
             result.report = transaction.report
         else:
             # Otherwise, we move on to create the order
-            print(
+            logger.debug(
                 f"{transaction.payer} just bought {transaction.data} from {transaction.recip}!"
             )
             await place_order_in_flow(shop, transaction, delivery_id, must_be_pre_paid)

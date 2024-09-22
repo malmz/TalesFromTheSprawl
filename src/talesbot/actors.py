@@ -1,6 +1,7 @@
 ### This module collects everything that is common to actors and shops.
 
 import asyncio
+import logging
 
 import discord
 from configobj import ConfigObj
@@ -12,6 +13,7 @@ from .custom_types import Actor, Transaction, TransTypes
 
 actors_conf_dir = "actors"
 finance_channel_mapping_index = "___finance_channels"
+logger = logging.getLogger(__name__)
 
 
 def get_actors_confobj():
@@ -400,10 +402,9 @@ async def lock_tentative_transaction(actor_id: str, msg_id: str):
         message = await channel.fetch_message(int(msg_id))
         await message.clear_reactions()
     except discord.errors.NotFound:
-        print(
+        logger.error(
             f"Tried to lock in transaction with msg_id {msg_id} for {actor_id}, but message has been removed."
         )
-        return
 
 
 async def remove_tentative_transaction(actor_id: str, msg_id: str):
@@ -415,7 +416,7 @@ async def remove_tentative_transaction(actor_id: str, msg_id: str):
         )
     message = await channel.fetch_message(int(msg_id))
     if message is None:
-        print(
+        logger.error(
             f"Tried to remove transaction record with msg_id {msg_id} for {actor_id}, but message has already been removed."
         )
         return
@@ -435,7 +436,7 @@ async def process_reaction_in_finance_channel(channel_id: str, msg_id: str, emoj
 
     await shops.attempt_refund(transaction, actor_id)
     if transaction is not None:
-        print(
+        logger.info(
             f"Attempted refund, success: {transaction.success}, report: {transaction.report}"
         )
         if not transaction.success and transaction.report is not None:

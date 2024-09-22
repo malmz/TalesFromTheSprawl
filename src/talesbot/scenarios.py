@@ -4,6 +4,7 @@
 # A scenario could be for example a simulated network crash, automated spam messages, or creation of a new group.
 
 import asyncio
+import logging
 from copy import deepcopy
 from enum import Enum
 from typing import List
@@ -13,6 +14,8 @@ from configobj import ConfigObj
 
 from . import game, groups, handles, players
 from .config import config_dir
+
+logger = logging.getLogger(__name__)
 
 
 class EventType(str, Enum):
@@ -205,7 +208,7 @@ class MessageGroupsEvent:
             for c in groups.get_members_of_groups(self.groups)
         ]
         for channel in channel_list:
-            print(f"Found channel {channel}")
+            logger.debug(f"Found channel {channel}")
         await send_message_to_channels(self.message, channel_list)
 
 
@@ -287,7 +290,7 @@ class Event:
         elif self.event_type == EventType.MessageExceptGroups:
             return MessageExceptGroupsEvent.from_string(self.data)
         else:
-            print(f"Scenario event type {self.event_type} not implemented yet.")
+            logger.error(f"Scenario event type {self.event_type} not implemented yet.")
             return None
 
     async def execute(self):
@@ -296,7 +299,7 @@ class Event:
             if event is None:
                 return
             await event.execute()
-            print(f"  Executed repetition {i+1} out of {self.repetitions}")
+            logger.debug(f"Executed repetition {i+1} out of {self.repetitions}")
             await asyncio.sleep(self.spacing)
 
 
@@ -321,17 +324,17 @@ class Scenario:
         return simplejson.dumps(dict_to_save)
 
     async def execute(self):
-        print(f'Executing scenario "{self.name}"...')
+        logger.info(f'Executing scenario "{self.name}"...')
         for i, step in enumerate(self.steps):
             repetition_string = "" if step.repetitions == 1 else f" x{step.repetitions}"
-            print(
+            logger.info(
                 f'Executing step #{i} ({step.event_type}{repetition_string}) of scenario "{self.name}"...'
             )
             await step.execute()
-            print(
+            logger.info(
                 f'Finished executing step #{i} ({step.event_type}{repetition_string}) of scenario "{self.name}".'
             )
-        print(f'Finished scenario "{self.name}".')
+        logger.info(f'Finished scenario "{self.name}".')
 
 
 scenarios_conf_dir = "scenarios"

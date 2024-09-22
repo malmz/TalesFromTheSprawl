@@ -1,12 +1,15 @@
 # module game.py
 
 import asyncio
+import logging
 from enum import Enum
 
 from . import channels, chats, handles, player_setup, players
 from .common import gm_announcements_name
 
 # Game-wide state. Only put general info here; anything specific should go in players / shops / groups / scenarios etc.
+
+logger = logging.getLogger(__name__)
 
 
 class NetworkState(str, Enum):
@@ -49,14 +52,14 @@ def set_network_down():
     if get_network_status() != NetworkState.Down:
         set_network_status(NetworkState.Down)
     else:
-        print("Network already down.")
+        logger.debug("Network already down.")
 
 
 def set_network_restored():
     if get_network_status() == NetworkState.Down:
         set_network_status(NetworkState.Ready)
     else:
-        print("Network already up.")
+        logger.debug("Network already up.")
 
 
 reserved_handles = {
@@ -110,7 +113,7 @@ async def check_alerts(message_string: str, channel, user_id: str):
     if "welcome the tree of light" in message_string:
         alerts_channels = channels.get_discord_channels_from_name(gm_announcements_name)
         if not alerts_channels:
-            print("Warning: Could not send gm announcement - no channels found")
+            logger.warning("Could not send gm announcement - no channels found")
         sender = players.get_player_id(user_id)
         handle = handles.get_active_handle_id(sender)
         send_tasks = (

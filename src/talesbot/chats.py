@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from enum import Enum
 
 import discord
@@ -22,6 +23,8 @@ from .custom_types import Handle, PostTimestamp
 
 ### Module chats.py
 # This module handles chats between handles
+
+logger = logging.getLogger(__name__)
 
 
 class ChatsCog(commands.Cog, name="chats"):
@@ -321,9 +324,9 @@ def get_channel_budget():
 
 def dump():
     for cat in chats:
-        print(f"Dumping category {cat}:")
+        logger.debug(f"Dumping category {cat}:")
         for entry in chats[cat]:
-            print(f"Entry {entry}: {chats[cat][entry]}")
+            logger.debug(f"Entry {entry}: {chats[cat][entry]}")
 
 
 async def init(clear_all: bool = False):
@@ -552,7 +555,7 @@ def init_chat_state(chat_state):
         chat_state[chat_content_index] = {}
         chat_state.write()
     else:
-        print(
+        logger.debug(
             f"Overwriting existing chat log file - the record did not indicate that chat {chat_state.filename} would exist."
         )
 
@@ -840,10 +843,8 @@ async def create_channel_for_chat_session(
         category_index=category_index,
     )
     await channel.send(
-        
-            f"```This is the start of {participant.channel_name}. "
-            + f'In this chat, you will always appear as "{participant.handle}", even if you switch handles elsewhere.```'
-        
+        f"```This is the start of {participant.channel_name}. "
+        + f'In this chat, you will always appear as "{participant.handle}", even if you switch handles elsewhere.```'
     )
 
     await repost_message_history(channel, chat_state, participant)
@@ -1074,7 +1075,7 @@ async def close_2party_chat_session(my_handle: Handle, partner_handle_id: str):
 
 
 async def close_chat_session(participant: ChatParticipant):
-    print(f"Trying to close {participant.chat_name}, for {participant.handle}")
+    logger.debug(f"Trying to close {participant.chat_name}, for {participant.handle}")
 
     # update chat -> channel ID mapping
     should_log = True
@@ -1161,7 +1162,7 @@ async def archive_chat_for_handle(handle: Handle, chat_name: str, chat_state):
 
     archive_for_remaining = len(is_non_archived) <= 1
 
-    print(
+    logger.debug(
         f"Archiving chat for {handle.handle_id}. Other participant is {other_participants[0].to_string()}. is_non_archived: {is_non_archived}, archive_for_remaining: {archive_for_remaining}"
     )
     task_list = (
@@ -1241,7 +1242,7 @@ async def post_to_participant(
     )
     if chat_ui.session_status == session_status_active:
         if chat_ui.channel is None:
-            print(
+            logger.debug(
                 f"Failed to reach participant of chat. Dump: {participant.to_string()}"
             )
         else:
@@ -1267,7 +1268,7 @@ async def post_to_participant(
         session_status_open_archive,
         session_status_closed_archive,
     ]:
-        print(
+        logger.debug(
             f"Just for logging: posting message in chat with archived participant {participant.handle}"
         )
     else:
@@ -1315,7 +1316,7 @@ async def auto_respond_if_needed(
                 )
             )
             if chat_channel_data_2:
-                print(f"Sending auto respond message for {participant.handle}")
+                logger.debug(f"Sending auto respond message for {participant.handle}")
                 await process_message_data(
                     chat_channel_data_2,
                     posting.MessageData(

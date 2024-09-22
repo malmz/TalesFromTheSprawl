@@ -1,17 +1,17 @@
+import logging
 import os
 
 from discord import Interaction, app_commands
 from discord.ext import commands
-from dotenv import load_dotenv
 
 from . import actors, artifacts, handles, player_setup, scenarios, server
 
 ### Module gm.py
 # This module holds the gm cog, which is used to set up in-game content and track resources shared by all GMs
 
-load_dotenv()
 gm_role_name = os.getenv("GM_ROLE_NAME")
 gm_actor_id = gm_role_name
+logger = logging.getLogger(__name__)
 
 
 class GmCog(commands.Cog, name=gm_role_name):
@@ -116,7 +116,7 @@ async def create_gm_actor():
         gm_actor_id, gm_actor_id
     )
     if response:
-        print(response)
+        logger.info(response)
 
 
 def get_gm_active_handle():

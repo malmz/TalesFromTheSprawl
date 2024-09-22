@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 import re
-from typing import List
+from typing import List, override
 
 import discord
 from discord.app_commands import BotMissingPermissions
@@ -72,23 +72,21 @@ class TalesBot(commands.Bot):
         self.inital_extensions = inital_extensions
 
     async def setup_hook(self) -> None:
-        await asyncio.gather(
-            *(
-                asyncio.create_task(self.load_extension(ext))
-                for ext in self.inital_extensions
-            )
-        )
+        for ext in self.inital_extensions:
+            await self.load_extension(ext)
 
-    async def on_ready(self, guild: discord.Guild):
-        logger.debug(f"Guild connected: {guild.name}({guild.id})")
-        if destroy_all:
-            await self.destroy_all()
-            logger.debug("Cleaned up all channels, categories and roles")
-            await self.close()
-            return
-
+    async def on_guild_available(self, guild: discord.Guild):
+        logger.info(f"Connected to guild {guild.name}")
         self.tree.copy_global_to(guild=guild)
         await self.tree.sync(guild=guild)
+
+    async def on_ready(self):
+        logger.info(f"Bot started as {self.user}")
+        if destroy_all:
+            await self.destroy_all()
+            logger.info("Cleaned up all channels, categories and roles")
+            await self.close()
+            return
 
         # TODO: move some of the initialisation to the cogs instead
         await server.init(self.guilds)
@@ -122,7 +120,7 @@ class TalesBot(commands.Bot):
                 f"{message.author.id} : {player_name} : {message.channel.name} : {message.content}"
             )
         except Exception:
-            logger.error("Failed to log command to file")
+            logger.exception("Failed to log command to file")
 
         # "Off messages" means starting and replying to chats with GM and similar
         only_off_messages = not game.can_process_messages()
@@ -193,37 +191,44 @@ class TalesBot(commands.Bot):
     async def on_member_join(self, member: discord.Member):
         await server.set_user_as_new_player(member)
 
-    async def on_command_error(ctx, error):
-        match error:
+    @override
+    async def on_command_error(
+        self,
+        context: commands.Context["TalesBot"],
+        exception: commands.errors.CommandError,
+    ):
+        match exception:
             case commands.errors.BadArgument():
-                match str(error):
+                match str(exception):
                     case 'Converting to "int" failed for parameter "amount"':
-                        await ctx.send(
+                        await context.send(
                             "Error: amount must be an integer greater than 0."
                         )
                     case 'Converting to "int" failed for parameter "price"':
-                        await ctx.send(
+                        await context.send(
                             "Error: price must be an integer greater than 0."
                         )
             case commands.errors.CommandNotFound():
-                await ctx.send("Error: that is not a known command.")
+                await context.send("Error: that is not a known command.")
             case _:
-                await ctx.send("Error: unknown system error. Contact administrator.")
-                super().on_command_error(ctx, error)
+                await context.send(
+                    "Error: unknown system error. Contact administrator."
+                )
+                super().on_command_error(context, exception)
 
     async def destroy_all(self):
         for guild in self.guilds:
             channels = await guild.fetch_channels()
             roles = await guild.fetch_roles()
             for channel in channels:
-                print(f"Removing channel {channel.name}")
+                logger.info(f"Removing channel {channel.name}")
                 await channel.delete()
             for category in guild.categories:
-                print(f"Removing category {category.name}")
+                logger.info(f"Removing category {category.name}")
                 await category.delete()
             for role in roles:
                 if role.name in ["gm", "new_player"] or role.name.isdigit():
-                    print(f"Removing role {role.name}")
+                    logger.info(f"Removing role {role.name}")
                     await role.delete()
 
 
@@ -240,18 +245,18 @@ async def process_message(message):
 
 
 def has_any_command(message):
-    matches = re.search("^\.[a-z]+", message.content)
+    matches = re.search(r"^\.[a-z]+", message.content)
     return matches is not None
 
 
 def has_help_command(message):
-    matches = re.search("^\.help", message.content)
+    matches = re.search(r"^\.help", message.content)
     return matches is not None
 
 
 def has_chat_command(message):
-    matches = re.search("^\.chat", message.content)
+    matches = re.search(r"^\.chat", message.content)
     if matches is not None:
         return True
-    matches = re.search("^\.gm_chat", message.content)
+    matches = re.search(r"^\.gm_chat", message.content)
     return matches is not None

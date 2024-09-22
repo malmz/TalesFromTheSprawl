@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import logging
 
 import discord
 
@@ -27,6 +28,8 @@ from .custom_types import ActionResult
 reactions_worth_money = {"💴": 1, "💸": 1, "💰": 1, "🍺": 1, "💯": 100, "🪙": 1}
 chat_reactions = ["📧", "💬", "🗨️", "❔", "❓", "❕", "❗"]
 
+logger = logging.getLogger(__name__)
+
 
 def init():
     clear_reaction_semaphores()
@@ -35,8 +38,8 @@ def init():
 async def remove_reaction(message, emoji, user_id: int):
     member = await message.channel.guild.fetch_member(user_id)
     if member is None:
-        print(
-            f"Error: tried to remove reaction but member not found, user_id is {user_id}"
+        logger.error(
+            f"tried to remove reaction but member not found, user_id is {user_id}"
         )
     else:
         await message.remove_reaction(emoji, member)
@@ -89,7 +92,7 @@ async def process_reaction_on_other_handle(
         await find_reaction_recipient_and_message(message_id, channel)
     )
     if search_result.recipient is None:
-        print(f"Error! Could not find recipient for message in channel {channel.name}.")
+        logger.error(f"Could not find recipient for message in channel {channel.name}.")
         return
 
     # Currently only one use case for reading reactions, and that is for paying money
@@ -177,7 +180,7 @@ async def process_reaction_add(message_id: int, user_id: int, channel, emoji):
 
     # Semaphore handling to ensure we only process one action per player at a time:
     async with get_reaction_semaphore(user_id):
-        print(f"User reacted with {emoji}")
+        logger.debug(f"User reacted with {emoji}")
         should_remove_reaction = True
         try:
             if channels.is_anonymous_channel(channel):

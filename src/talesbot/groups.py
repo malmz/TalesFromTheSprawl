@@ -8,6 +8,7 @@
 # (this would avoid the double-implementation of access roles that currently exists between groups and actors)
 
 import asyncio
+import logging
 from typing import Dict, List
 
 import discord
@@ -24,6 +25,7 @@ from .custom_types import Handle, HandleTypes
 
 groups_conf_dir = "groups"
 groups_file_name = str(config_dir / groups_conf_dir / "groups.conf")
+logger = logging.getLogger(__name__)
 
 
 class Group:
@@ -63,7 +65,7 @@ class Group:
         if role is not None:
             await server.give_member_role(member, role)
         else:
-            print(f"Error: could not find the role belonging to group {self.group_id}")
+            logger.error(f"could not find the role belonging to group {self.group_id}")
 
     async def remove_member(self, player_id: str):
         self.members = [m for m in self.members if m != player_id]
@@ -211,7 +213,7 @@ async def create_new_group(
     group_name: str, initial_members: List[str] = None, has_channel: bool = True
 ):
     initial_members = [] if initial_members is None else initial_members
-    print(f"Creating new group {group_name} with players {initial_members}")
+    logger.debug(f"Creating new group {group_name} with players {initial_members}")
     group_id = group_name.lower()
     group_index = Group.get_next_index()
 
@@ -313,5 +315,5 @@ def get_members_of_groups(group_ids: List[str]):
             for player_id in group.members:
                 if player_id not in members:
                     members.append(player_id)
-    print(f"Found members {members} in groups {group_ids}")
+    logger.debug(f"Found members {members} in groups {group_ids}")
     return members

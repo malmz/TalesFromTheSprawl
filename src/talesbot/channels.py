@@ -1,10 +1,12 @@
 import asyncio
 import datetime
+import logging
 import os
-from typing import Optional
+from typing import TYPE_CHECKING, Optional, Union
 
 import discord
 from configobj import ConfigObj
+from discord.ext import commands
 
 from . import players, server
 from .common import (
@@ -38,6 +40,15 @@ slowmode_delay: int = 2
 # Channel state: this is the state of the channel, independent of the handles used in it.
 
 channel_states = ConfigObj(str(config_dir / "channel_states.conf"))
+logger = logging.getLogger(__name__)
+
+VocalGuildChannel = Union[discord.VoiceChannel, discord.StageChannel]
+GuildChannel = Union[
+    VocalGuildChannel,
+    discord.ForumChannel,
+    discord.TextChannel,
+    discord.CategoryChannel,
+]
 
 
 ### Utilities:
@@ -153,27 +164,27 @@ async def delete_discord_channel(channel_id: str, guild_id: Optional[int] = None
 ### Common init functions:
 
 
-async def init():
+async def setup(bot: commands.Bot):
     for elem in channel_states:
         del channel_states[elem]
     channel_states.write()
 
-    print("Found %d guilds" % len(server.get_guilds()))
-    for guild in server.get_guilds():
-        print(f"Processing guild {guild.name}")
+    logger.debug(f"Init channels for {len(bot.guilds)} guilds")
+    for guild in bot.guilds:
+        logger.debug(f"Processing guild {guild.name}")
         await init_channels_and_categories(guild)
 
 
-async def init_channels_and_categories(guild):
+async def init_channels_and_categories(guild: discord.Guild):
     for cat, channels in get_all_categories():
         await _verify_category_exists(guild, cat, channels)
 
     for c in guild.channels:
-        print(f"Setting roles for {c.name}")
+        logging.debug(f"Setting roles for {c.name}")
         await _init_discord_channel(c)
 
 
-async def _init_discord_channel(discord_channel):
+async def _init_discord_channel(discord_channel: GuildChannel):
     if discord_channel.type in [
         discord.ChannelType.category,
         discord.ChannelType.voice,
@@ -208,17 +219,19 @@ async def _init_discord_channel(discord_channel):
             await _init_private_channel(discord_channel, gm_extra_access=True)
 
     else:
-        print(
+        logger.debug(
             f"Will not create channel state for channel {discord_channel.name} which has no category"
         )
 
 
-async def _verify_category_exists(guild, category_name: str, channels: list):
+async def _verify_category_exists(
+    guild: discord.Guild, category_name: str, channels: list
+):
     if category_name not in [cat.name for cat in guild.categories]:
-        print(f"Did not find category {category_name}, will create it")
+        logger.debug(f"Did not find category {category_name}, will create it")
         await guild.create_category(category_name)
     else:
-        print(f"Category already exists {guild.name}:{category_name}")
+        logger.debug(f"Category already exists {guild.name}:{category_name}")
 
     category = next(
         (cat for cat in guild.categories if cat.name == category_name), None
@@ -227,14 +240,14 @@ async def _verify_category_exists(guild, category_name: str, channels: list):
         await _verify_channel_exists(category, channel)
 
 
-async def _verify_channel_exists(category, channel_name: str):
+async def _verify_channel_exists(category: discord.CategoryChannel, channel_name: str):
     if channel_name not in [ch.name for ch in category.channels]:
         await category.create_text_channel(channel_name)
     else:
-        print(f"Channel already exists {category.guild.name}:{channel_name}")
+        logger.debug(f"Channel already exists {category.guild.name}:{channel_name}")
 
 
-async def _init_channel_state(discord_channel):
+async def _init_channel_state(discord_channel: GuildChannel):
     await discord_channel.edit(slowmode_delay=slowmode_delay)
     channel_name = discord_channel.name
     channel_states[
@@ -244,7 +257,10 @@ async def _init_channel_state(discord_channel):
 
 
 async def _set_base_permissions(
-    discord_channel, private: bool, read_only: bool, gm_extra_access: bool = False
+    discord_channel: GuildChannel,
+    private: bool,
+    read_only: bool,
+    gm_extra_access: bool = False,
 ):
     add_roles_tasks = [
         asyncio.create_task(discord_channel.set_permissions(role, overwrite=overwrites))

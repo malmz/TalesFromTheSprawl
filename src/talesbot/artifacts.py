@@ -4,15 +4,19 @@
 # logging in with codes.
 
 import json
+import logging
 import os
 
 from discord import Interaction, app_commands
 from discord.ext import commands
 
+from talesbot import common, handles, players, server
+
 from . import channels
 from .config import config_dir
 
 # TODO: reinitialise?
+logger = logging.getLogger(__name__)
 
 
 class ArtifactsCog(commands.Cog, name="network"):
@@ -27,8 +31,6 @@ class ArtifactsCog(commands.Cog, name="network"):
         help="Connect to device or remote server. Aliases: /connect, /login, /access",
     )
     async def old_connect_command(self, ctx, code: str = None, password: str = None):
-        import server
-
         if not channels.is_cmd_line(ctx.channel.name):
             await server.swallow(ctx.message, alert=True)
             return
@@ -83,11 +85,6 @@ class ArtifactsCog(commands.Cog, name="network"):
         self, user_id: str, code: str, password: str, announcement: str = None
     ):
         try:
-            import common
-            import handles
-            import players
-            import server
-
             player_id = players.get_player_id(user_id)
             handle = handles.get_active_handle(player_id)
             password_info = f"password {password}" if password else "no password"
@@ -97,11 +94,11 @@ class ArtifactsCog(commands.Cog, name="network"):
             if announcement:
                 log_report += f"\n{announcement}"
             await server.send_message_to_all(common.gm_announcements_name, log_report)
-        except:
-            print("Failed to log connect attempt")
+        except Exception:
+            logger.exception("Failed to log connect attempt")
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(ArtifactsCog(bot))
 
 

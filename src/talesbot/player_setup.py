@@ -1,3 +1,4 @@
+import logging
 from typing import List
 
 import simplejson
@@ -14,6 +15,8 @@ from .shops import Shop
 # It can be edited manually
 
 # TODO: re-write this to integrate the output with the general welcome message!
+
+logger = logging.getLogger(__name__)
 
 
 class PlayerSetupInfo:
@@ -80,7 +83,7 @@ def add_known_handle(handle_id: str):
         known_handles[handle_id] = PlayerSetupInfo(handle_id).to_string()
         known_handles.write()
     else:
-        print(
+        logger.warning(
             "Trying to edit player setup info for a handle that is already in the database. Please edit the file manually instead."
         )
 
@@ -119,8 +122,8 @@ async def setup_handles_and_welcome_new_player(player: PlayerData, main_handle: 
     guild = actors.get_guild_for_actor(player.player_id)
     channel = channels.get_discord_channel(str(player.cmd_line_channel_id), guild.id)
     if channel is None:
-        print(
-            f"Error: Failed to welcome player {player.player_id} -- no cmd line channel found!"
+        logger.error(
+            f"Failed to welcome player {player.player_id} -- no cmd line channel found!"
         )
         return False
     result: ActionResult = await handles.create_handle_and_switch(
@@ -230,7 +233,7 @@ async def setup_handles_no_welcome_new_player(actor_id: str, main_handle: str):
     ]:
         result = await setup_alternate_handles(actor_id, handles_list, handle_type)
         if not result.success:
-            print(result.report)
+            logger.error(result.report)
 
     await setup_groups(actor_id, info.groups)
 
@@ -358,5 +361,5 @@ async def setup_shop_for_member(shop_name: str, handle: Handle, is_owner: bool):
         if result.success:
             return shops.read_shop(shop_name)
         else:
-            print(f"Failed to setup shop for member: {result.report}")
+            logger.error(f"Failed to setup shop for member: {result.report}")
             return None

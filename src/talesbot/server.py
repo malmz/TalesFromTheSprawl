@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import List
 
 import discord
@@ -10,6 +11,8 @@ from .common import (
     new_player_role_name,
     system_role_name,
 )
+
+logger = logging.getLogger(__name__)
 
 guilds = []
 guild_roles = {}
@@ -61,7 +64,7 @@ async def init(connected_guilds):
 async def _init_role(guild, role_name: str):
     role = discord.utils.find(lambda role: role.name == role_name, guild.roles)
     if role is None:
-        print(f"Creating role with name {role_name}")
+        logger.debug(f"Creating role with name {role_name}")
         role = await guild.create_role(name=role_name)
     return role
 
@@ -79,15 +82,15 @@ def get_guilds():
 
 async def give_role_access(channel, role):
     if channel.guild.id != role.guild.id:
-        print(
-            "Warning: Trying to set role permissions on a channel from a different guild"
+        logger.warning(
+            "Trying to set role permissions on a channel from a different guild"
         )
     await channel.set_permissions(role, overwrite=normal_access)
 
 
 async def give_member_role(member, role):
     if member.guild.id != role.guild.id:
-        print("Warning: Trying to give member a role from a different guild")
+        logger.warning("Trying to give member a role from a different guild")
     new_roles = member.roles
     if role not in member.roles:
         new_roles.append(role)

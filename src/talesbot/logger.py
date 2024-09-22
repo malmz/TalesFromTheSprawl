@@ -6,23 +6,27 @@ LOGGING_CONFIG: dict[str, Any] = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
-        "default": {
+        "console": {
             "()": "uvicorn.logging.DefaultFormatter",
             "fmt": "%(levelprefix)s %(message)s",
             "use_colors": None,
         },
+        "full": {
+            "format": "%(asctime)s %(levelname)-8s %(name)-15s %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
         "messages": {
-            "fmt": "%(message)s",
+            "format": "%(message)s",
         },
     },
     "handlers": {
         "default": {
-            "formatter": "default",
+            "formatter": "console",
             "class": "logging.StreamHandler",
             "stream": "ext://sys.stderr",
         },
         "file": {
-            "formatter": "default",
+            "formatter": "full",
             "class": "logging.handlers.RotatingFileHandler",
             "filename": "config/logs/app.log",
         },
@@ -35,10 +39,14 @@ LOGGING_CONFIG: dict[str, Any] = {
     "loggers": {
         "talesbot": {
             "handlers": ["default", "file"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+        "talesbot.messages": {
+            "handlers": ["messages"],
             "level": "INFO",
             "propagate": False,
         },
-        "talesbot.messages": {"handlers": ["messages"], "level": "INFO"},
     },
 }
 

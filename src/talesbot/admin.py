@@ -1,3 +1,5 @@
+import logging
+
 import discord
 from discord import Interaction, app_commands
 from discord.ext import commands
@@ -10,6 +12,7 @@ from . import actors, common, groups, handles, players, server
 
 # TODO: change these to be admin-only (currently they are actually GM-only)
 # TODO: grab the name of the admin role from env file
+logger = logging.getLogger(__name__)
 
 
 class AdminCog(commands.Cog, name="admin"):
@@ -156,8 +159,8 @@ class AdminCog(commands.Cog, name="admin"):
         try:
             await interaction.followup.send("Done.", ephemeral=True)
         except discord.errors.NotFound:
-            print(
-                "Cleared all players. Could not send report because channel is missing – "
+            logger.warning(
+                "Cleared all players. Could not send report because channel is missing - "
                 + "the command was probably given in a player-only command line that was deleted."
             )
 
@@ -172,8 +175,8 @@ class AdminCog(commands.Cog, name="admin"):
         try:
             await interaction.followup.send("Done.", ephemeral=True)
         except discord.errors.NotFound:
-            print(
-                "Cleared all actors. Could not send report because channel is missing – "
+            logger.warning(
+                "Cleared all actors. Could not send report because channel is missing - "
                 + "the command was probably given in a player-only command line that was deleted."
             )
 
@@ -188,8 +191,8 @@ class AdminCog(commands.Cog, name="admin"):
         try:
             await interaction.followup.send(report, ephemeral=True)
         except discord.errors.NotFound:
-            print(
-                f"Cleared actor {actor_id}. Could not send report because channel is missing – "
+            logger.warning(
+                f"Cleared actor {actor_id}. Could not send report because channel is missing - "
                 + "the command was probably given in a player-only command line that was deleted."
             )
 
@@ -249,5 +252,5 @@ class AdminCog(commands.Cog, name="admin"):
         await interaction.followup.send("Done.", ephemeral=True)
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(AdminCog(bot))

@@ -1,15 +1,16 @@
 import asyncio
 import contextlib
-import logging
 import os
 
 import discord
 import uvicorn
 import uvloop
+from discord.ext import commands
 from dotenv import load_dotenv
 
 from .api import app
 from .bot import TalesBot
+from .config import config_dir
 from .logger import init_loggers
 
 
@@ -25,11 +26,29 @@ async def start_bot():
         "talesbot.artifacts",
     ]
 
+    config_folders = [
+        "channels" "actors",
+        "artifacts",
+        "chats",
+        "finances",
+        "groups",
+        "handles",
+        "logs",
+        "players",
+        "scenarios",
+        "shops",
+    ]
+
+    for folder in config_folders:
+        os.makedirs(config_dir / folder, exist_ok=True)
+
     intents = discord.Intents.default()
     intents.message_content = True
     intents.members = True
 
-    async with TalesBot(intents=intents, inital_extensions=exts) as bot:
+    async with TalesBot(
+        commands.when_mentioned, intents=intents, inital_extensions=exts
+    ) as bot:
         await bot.start(TOKEN)
 
 
@@ -41,7 +60,7 @@ async def start_api():
 
 async def start() -> int:
     async with asyncio.TaskGroup() as tg:
-        # tg.create_task(start_bot())
+        tg.create_task(start_bot())
         tg.create_task(start_api())
 
 
