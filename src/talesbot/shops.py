@@ -53,16 +53,11 @@ class ShoppingCog(commands.Cog, name="shopping"):
 
     def __init__(self, bot):
         self.bot = bot
-        self._last_member = None
-
-    # Commands related to ordering
-    # These only work in cmd_line channels
 
     @app_commands.command(
-        name="order",
         description="Order a product from a shop. Tip: it is much easier to order from their storefront channel",
     )
-    async def order_command(
+    async def order(
         self,
         interaction: discord.Interaction,
         product_name: str,
@@ -77,11 +72,10 @@ class ShoppingCog(commands.Cog, name="shopping"):
         await interaction.followup.send(report, ephemeral=True)
 
     @app_commands.command(
-        name="order_other",
         description="Admin-only. Order a product from a shop for someone else.",
     )
     @app_commands.checks.has_role("gm")
-    async def order_other_command(
+    async def order_other(
         self,
         interaction: Interaction,
         buyer: str,
@@ -96,64 +90,23 @@ class ShoppingCog(commands.Cog, name="shopping"):
         await interaction.followup.send(report, ephemeral=True)
 
 
-"""
-	@app_commands.command(
-		name='set_delivery_id',
-		description='Set your delivery option at a shop. E.g. your table number, your delivery address, or your alias.',
-#		help=(
-#			'Set your delivery option at a shop. ' +
-#			'This can be e.g. your table number, your delivery address, or your alias. ' +
-#			'If several items are ordered for the same delivery option (e.g. to the same ' +
-#			'table or same address) around the same time, they will likely be together.'
-#			)
-		)
-	async def set_delivery_id_command(self, interaction: Interaction, delivery_id: str, shop_name: str='trinity_taskbar'):
-		await interaction.response.defer(ephemeral=True)
-		report = set_delivery_id_from_command(str(interaction.user.id), delivery_id, shop_name)
-		if report is None:
-			report = 'Unknown error. Contact system admin'
-		await interaction.followup.send(report, ephemeral=True)
-"""
-
-"""	@app_commands.command(
-		name='table',
-		description=f'Tell {main_shop} where to bring your order. Valid options are table numbers, \"bar\", and \"call\".'
-		)
-	async def set_delivery_id_command_table(self, interaction: Interaction, option: str):
-		report = set_delivery_table_from_command(str(interaction.user.id), option, main_shop)
-		if report is None:
-			report = 'Unknown error. Contact system admin'
-		await interaction.followup.send(report, ephemeral=True)
-
-	@app_commands.command(name='clear_all_shops', description='Admin-only: Delete all shops.')
-	@app_commands.checks.has_role('gm')
-	async def clear_shops_command(self, interaction: Interaction):
-		await interaction.response.defer(ephemeral=True)
-		await init(clear_all=True)
-		await interaction.followup.send('Done.', ephemeral=True)
-"""
-
-
-class EmployeeCog(commands.Cog, name="employee"):
+class EmployeeCog(commands.GroupCog, group_name="shop"):
     """Commands related to working at a store or restaurant.
-    For all of these commands, the "shop_name" argument is optional! The system will find the store you work at, as long as you don't work at more than one.
+    For all of these commands, the "shop_name" argument is optional!
+    The system will find the store you work at, as long as you don't work at more than one.
     If you want to order from a store/restaurant, see \".help shopping\" instead."""
 
     def __init__(self, bot):
         self.bot = bot
-        self._last_member = None
 
     # Commands related to managing a shop
     # These only work in cmd_line channels
 
     @app_commands.command(
-        name="create_shop",
-        description="Admin-only: create a new shop, run by a certain player.",
+        description="Create a new shop, run by a certain player.",
     )
-    @app_commands.checks.has_role("gm")
-    async def create_shop_command(
-        self, interaction: Interaction, shop_name: str, player_id: str
-    ):
+    @app_commands.checks.has_role(common.gm_role_name)
+    async def create(self, interaction: Interaction, shop_name: str, player_id: str):
         await interaction.response.defer(ephemeral=True)
         async with handles.semaphore():
             result: ActionResult = await create_shop(
@@ -166,8 +119,8 @@ class EmployeeCog(commands.Cog, name="employee"):
             )
         await interaction.followup.send(report, ephemeral=True)
 
-    @app_commands.command(name="employ", description="Add a new employee to your shop.")
-    async def employ_command(
+    @app_commands.command(description="Add a new employee to your shop.")
+    async def employ(
         self, interaction: Interaction, handle_id: str, shop_name: str = None
     ):
         await interaction.response.defer(ephemeral=True)
@@ -179,9 +132,9 @@ class EmployeeCog(commands.Cog, name="employee"):
         await interaction.followup.send(report, ephemeral=True)
 
     @app_commands.command(
-        name="fire", description="Shop owner only: remove an employee from your shop."
+        description="Shop owner only: remove an employee from your shop."
     )
-    async def fire_command(
+    async def fire(
         self, interaction: Interaction, handle_id: str, shop_name: str = None
     ):
         await interaction.response.defer(ephemeral=True)
@@ -192,16 +145,12 @@ class EmployeeCog(commands.Cog, name="employee"):
             report = "Unknown error. Contact system admin."
         await interaction.followup.send(report, ephemeral=True)
 
-    @app_commands.command(
-        name="add_product",
+    product = app_commands.Group(name="product", description="Manage store products")
+
+    @product.command(
         description="Add a new product to the shop.",
-        # 		help=(
-        # 			'Add a new product to the shop.\n' +
-        # 			'If you do not give a description, price or symbol, boring presets will be used but you can edit them afterwards.\n' +
-        # 			'Note: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
-        # 			)
     )
-    async def add_product_command(
+    async def add(
         self,
         interaction: Interaction,
         product_name: str,
@@ -223,24 +172,10 @@ class EmployeeCog(commands.Cog, name="employee"):
             report = "Unknown error. Contact system admin."
         await interaction.followup.send(report, ephemeral=True)
 
-    @app_commands.command(
-        name="edit_product",
+    @product.command(
         description="Edit one of the shop's existing products. Don't forget to re-publish menu after changes.",
-        # 		help=(
-        # 			'Edit a product\'s properties. Examples:\n' +
-        # 			'.edit_product beer description \"A refreshing soybeer\"\n' +
-        # 			'.edit_product beer price 5\n' +
-        # 			'.edit_product beer symbol beer [some named symbols are avaialable]\n' +
-        # 			'.edit_product beer symbol 🥤 [any standard emoji can be used]\n' +
-        # 			'.edit_product beer available true [\"true\", \"t\" and \"1\" are equivalent]\n' +
-        # 			'.edit_product beer available false [\"false\", \"f\" and \"0\" are equivalent]\n' +
-        # 			'.edit_product beer in_stock true\n' +
-        # 			'\"available\" means the product will be visible in the shop. \"in_stock\" means it can be ordered.\n' +
-        # 			'Note: after editing a product, you must run \".publish_menu\" before the changes are visible to customers.' +
-        # 			'Note 2: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
-        # 			)
     )
-    async def edit_product_command(
+    async def edit(
         self,
         interaction: Interaction,
         product_name: str,
@@ -256,16 +191,10 @@ class EmployeeCog(commands.Cog, name="employee"):
             report = "Unknown error. Contact system admin."
         await interaction.followup.send(report, ephemeral=True)
 
-    @app_commands.command(
-        name="remove_product",
+    @product.command(
         description="Delete a product from the shop.",
-        # 		help=(
-        # 			'Delete a product from the shop.\n' +
-        # 			'After editing a product, you must run \".publish_menu\" before the changes are visible to customers.' +
-        # 			'Note: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
-        # 			)
     )
-    async def remove_product_command(
+    async def remove(
         self, interaction: Interaction, product_name: str, shop_name: str = None
     ):
         await interaction.response.defer(ephemeral=True)
@@ -274,14 +203,9 @@ class EmployeeCog(commands.Cog, name="employee"):
             report = "Unknown error. Contact system admin."
         await interaction.followup.send(report, ephemeral=True)
 
-    @app_commands.command(
-        name="in_stock",
+    @product.command(
+        name="stock",
         description="Set a product to be in stock / out of stock. Value can be either True or False",
-        # 		help=(
-        # 			'Set a product to be in stock / out of stock. \".in_stock beer true\" is equivalent to \".edit_product beer in_stock true\".\n' +
-        # 			'After editing a product, you must run \".publish_menu\" before the changes are visible to customers.' +
-        # 			'Note: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
-        # 			)
     )
     async def in_stock_command(
         self,
@@ -299,32 +223,18 @@ class EmployeeCog(commands.Cog, name="employee"):
         await interaction.followup.send(report, ephemeral=True)
 
     @app_commands.command(
-        name="publish_menu",
         description="Publish the current catalogue/menu",
-        # 		help=(
-        # 			'Publish the current catalogue/menu. After editing a product, you must run this command for the updates to be visible to customers.\n' +
-        # 			'Note: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
-        # 			)
     )
-    async def publish_menu_command(
-        self, interaction: Interaction, product_name: str = None, shop_name: str = None
-    ):
-        await interaction.response.defer(ephemeral=True)
-        report = await self.publish_menu(interaction.user.id, product_name, shop_name)
-        await interaction.followup.send(report, ephemeral=True)
-
-    @app_commands.command(
-        name="pm",
-        description="Publish the current catalogue/menu. Alias for /publish_menu.",
-    )
-    async def pm_command(
-        self, interaction: Interaction, product_name: str = None, shop_name: str = None
-    ):
-        await interaction.response.defer(ephemeral=True)
-        report = await self.publish_menu(interaction.user.id, product_name, shop_name)
-        await interaction.followup.send(report, ephemeral=True)
-
     async def publish_menu(
+        self, interaction: Interaction, product_name: str = None, shop_name: str = None
+    ):
+        await interaction.response.defer(ephemeral=True)
+        report = await self.publish_menu_inner(
+            interaction.user.id, product_name, shop_name
+        )
+        await interaction.followup.send(report, ephemeral=True)
+
+    async def publish_menu_inner(
         self, user_id: int, product_name: str = None, shop_name: str = None
     ):
         if product_name is not None:
@@ -338,32 +248,18 @@ class EmployeeCog(commands.Cog, name="employee"):
         return report
 
     @app_commands.command(
-        name="clear_orders",
         description="Shop owner only: clear your shop's orders.",
-        # 		help=(
-        # 			'Remove all orders (both fulfilled and pending), and publish all product updates to the menu.\n' +
-        # 			'Note: all orders that are pre-paid will still be paid, and there will be no easy way to refund them!\n' +
-        # 			'Note 2: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
-        # 			)
     )
-    async def clear_orders_command(
-        self, interaction: Interaction, shop_name: str = None
-    ):
+    async def clear_orders(self, interaction: Interaction, shop_name: str = None):
         await interaction.response.defer(ephemeral=True)
         await reinitialize(str(interaction.user.id), shop_name)
-        report = await self.publish_menu(interaction.user.id, shop_name=shop_name)
+        report = await self.publish_menu_inner(interaction.user.id, shop_name=shop_name)
         await interaction.followup.send(report, ephemeral=True)
 
     @app_commands.command(
-        name="set_tips",
         description="Set which handle should get your tips. If no handle is given you will not be shown at all.",
-        # 		help=(
-        # 			'Set the handle that is shown in the storefront and gets your tips.\n' +
-        # 			'If you just do \".set_tips\" without any handle, you will not be shown in the storefront at all.\n' +
-        # 			'Note: as long as you don\'t work at more than one shop, you can skip the \"shop_name\" argument.'
-        # 			)
     )
-    async def set_tips_command(
+    async def set_tips(
         self, interaction: Interaction, handle_id: str = None, shop_name: str = None
     ):
         await interaction.response.defer(ephemeral=True)
@@ -373,7 +269,7 @@ class EmployeeCog(commands.Cog, name="employee"):
         await interaction.followup.send(report, ephemeral=True)
 
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(ShoppingCog(bot))
     await bot.add_cog(EmployeeCog(bot))
 
