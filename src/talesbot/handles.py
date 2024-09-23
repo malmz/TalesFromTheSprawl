@@ -505,8 +505,8 @@ async def create_handle_and_switch(
     if handle.handle_type == HandleTypes.Invalid:
         result.report = (
             f"Error: cannot create handle {handle.handle_id}. "
-            + "Handles can only contain letters a-z, numbers 0-9, and \_ (underscore). "
-            + "May not start or end with \_, may not have more than one \_ in a row."
+            + "Handles can only contain letters a-z, numbers 0-9, and _ (underscore). "
+            + "May not start or end with _, may not have more than one _ in a row."
         )
     elif handle.handle_type == HandleTypes.Reserved:
         result.report = (

@@ -10,7 +10,7 @@ type_player = "player"
 type_shop = "shop"
 
 forbidden_content = "**"
-forbidden_content_print = "\*\*"
+forbidden_content_print = r"\*\*"
 
 transaction_collector = "___collector"
 transaction_collected = "___collected"
