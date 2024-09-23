@@ -27,7 +27,7 @@ async def start_bot():
     ]
 
     config_folders = [
-        "channels" "actors",
+        "actors",
         "artifacts",
         "chats",
         "finances",

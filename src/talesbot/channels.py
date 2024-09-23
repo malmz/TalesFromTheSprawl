@@ -2,7 +2,7 @@ import asyncio
 import datetime
 import logging
 import os
-from typing import TYPE_CHECKING, Optional, Union
+from typing import Optional, Union
 
 import discord
 from configobj import ConfigObj
@@ -25,6 +25,7 @@ from .common import (
 )
 from .config import config_dir
 from .custom_types import PostTimestamp
+from .ui.register import RegisterView
 
 ### Module channels.py
 # This module tracks and handles state related to channels
@@ -42,8 +43,8 @@ slowmode_delay: int = 2
 channel_states = ConfigObj(str(config_dir / "channel_states.conf"))
 logger = logging.getLogger(__name__)
 
-VocalGuildChannel = Union[discord.VoiceChannel, discord.StageChannel]
-GuildChannel = Union[
+type VocalGuildChannel = Union[discord.VoiceChannel, discord.StageChannel]
+type GuildChannel = Union[
     VocalGuildChannel,
     discord.ForumChannel,
     discord.TextChannel,
@@ -164,7 +165,7 @@ async def delete_discord_channel(channel_id: str, guild_id: Optional[int] = None
 ### Common init functions:
 
 
-async def setup(bot: commands.Bot):
+async def init(bot: commands.Bot):
     for elem in channel_states:
         del channel_states[elem]
     channel_states.write()
@@ -304,7 +305,7 @@ async def _init_group_channel(discord_channel):
     _init_pseudonymous_channel(discord_channel.name)
 
 
-async def _init_setup_channel(discord_channel):
+async def _init_setup_channel(discord_channel: GuildChannel):
     add_roles_tasks = [
         asyncio.create_task(discord_channel.set_permissions(role, overwrite=overwrites))
         for (role, overwrites) in server.generate_setup_channel_overwrites(
@@ -314,7 +315,9 @@ async def _init_setup_channel(discord_channel):
     await asyncio.gather(*add_roles_tasks)
     await _init_channel_state(discord_channel)
     await discord_channel.purge()
-    await discord_channel.send(generate_setup_channel_welcome_msg())
+    await discord_channel.send(
+        generate_setup_channel_welcome_msg(), view=RegisterView()
+    )
 
 
 async def make_read_only(channel_id: str, guild_id: Optional[int] = None):
@@ -607,14 +610,15 @@ def is_landing_page(channel_name: str):
 
 
 def generate_setup_channel_welcome_msg():
-    content = "Welcome to the in-game matrix system! In order for you to join the game, we must know your main **handle**. "
-    content += (
-        "Your starting money, access to private networks etc. are tied to this.\n\n"
-    )
-    content += 'To join, type "**/join** *handle*" below.\n'
-    content += 'For example, if you are shadow_weaver, type "/join shadow_weaver"\n\n'
-    content += (
+    return (
+        "Welcome to the in-game matrix system! In order for you to join the game, "
+        "we must know your main **handle**. "
+        "Your starting money, access to private networks etc. are tied to this."
+        "\n\n"
+        'To join, either press the "Register as player" button below'
+        'or type "**/join** *handle*" in the chat.\n'
+        'For example, if you are shadow_weaver, type "/join shadow_weaver"'
+        "\n\n"
         "If you are not sure what your main handle is, please contact the organizers.\n"
+        "==============================="
     )
-    content += "==============================="
-    return content

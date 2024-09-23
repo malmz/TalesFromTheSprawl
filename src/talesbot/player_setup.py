@@ -8,7 +8,6 @@ from . import actors, channels, finances, groups, handles, reactions, shops
 from .common import coin, emoji_accept
 from .config import config_dir
 from .custom_types import ActionResult, Actor, Handle, HandleTypes, PlayerData
-from .groups import Group
 from .shops import Shop
 
 # Known_handles is meant to be read-only during the event
@@ -315,7 +314,7 @@ async def setup_groups(actor_id: str, group_names: List[str]):
 
 
 async def setup_group_for_new_member(group_name: str, actor_id: str):
-    if Group.exists(group_name):
+    if groups.Group.exists(group_name):
         await groups.add_member_from_player_id(group_name, actor_id)
     else:
         await groups.create_new_group(group_name, [actor_id])

@@ -72,6 +72,9 @@ class TalesBot(commands.Bot):
         self.inital_extensions = inital_extensions
 
     async def setup_hook(self) -> None:
+        logger.debug("setup hook")
+        # self.add_view(RegisterView())
+
         for ext in self.inital_extensions:
             await self.load_extension(ext)
 
@@ -93,7 +96,7 @@ class TalesBot(commands.Bot):
         await handles.init(clear_all)
         await actors.init(clear_all=clear_all)
         await players.init(clear_all=clear_all)
-        await channels.init()
+        await channels.init(self)
         finances.init_finances()
         await chats.init(clear_all=clear_all)
         await shops.init(clear_all=clear_all)

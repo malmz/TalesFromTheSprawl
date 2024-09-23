@@ -47,6 +47,7 @@ LOGGING_CONFIG: dict[str, Any] = {
             "level": "INFO",
             "propagate": False,
         },
+        # "discord.client": {"handlers": ["default"], "level": "DEBUG"},
     },
 }
 
