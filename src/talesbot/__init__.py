@@ -13,6 +13,19 @@ from .bot import TalesBot
 from .config import config_dir
 from .logger import init_loggers
 
+config_folders = [
+    "actors",
+    "artifacts",
+    "chats",
+    "finances",
+    "groups",
+    "handles",
+    "logs",
+    "players",
+    "scenarios",
+    "shops",
+]
+
 
 async def start_bot():
     TOKEN = os.getenv("DISCORD_TOKEN")
@@ -25,22 +38,6 @@ async def start_bot():
         "talesbot.gm",
         "talesbot.artifacts",
     ]
-
-    config_folders = [
-        "actors",
-        "artifacts",
-        "chats",
-        "finances",
-        "groups",
-        "handles",
-        "logs",
-        "players",
-        "scenarios",
-        "shops",
-    ]
-
-    for folder in config_folders:
-        os.makedirs(config_dir / folder, exist_ok=True)
 
     intents = discord.Intents.default()
     intents.message_content = True
@@ -66,6 +63,10 @@ async def start() -> int:
 
 def main() -> int:
     load_dotenv()
+
+    for folder in config_folders:
+        os.makedirs(config_dir / folder, exist_ok=True)
+
     init_loggers()
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     with contextlib.suppress(KeyboardInterrupt):
