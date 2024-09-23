@@ -50,7 +50,9 @@ async def start_bot():
 
 
 async def start_api():
-    config = uvicorn.Config(app=app, port=5000, log_level="info")
+    host = os.getenv("HOST") or "127.0.0.1"
+    port = int(os.getenv("PORT") or "5000")
+    config = uvicorn.Config(app=app, host=host, port=port, log_level="info")
     server = uvicorn.Server(config)
     await server.serve()
 
