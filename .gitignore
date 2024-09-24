@@ -6,15 +6,8 @@ dist/
 wheels/
 *.egg-info
 
-# venv
-.venv
-
-
 # Runtime conf files
 config/
-config_old/
-*.csv
-*.conf
 .env
 
 # MacOS

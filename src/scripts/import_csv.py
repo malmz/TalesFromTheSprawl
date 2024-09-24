@@ -38,7 +38,7 @@ def parse_bool(val: str) -> bool:
 @click.command()
 @click.argument("input", type=click.File("r"), required=True)
 @click.argument("output", type=click.File("wb"), default="known_handles.conf")
-def import_csv(input: IO, output: IO):
+def main(input: IO, output: IO):
     config = ConfigObj()
     reader = csv.DictReader(input)
 
@@ -103,4 +103,4 @@ def import_csv(input: IO, output: IO):
 
 
 if __name__ == "__main__":
-    import_csv()
+    main()

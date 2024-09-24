@@ -22,7 +22,7 @@ handles_to_actors = "___handle_to_actor_mapping"
 @click.argument("known_handles_file", type=click.File(), required=True)
 @click.argument("handles_file", type=click.File(), required=True)
 @click.option("-a", "--all", is_flag=True, help="Print all handles, even joined ones")
-def unclaimed(known_handles_file: IO, handles_file: IO, all: bool):
+def main(known_handles_file: IO, handles_file: IO, all: bool):
     known_handles = ConfigObj(known_handles_file)
     handles = ConfigObj(handles_file)
 
@@ -46,4 +46,4 @@ def unclaimed(known_handles_file: IO, handles_file: IO, all: bool):
 
 
 if __name__ == "__main__":
-    unclaimed()
+    main()

@@ -19,8 +19,12 @@ requires-python = ">= 3.12"
 
 [project.scripts]
 "talesbot" = "talesbot:main"
-"import" = "scripts.import_csv:import_csv"
-"unclaimed" = "scripts.unclaimed:unclaimed"
+"import" = "scripts.import_csv:main"
+"unclaimed" = "scripts.unclaimed:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.ruff.lint]
 select = [
