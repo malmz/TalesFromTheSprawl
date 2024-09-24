@@ -55,7 +55,7 @@ class ShoppingCog(commands.Cog, name="shopping"):
         self.bot = bot
 
     @app_commands.command(
-        description="Order a product from a shop. Tip: it is much easier to order from their storefront channel",
+        description="Order a product from a shop",
     )
     async def order(
         self,
@@ -91,10 +91,7 @@ class ShoppingCog(commands.Cog, name="shopping"):
 
 
 class EmployeeCog(commands.GroupCog, group_name="shop"):
-    """Commands related to working at a store or restaurant.
-    For all of these commands, the "shop_name" argument is optional!
-    The system will find the store you work at, as long as you don't work at more than one.
-    If you want to order from a store/restaurant, see \".help shopping\" instead."""
+    """Commands related to working at a store or restaurant."""
 
     def __init__(self, bot):
         self.bot = bot
@@ -204,10 +201,9 @@ class EmployeeCog(commands.GroupCog, group_name="shop"):
         await interaction.followup.send(report, ephemeral=True)
 
     @product.command(
-        name="stock",
         description="Set a product to be in stock / out of stock. Value can be either True or False",
     )
-    async def in_stock_command(
+    async def stock(
         self,
         interaction: Interaction,
         product_name: str,
@@ -229,23 +225,16 @@ class EmployeeCog(commands.GroupCog, group_name="shop"):
         self, interaction: Interaction, product_name: str = None, shop_name: str = None
     ):
         await interaction.response.defer(ephemeral=True)
-        report = await self.publish_menu_inner(
-            interaction.user.id, product_name, shop_name
-        )
-        await interaction.followup.send(report, ephemeral=True)
-
-    async def publish_menu_inner(
-        self, user_id: int, product_name: str = None, shop_name: str = None
-    ):
         if product_name is not None:
             report = await _update_storefront_channel(
-                str(user_id), product_name, shop_name
+                str(interaction.user.id), product_name, shop_name
             )
         else:
-            report = await update_storefront(str(user_id), shop_name)
+            report = await update_storefront(str(interaction.user.id), shop_name)
         if report is None:
             report = "Command finished without any output."
-        return report
+
+        await interaction.followup.send(report, ephemeral=True)
 
     @app_commands.command(
         description="Shop owner only: clear your shop's orders.",
@@ -490,7 +479,7 @@ class Order:
         paid_total: int = 0,
         order_flow_msg_id: str = None,
         time_created: PostTimestamp = None,
-        undo_hooks: List[Tuple[str, str]] = None,
+        undo_hooks: list[tuple[str, str]] = None,
         items_ordered=None,
     ):
         if items_ordered is None:
@@ -511,12 +500,8 @@ class Order:
         obj = Order(None, None, None)
         loaded_dict = simplejson.loads(string)
         obj.__dict__.update(loaded_dict)
-        obj.time_created: PostTimestamp = PostTimestamp.from_string(
-            loaded_dict["time_created"]
-        )
-        obj.time_updated: PostTimestamp = PostTimestamp.from_string(
-            loaded_dict["time_updated"]
-        )
+        obj.time_created = PostTimestamp.from_string(loaded_dict["time_created"])
+        obj.time_updated = PostTimestamp.from_string(loaded_dict["time_updated"])
         return obj
 
     def to_string(self):
@@ -891,9 +876,11 @@ def store_delivery_choice_message(shop_name: str, msg_id: str, guild_id: int):
 def get_tipping_message(shop_name: str, guild_id: int):
     if shop_exists(shop_name):
         storefront = get_storefront(shop_name)
-        if tipping_msg_index in storefront:
-            if str(guild_id) in storefront[tipping_msg_index]:
-                return storefront[tipping_msg_index][str(guild_id)]
+        if (
+            tipping_msg_index in storefront
+            and str(guild_id) in storefront[tipping_msg_index]
+        ):
+            return storefront[tipping_msg_index][str(guild_id)]
 
 
 def store_tipping_message(shop_name: str, msg_id: str, guild_id: int):
@@ -1585,14 +1572,16 @@ bar_emoji = "🍸"
 call_emoji = "📣"
 
 
-async def update_storefront_delivery_choice_message(shop: Shop, channel):
+async def update_storefront_delivery_choice_message(
+    shop: Shop, channel: channels.GuildChannel
+):
     tipping_message = get_tipping_message(shop.shop_id, channel.guild.id)
     if not tipping_message:
         await channel.purge()
         await channel.send(
-            f"{common.hard_space}\n"
-            + "Use the buttons below to order! If you make a mistake, you can cancel the order from your **finance** channel (if you're fast enough).\n"
-            + f"{common.hard_space}"
+            "Use the buttons below to order! "
+            "If you make a mistake, you can cancel the order from your "
+            "**finance** channel (if you're fast enough)."
         )
 
 
