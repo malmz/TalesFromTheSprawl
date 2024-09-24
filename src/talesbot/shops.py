@@ -6,7 +6,7 @@ import logging
 import os
 from copy import deepcopy
 from enum import Enum
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import discord
 import simplejson
@@ -42,6 +42,14 @@ logger = logging.getLogger(__name__)
 # the in-game bar/restaurant as a shop, using .create_shop etc.
 main_shop = os.getenv("MAIN_SHOP_NAME")
 
+
+type VocalGuildChannel = discord.VoiceChannel | discord.StageChannel
+type GuildChannel = Union[
+    VocalGuildChannel,
+    discord.ForumChannel,
+    discord.TextChannel,
+    discord.CategoryChannel,
+]
 
 # TODO: add role check: GMs can do anything to any shop
 # TODO: change so that a shop does not have to have an owner to function
@@ -1572,9 +1580,7 @@ bar_emoji = "🍸"
 call_emoji = "📣"
 
 
-async def update_storefront_delivery_choice_message(
-    shop: Shop, channel: channels.GuildChannel
-):
+async def update_storefront_delivery_choice_message(shop: Shop, channel: GuildChannel):
     tipping_message = get_tipping_message(shop.shop_id, channel.guild.id)
     if not tipping_message:
         await channel.purge()
