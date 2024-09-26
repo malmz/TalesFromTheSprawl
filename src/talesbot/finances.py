@@ -185,6 +185,64 @@ highest_transaction_index = "___highest"
 system_fake_handle = "[system]"
 
 
+class ReportError(Exception):
+    """User facing error with safe printable message"""
+
+    def __init__(self, message: str | None) -> None:
+        self.message = message if message is not None else "Oops! Something when wrong!"
+        super().__init__(message)
+
+    def __str__(self) -> str:
+        messages = [
+            self.message if self.message is not None else "Oops! Something when wrong!"
+        ]
+        inner = self.__cause__
+        while inner is not None:
+            match inner:
+                case ReportError() as r:
+                    if r.message is not None:
+                        messages.append(r.message)
+
+            inner = inner.__cause__
+        return "\n".join(messages)
+
+
+class InsufficientBalanceError(ReportError):
+    def __init__(
+        self, sender: str, receiver: str, amount: int, sender_balance: int
+    ) -> None:
+        self.sender = sender
+        self.receiver = receiver
+        self.amount = amount
+        self.sender_balance = sender_balance
+
+        super().__init__(
+            f"Could not transfer {fmt_money(amount)} to {receiver}, "
+            f"insufficient funds on {sender} ({fmt_money(sender_balance)})"
+        )
+
+
+class InvalidPartiesError(ReportError):
+    def __init__(self, sender: str, receiver: str) -> None:
+        self.sender = sender
+        self.receiver = receiver
+        super().__init__(
+            f"Cannot transfer funds from {fmt_handle(sender)} to {fmt_handle(receiver)}"
+        )
+
+
+class InvalidAmountError(ReportError):
+    def __init__(self, amount: int) -> None:
+        self.amount = amount
+        if amount < 0:
+            message = f"Cannot transfer negative funds ({fmt_money(amount)})"
+        elif amount == 0:
+            message = "Cannot transfer zero funds"
+        else:
+            message = f"Cannot transfer {fmt_money(amount)}"
+        super().__init__(message)
+
+
 def init_finances():
     for handle in handles.get_all_handles():
         if can_have_finances(handle.handle_type):
@@ -236,6 +294,79 @@ def set_current_balance_handle_id(handle_id: str, balance: int):
     finances_conf = ConfigObj(file_name)
     finances_conf[balance_index] = str(balance)
     finances_conf.write()
+
+
+def fmt_money(amount: int) -> str:
+    return f"{coin}{amount}" if amount >= 0 else f"-{coin}{-amount}"
+
+
+def fmt_handle(handle: str | None) -> str:
+    return handle if handle is not None else system_fake_handle
+
+
+async def transfer_funds(
+    sender_handle: str | None,
+    receiver_handle: str | None,
+    amount: int,
+    allow_partial=False,
+    operation=TransTypes.Transfer,
+):
+    if sender_handle == receiver_handle:
+        raise InvalidPartiesError(sender_handle, receiver_handle)
+
+    if amount <= 0:
+        raise InvalidAmountError(amount)
+
+    sender_balance = (
+        get_current_balance_handle_id(sender_handle)
+        if sender_handle is not None
+        else amount
+    )
+
+    if allow_partial:
+        amount = min(amount, sender_balance)
+
+    if sender_balance < amount:
+        raise InsufficientBalanceError(
+            sender_handle, receiver_handle, amount, sender_balance
+        )
+
+    if receiver_handle is not None:
+        receiver_balance = get_current_balance_handle_id(receiver_handle)
+        set_current_balance_handle_id(receiver_handle, receiver_balance + amount)
+
+    if sender_handle is not None:
+        set_current_balance_handle_id(sender_balance, sender_balance - amount)
+
+    transaction = Transaction(
+        payer=fmt_handle(sender_handle),
+        payer_actor=None,
+        recip=fmt_handle(receiver_handle),
+        recip_actor=None,
+        amount=amount,
+        cause=operation,
+    )
+
+    find_transaction_parties(transaction)
+
+    if (
+        transaction.payer_actor is not None
+        and transaction.payer_actor == transaction.recip_actor
+    ):
+        transaction.report = (
+            f"Successfully transferred {fmt_money(transaction.amount)} "
+            f"from {transaction.payer} to {transaction.recip}. "
+            "(Note: you control both accounts.)"
+        )
+    else:
+        transaction.report = (
+            f"Successfully transferred {fmt_money(transaction.amount)} "
+            f"from {transaction.payer} to {transaction.recip}."
+        )
+
+    await record_transaction(transaction)
+
+    return transaction
 
 
 def add_internal_record(handle_id: str, record: InternalTransRecord):

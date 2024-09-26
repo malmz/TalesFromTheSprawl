@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -20,21 +19,31 @@ async def balance(handle: str):
 
 
 class Transfer(BaseModel):
-    sender: Optional[str] = None
-    receiver: Optional[str] = None
+    sender: str | None = None
+    receiver: str | None = None
     amount: int
+    allow_partial: bool = False
 
 
 @app.post("/api/transfer")
 async def transfer(data: Transfer):
-    payer = data.sender if data.sender is not None else finances.system_fake_handle
-    recip = data.receiver if data.receiver is not None else finances.system_fake_handle
-
-    logger.info(f"Sending {data.amount}¥ from {payer} to {recip}")
+    logger.info(
+        f"Transfering {finances.fmt_money(data.amount)} from "
+        f"{finances.fmt_handle(data.sender)} to {finances.fmt_handle(data.sender)}"
+    )
     try:
-        transaction = Transaction(payer=payer, recip=recip, amount=data.amount)
-        finances.find_transaction_parties(transaction)
-        await finances.record_transaction(transaction)
-        return {"status": "ok"}
+        transaction = await finances.transfer_funds(
+            data.sender, data.receiver, data.amount, allow_partial=True
+        )
+
+        return {
+            "status": "ok",
+            "message": transaction.report,
+            "amount": transaction.amount,
+        }
     except Exception as e:
+        logger.exception(
+            f"Failed transfering {finances.fmt_money(data.amount)} from "
+            f"{finances.fmt_handle(data.sender)} to {finances.fmt_handle(data.sender)}"
+        )
         return {"status": "error", "msg": str(e)}
