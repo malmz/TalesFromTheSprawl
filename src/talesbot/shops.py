@@ -6,16 +6,17 @@ import logging
 import os
 from copy import deepcopy
 from enum import Enum
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, cast
 
 import discord
 import simplejson
 from configobj import ConfigObj
-from discord import Interaction, app_commands
+from discord import Interaction, Member, app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
 from talesbot import checks, gm
+from .errors import NotRegisterdError
 
 # Custom imports
 from . import actors, channels, common, finances, handles, players, server
@@ -112,7 +113,7 @@ class EmployeeCog(commands.GroupCog, group_name="shop"):
     @app_commands.command(
         description="Create a new shop, run by a certain player.",
     )
-    @app_commands.checks.has_role(gm.role_name)
+    @checks.is_gm
     async def create(self, interaction: Interaction, shop_name: str, player_id: str):
         await interaction.response.defer(ephemeral=True)
         async with handles.semaphore():
@@ -152,19 +153,20 @@ class EmployeeCog(commands.GroupCog, group_name="shop"):
             report = "Unknown error. Contact system admin."
         await interaction.followup.send(report, ephemeral=True)
 
-    product = app_commands.Group(name="product", description="Manage store products")
+    product_g = app_commands.Group(name="product", description="Manage store products")
 
-    @product.command(
+    @product_g.command(
+        name="add",
         description="Add a new product to the shop.",
     )
-    async def add(
+    async def add_product(
         self,
         interaction: Interaction,
         product_name: str,
-        description: str = None,
+        description: str | None = None,
         price: int = 0,
-        symbol: str = None,
-        shop_name: str = None,
+        symbol: str | None = None,
+        shop_name: str | None = None,
     ):
         await interaction.response.defer(ephemeral=True)
         report = await add_product(
@@ -179,16 +181,17 @@ class EmployeeCog(commands.GroupCog, group_name="shop"):
             report = "Unknown error. Contact system admin."
         await interaction.followup.send(report, ephemeral=True)
 
-    @product.command(
+    @product_g.command(
+        name="edit",
         description="Edit one of the shop's existing products. Don't forget to re-publish menu after changes.",
     )
-    async def edit(
+    async def edit_product(
         self,
         interaction: Interaction,
         product_name: str,
-        key: str = None,
-        value: str = None,
-        shop_name: str = None,
+        key: str | None = None,
+        value: str | None = None,
+        shop_name: str | None = None,
     ):
         await interaction.response.defer(ephemeral=True)
         report = await edit_product_from_command(
@@ -198,10 +201,11 @@ class EmployeeCog(commands.GroupCog, group_name="shop"):
             report = "Unknown error. Contact system admin."
         await interaction.followup.send(report, ephemeral=True)
 
-    @product.command(
+    @product_g.command(
+        name="remove",
         description="Delete a product from the shop.",
     )
-    async def remove(
+    async def remove_product(
         self, interaction: Interaction, product_name: str, shop_name: str = None
     ):
         await interaction.response.defer(ephemeral=True)
@@ -210,15 +214,16 @@ class EmployeeCog(commands.GroupCog, group_name="shop"):
             report = "Unknown error. Contact system admin."
         await interaction.followup.send(report, ephemeral=True)
 
-    @product.command(
+    @product_g.command(
+        name="stock",
         description="Set a product to be in stock / out of stock. Value can be either True or False",
     )
-    async def stock(
+    async def stock_product(
         self,
         interaction: Interaction,
         product_name: str,
         value: bool = True,
-        shop_name: str = None,
+        shop_name: str | None = None,
     ):
         await interaction.response.defer(ephemeral=True)
         report = await edit_product_from_command(
@@ -232,7 +237,10 @@ class EmployeeCog(commands.GroupCog, group_name="shop"):
         description="Publish the current catalogue/menu",
     )
     async def publish_menu(
-        self, interaction: Interaction, product_name: str = None, shop_name: str = None
+        self,
+        interaction: Interaction,
+        product_name: str | None = None,
+        shop_name: str | None = None,
     ):
         await interaction.response.defer(ephemeral=True)
         if product_name is not None:
@@ -249,23 +257,57 @@ class EmployeeCog(commands.GroupCog, group_name="shop"):
     @app_commands.command(
         description="Shop owner only: clear your shop's orders.",
     )
-    async def clear_orders(self, interaction: Interaction, shop_name: str = None):
+    async def clear_orders(
+        self, interaction: Interaction, shop_name: str | None = None
+    ):
         await interaction.response.defer(ephemeral=True)
         await reinitialize(str(interaction.user.id), shop_name)
-        report = await self.publish_menu_inner(interaction.user.id, shop_name=shop_name)
+        report = await update_storefront(str(interaction.user.id), shop_name)
         await interaction.followup.send(report, ephemeral=True)
 
     @app_commands.command(
         description="Set which handle should get your tips. If no handle is given you will not be shown at all.",
     )
     async def set_tips(
-        self, interaction: Interaction, handle_id: str = None, shop_name: str = None
+        self,
+        interaction: Interaction,
+        handle_id: str | None = None,
+        shop_name: str | None = None,
     ):
         await interaction.response.defer(ephemeral=True)
         report = await set_tips_for_user(str(interaction.user.id), handle_id, shop_name)
         if report is None:
             report = "Unknown error. Contact system admin"
         await interaction.followup.send(report, ephemeral=True)
+
+    @edit_product.autocomplete("product_name")
+    @remove_product.autocomplete("product_name")
+    @stock_product.autocomplete("product_name")
+    @publish_menu.autocomplete("product_name")
+    async def autocomplete_product_name(
+        self, interaction: Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return [
+            app_commands.Choice(name=product.name, value=cast(str, product.product_id))
+            for product in get_all_products("trinity_taskbar")
+            if current.lower() in product.name.lower()
+        ]
+
+    @add_product.autocomplete("shop_name")
+    @edit_product.autocomplete("shop_name")
+    @remove_product.autocomplete("shop_name")
+    @stock_product.autocomplete("shop_name")
+    @publish_menu.autocomplete("shop_name")
+    @clear_orders.autocomplete("shop_name")
+    @set_tips.autocomplete("shop_name")
+    async def autocomplete_shop_name(
+        self, interaction: Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return [
+            app_commands.Choice(name=id, value=id)
+            for id in get_all_shop_ids()
+            if current.lower() in id.lower()
+        ]
 
 
 async def setup(bot: commands.Bot):
@@ -717,7 +759,7 @@ def get_all_shop_ids():
     shops = get_shops_configobj()
     for shop_id in shops[shop_data_index]:
         if shop_id != highest_ever_index:
-            yield shop_id
+            yield cast(str, shop_id)
 
 
 def store_shop(shop: Shop):
@@ -780,7 +822,7 @@ def get_catalogue(shop_name: str):
 def get_all_products(shop_name: str):
     catalogue = get_catalogue(shop_name)
     for product_id in catalogue[product_entries_index]:
-        yield read_product_from_cat(catalogue, product_id)
+        yield cast(Product, read_product_from_cat(catalogue, product_id))
 
 
 def product_exists(shop_name: str, product_name: str):
@@ -1198,19 +1240,16 @@ async def create_shop(shop_name: str, handle_id: str, is_owner: bool = False):
 
 
 async def find_shop_for_command(
-    user_id: str, shop_name: str, must_be_owner: bool = False
+    user_id: str, shop_name: str | None, must_be_owner: bool = False
 ):
-    if user_id is None:
-        raise RuntimeError(
-            "Tried to find a shop, but the action initiator user_id was not found."
-        )
-
     result = FindShopResult()
     if shop_name is not None and not shop_exists(shop_name):
         result.error_report = f"Error: there is no shop named {shop_name}."
         return result
 
-    player_id = players.get_player_id(user_id)
+    player_id = players.get_player_id(str(user_id))
+    if player_id is None:
+        raise NotRegisterdError(user_id)
 
     is_gm_or_admin = await players.is_gm_or_admin(player_id)
 
@@ -1422,10 +1461,10 @@ def get_emoji_for_new_product(symbol: str):
 async def add_product(
     user_id: str,
     product_name: str,
-    description: str,
+    description: str | None,
     price: int,
-    symbol: str,
-    shop_name: str,
+    symbol: str | None,
+    shop_name: str | None,
 ):
     result: FindShopResult = await find_shop_for_command(user_id, shop_name)
     if result.error_report is not None or result.shop is None:
@@ -1518,9 +1557,9 @@ def edit_product(shop: Shop, product_name: str, key: str, value: str):
         product.description = value
         edited = True
     elif key in ["available", "in_stock"]:
-        if value in ["true", "t", "1"]:
+        if value in ["True", "true", "t", "1"]:
             new_value = True
-        elif value in ["false", "f", "0"]:
+        elif value in ["False", "false", "f", "0"]:
             new_value = False
         else:
             return f'Error: did not understand value "{value}" for property "{key}"'

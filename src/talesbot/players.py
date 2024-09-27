@@ -124,7 +124,7 @@ def read_player_data(player_id: str):
         return PlayerData.from_string(players[player_id])
 
 
-def get_player_id(user_id: str, expect_to_find=True):
+def get_player_id(user_id: str, expect_to_find=True) -> str | None:
     players = get_players_confobj()
     if user_id not in players[user_id_mappings_index]:
         if expect_to_find:
@@ -133,7 +133,7 @@ def get_player_id(user_id: str, expect_to_find=True):
                 "User has not been initialized as a player. Did you run /join?"
             )
         return None
-    return players[user_id_mappings_index][user_id]
+    return players[user_id_mappings_index][user_id]  # type: ignore
 
 
 def get_player_category_index(player_id: str):

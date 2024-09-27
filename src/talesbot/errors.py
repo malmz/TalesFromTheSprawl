@@ -66,5 +66,8 @@ class ArtifactNotFoundError(ReportError):
 
 
 class NotRegisterdError(ReportError):
-    def __init__(self, user: Member) -> None:
-        super().__init__(f"User {user.name} is not registerd as a player")
+    def __init__(self, user: Member | str) -> None:
+        super().__init__(
+            f"User {user.name if isinstance(user, Member) else user} "
+            "is not registerd as a player"
+        )
