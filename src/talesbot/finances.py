@@ -5,6 +5,10 @@ from configobj import ConfigObj
 from discord import Interaction, app_commands
 from discord.ext import commands
 
+from .errors import InsufficientBalanceError, InvalidAmountError, InvalidPartiesError
+
+from .utils import fmt_handle, fmt_money
+
 from . import actors, handles, players
 from .common import coin, transaction_collected, transaction_collector
 from .config import config_dir
@@ -185,64 +189,6 @@ highest_transaction_index = "___highest"
 system_fake_handle = "[system]"
 
 
-class ReportError(Exception):
-    """User facing error with safe printable message"""
-
-    def __init__(self, message: str | None) -> None:
-        self.message = message if message is not None else "Oops! Something when wrong!"
-        super().__init__(message)
-
-    def __str__(self) -> str:
-        messages = [
-            self.message if self.message is not None else "Oops! Something when wrong!"
-        ]
-        inner = self.__cause__
-        while inner is not None:
-            match inner:
-                case ReportError() as r:
-                    if r.message is not None:
-                        messages.append(r.message)
-
-            inner = inner.__cause__
-        return "\n".join(messages)
-
-
-class InsufficientBalanceError(ReportError):
-    def __init__(
-        self, sender: str, receiver: str, amount: int, sender_balance: int
-    ) -> None:
-        self.sender = sender
-        self.receiver = receiver
-        self.amount = amount
-        self.sender_balance = sender_balance
-
-        super().__init__(
-            f"Could not transfer {fmt_money(amount)} to {receiver}, "
-            f"insufficient funds on {sender} ({fmt_money(sender_balance)})"
-        )
-
-
-class InvalidPartiesError(ReportError):
-    def __init__(self, sender: str, receiver: str) -> None:
-        self.sender = sender
-        self.receiver = receiver
-        super().__init__(
-            f"Cannot transfer funds from {fmt_handle(sender)} to {fmt_handle(receiver)}"
-        )
-
-
-class InvalidAmountError(ReportError):
-    def __init__(self, amount: int) -> None:
-        self.amount = amount
-        if amount < 0:
-            message = f"Cannot transfer negative funds ({fmt_money(amount)})"
-        elif amount == 0:
-            message = "Cannot transfer zero funds"
-        else:
-            message = f"Cannot transfer {fmt_money(amount)}"
-        super().__init__(message)
-
-
 def init_finances():
     for handle in handles.get_all_handles():
         if can_have_finances(handle.handle_type):
@@ -296,14 +242,6 @@ def set_current_balance_handle_id(handle_id: str, balance: int):
     finances_conf.write()
 
 
-def fmt_money(amount: int) -> str:
-    return f"{coin}{amount}" if amount >= 0 else f"-{coin}{-amount}"
-
-
-def fmt_handle(handle: str | None) -> str:
-    return handle if handle is not None else system_fake_handle
-
-
 async def transfer_funds(
     sender_handle: str | None,
     receiver_handle: str | None,
@@ -336,7 +274,7 @@ async def transfer_funds(
         set_current_balance_handle_id(receiver_handle, receiver_balance + amount)
 
     if sender_handle is not None:
-        set_current_balance_handle_id(sender_balance, sender_balance - amount)
+        set_current_balance_handle_id(sender_handle, sender_balance - amount)
 
     transaction = Transaction(
         payer=fmt_handle(sender_handle),
