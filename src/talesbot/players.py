@@ -5,10 +5,11 @@ from typing import List, cast
 import discord
 from configobj import ConfigObj
 
+from talesbot import gm
+
 from . import actors, channels, common, player_setup, server, shops
 from .common import (
     admin_role_name,
-    gm_role_name,
     highest_ever_index,
     player_personal_role_start,
 )
@@ -297,7 +298,7 @@ def remove_group(player_id: str, group_id: str):
 async def is_gm(player_id: str):
     if player_exists(player_id):
         member = await server.get_member_from_nick(player_id)
-        return server.check_member_has_role(member, [gm_role_name])
+        return server.check_member_has_role(member, [gm.role_name])
 
 
 async def is_admin(player_id: str):
@@ -310,4 +311,4 @@ async def is_gm_or_admin(player_id: str):
     if player_exists(player_id):
         member = await server.get_member_from_nick(player_id)
         logger.debug(f"Checking if {player_id} is gm or admin")
-        return server.check_member_has_role(member, [gm_role_name, admin_role_name])
+        return server.check_member_has_role(member, [gm.role_name, admin_role_name])

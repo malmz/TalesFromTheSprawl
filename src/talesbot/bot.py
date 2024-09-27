@@ -2,7 +2,6 @@ import asyncio
 import logging
 import os
 import re
-from typing import List, override
 
 import discord
 from discord.app_commands import BotMissingPermissions
@@ -11,7 +10,6 @@ from discord.ext import commands
 
 from talesbot import (
     actors,
-    artifacts,
     channels,
     chats,
     finances,
@@ -26,6 +24,9 @@ from talesbot import (
     shops,
 )
 
+from .errors import ReportError
+from .ui.register import RegisterView
+
 guild_name = os.getenv("GUILD_NAME")
 clear_all = os.getenv("CLEAR_ALL") == "true"
 destroy_all = os.getenv("DESTROY_ALL") == "true"
@@ -38,13 +39,26 @@ class TalesCommandTree(discord.app_commands.CommandTree):
     async def on_error(
         self, interaction: discord.Interaction[discord.Client], error: AppCommandError
     ) -> None:
+        logger.error("Command error", exc_info=error)
         match error:
+            case ReportError() as e:
+                await interaction.response.send_message(str(e), ephemeral=True)
             case BotMissingPermissions():
                 await interaction.response.send_message(error, ephemeral=True)
             case MissingRole():
                 await interaction.response.send_message(
                     "You are not allowed to run this command.", ephemeral=True
                 )
+            case CommandInvokeError(__cause__=ReportError()) as e:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        f"Error: {str(error.__cause__)}", ephemeral=True
+                    )
+                else:
+                    await interaction.followup.send(
+                        f"Error: {str(error.__cause__)}", ephemeral=True
+                    )
+
             case CommandInvokeError(__cause__=RuntimeError()):
                 try:
                     await interaction.response.send_message(
@@ -67,13 +81,12 @@ class TalesCommandTree(discord.app_commands.CommandTree):
 
 
 class TalesBot(commands.Bot):
-    def __init__(self, *args, inital_extensions: List[str], **kwargs):
+    def __init__(self, *args, inital_extensions: list[str], **kwargs):
         super().__init__(*args, tree_cls=TalesCommandTree, **kwargs)
         self.inital_extensions = inital_extensions
 
     async def setup_hook(self) -> None:
-        logger.debug("setup hook")
-        # self.add_view(RegisterView())
+        self.add_view(RegisterView())
 
         for ext in self.inital_extensions:
             await self.load_extension(ext)
@@ -103,7 +116,6 @@ class TalesBot(commands.Bot):
         await shops.init(clear_all=clear_all)
         await groups.init(clear_all=clear_all)
         reactions.init()
-        artifacts.init(clear_all=clear_all)
         await gm.init(clear_all=clear_all)
         game.init()
         logger.debug("Initialization complete.")
@@ -231,7 +243,7 @@ class TalesBot(commands.Bot):
                 logger.info(f"Removing category {category.name}")
                 await category.delete()
             for role in roles:
-                if role.name in ["gm", "new_player"] or role.name.isdigit():
+                if role.name in [gm.role_name, "new_player"] or role.name.isdigit():
                     logger.info(f"Removing role {role.name}")
                     await role.delete()
 

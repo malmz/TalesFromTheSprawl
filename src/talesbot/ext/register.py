@@ -1,7 +1,6 @@
 import logging
 from typing import cast
 
-import discord
 from discord import Interaction, Member, app_commands
 from discord.ext import commands
 from talesbot import common, handles, players

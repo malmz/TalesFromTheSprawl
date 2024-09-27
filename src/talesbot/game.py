@@ -74,7 +74,13 @@ reserved_handles = {
     "balance",
     "pay",
 }
-meta_handles = {"admin", "system", "gm", "arr", "eclipse"}  # TODO create dynamically
+meta_handles = {
+    "admin",
+    "system",
+    "gm",
+    "arr",
+    "eclipse",
+}  # TODO create dynamically
 
 
 def is_handle_reserved(handle_id: str):

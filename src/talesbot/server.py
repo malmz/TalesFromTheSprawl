@@ -4,10 +4,11 @@ from typing import List
 
 import discord
 
+from talesbot import gm
+
 from .common import (
     admin_role_name,
     all_players_role_name,
-    gm_role_name,
     new_player_role_name,
     system_role_name,
 )
@@ -54,7 +55,7 @@ async def init(connected_guilds):
         for role_name in [
             system_role_name,
             admin_role_name,
-            gm_role_name,
+            gm.role_name,
             all_players_role_name,
             new_player_role_name,
         ]:
@@ -131,7 +132,7 @@ def get_admin_role(guild):
 
 
 def get_gm_role(guild):
-    return guild_roles[guild.id][gm_role_name]
+    return guild_roles[guild.id][gm.role_name]
 
 
 def get_new_player_role(guild):
@@ -204,7 +205,7 @@ async def get_all_channels():
 
 
 async def send_message_to_all(channel_name: str, content: str):
-    import posting
+    from . import posting
 
     msg_data = posting.MessageData(content, 0)
     channels = await get_mirrored_channels_by_name(channel_name)

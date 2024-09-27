@@ -15,6 +15,8 @@ from discord import Interaction, app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
+from talesbot import checks, gm
+
 # Custom imports
 from . import actors, channels, common, finances, handles, players, server
 from .common import (
@@ -82,7 +84,7 @@ class ShoppingCog(commands.Cog, name="shopping"):
     @app_commands.command(
         description="Admin-only. Order a product from a shop for someone else.",
     )
-    @app_commands.checks.has_role("gm")
+    @checks.is_gm
     async def order_other(
         self,
         interaction: Interaction,
@@ -110,7 +112,7 @@ class EmployeeCog(commands.GroupCog, group_name="shop"):
     @app_commands.command(
         description="Create a new shop, run by a certain player.",
     )
-    @app_commands.checks.has_role(common.gm_role_name)
+    @app_commands.checks.has_role(gm.role_name)
     async def create(self, interaction: Interaction, shop_name: str, player_id: str):
         await interaction.response.defer(ephemeral=True)
         async with handles.semaphore():

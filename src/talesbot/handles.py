@@ -6,6 +6,8 @@ from configobj import ConfigObj
 from discord import Interaction, app_commands
 from discord.ext import commands
 
+from talesbot import checks
+
 from . import actors, chats, finances, game, gm, players
 from .common import coin
 from .config import config_dir
@@ -43,14 +45,14 @@ class HandlesCog(commands.Cog, name="handles"):
         await self.handle_command_internal(interaction, handle_name, burner=False)
 
     @app_commands.command(description="Show current handle for the gm user")
-    @app_commands.checks.has_role("gm")
+    @checks.is_gm
     async def show_gm_handle(self, interaction: Interaction):
         await self.handle_command_internal(
             interaction, None, burner=False, use_gm_actor=True
         )
 
     @app_commands.command(description="Switch handle for gm user")
-    @app_commands.checks.has_role("gm")
+    @checks.is_gm
     async def gm_handle(self, interaction: Interaction, handle_name: str):
         await self.handle_command_internal(
             interaction, handle_name, burner=False, use_gm_actor=True
@@ -87,7 +89,7 @@ class HandlesCog(commands.Cog, name="handles"):
     @app_commands.command(
         name="show_handles", description="Show all handles for another player."
     )
-    @app_commands.checks.has_role("gm")
+    @checks.is_gm
     async def show_handles_command(self, interaction: Interaction, handle_id: str):
         await interaction.response.defer(ephemeral=True)
         response = await get_full_handles_report_for_handle(handle_id)
@@ -105,7 +107,7 @@ class HandlesCog(commands.Cog, name="handles"):
         description="Admin-only. Remove all handles and reset all users",
         #        help='Admin-only. Remove all handles (including all financial info) and reset all users to their original handle uXXXX.'
     )
-    @app_commands.checks.has_role("gm")
+    @checks.is_gm
     async def clear_handles_command(self, interaction: Interaction):
         await interaction.response.defer(ephemeral=True)
         async with semaphore():
@@ -117,7 +119,7 @@ class HandlesCog(commands.Cog, name="handles"):
         name="remove_handle",
         description="Admin-only. Remove a handle (including all financial info) without a trace.",
     )
-    @app_commands.checks.has_role("gm")
+    @checks.is_gm
     async def remove_handle_command(self, interaction: Interaction, handle_id: str):
         await interaction.response.defer(ephemeral=True)
         async with semaphore():

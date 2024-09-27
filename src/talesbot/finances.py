@@ -5,6 +5,8 @@ from configobj import ConfigObj
 from discord import Interaction, app_commands
 from discord.ext import commands
 
+from talesbot import checks
+
 from .errors import InsufficientBalanceError, InvalidAmountError, InvalidPartiesError
 
 from .utils import fmt_handle, fmt_money
@@ -34,7 +36,7 @@ class FinancesCog(commands.Cog, name="finances"):
         name="create_money",
         description="Admin-only. Creates new money and deposits them in a handle.",
     )
-    @app_commands.checks.has_role("gm")
+    @checks.is_gm
     async def create_money_command(
         self, interaction: Interaction, handle_id: str, amount: int
     ):
@@ -54,7 +56,7 @@ class FinancesCog(commands.Cog, name="finances"):
     @app_commands.command(
         name="set_money", description="Admin-only. Sets the balance of an account."
     )
-    @app_commands.checks.has_role("gm")
+    @checks.is_gm
     async def set_money_command(
         self, interaction: Interaction, handle_id: str, amount: int
     ):

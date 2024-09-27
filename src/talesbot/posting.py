@@ -57,7 +57,7 @@ def sanitize_bold(content: str):
     return add_space(content) if starts_with_bold(content) else content
 
 
-def create_header(timestamp, sender: str, recip: str = None):
+def create_header(timestamp, sender: str, recip: str | None = None):
     sender_info = f"**{sender}**" if recip is None else f"**{sender}** to {recip}"
     # Manual DST fix:
     post_timestamp = PostTimestamp(timestamp.hour + 2, timestamp.minute)
@@ -67,8 +67,8 @@ def create_header(timestamp, sender: str, recip: str = None):
 
 def create_post(
     msg_data: MessageData,
-    sender: str,
-    recip: str = None,
+    sender: str | None,
+    recip: str | None = None,
     attachments_supported: bool = True,
 ):
     post = sanitize_bold(msg_data.content)
@@ -84,7 +84,7 @@ def create_post(
 
 # TODO: pass in "full_post : bool" instead of checking sender == None
 async def repost_message_to_channel(
-    channel, msg_data: MessageData, sender: str, recip: str = None
+    channel, msg_data: MessageData, sender: str | None, recip: str | None = None
 ):
     post = create_post(msg_data, sender, recip)
     files = [await a.to_file() for a in msg_data.attachments]

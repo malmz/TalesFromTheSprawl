@@ -1,3 +1,4 @@
+from discord import Member
 from .utils import fmt_handle, fmt_money
 
 
@@ -57,3 +58,13 @@ class InvalidAmountError(ReportError):
         else:
             message = f"Cannot transfer {fmt_money(amount)}"
         super().__init__(message)
+
+
+class ArtifactNotFoundError(ReportError):
+    def __init__(self, name: str) -> None:
+        super().__init__(f'Entity "{name}" not found. Check the spelling')
+
+
+class NotRegisterdError(ReportError):
+    def __init__(self, user: Member) -> None:
+        super().__init__(f"User {user.name} is not registerd as a player")

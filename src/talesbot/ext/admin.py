@@ -4,7 +4,7 @@ import discord
 from discord import Interaction, Member, app_commands, utils
 from discord.app_commands.errors import MissingRole, NoPrivateMessage
 from discord.ext import commands
-from talesbot import actors, groups, handles, players
+from talesbot import actors, gm, groups, handles, players
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +19,10 @@ class AdminCog(commands.GroupCog, group_name="admin"):
         if isinstance(interaction.user, discord.User):
             raise NoPrivateMessage()
 
-        role = utils.get(interaction.user.roles, name="gm")
+        role = utils.get(interaction.user.roles, name=gm.role_name)
 
         if role is None:
-            raise MissingRole("gm")
+            raise MissingRole(gm.role_name)
         return True
 
     player = app_commands.Group(name="player", description="Manage players")

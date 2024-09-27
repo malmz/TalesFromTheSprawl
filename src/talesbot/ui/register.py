@@ -1,7 +1,8 @@
 import logging
+from typing import cast
 
 import discord
-from discord import ui
+from discord import Member, ui
 
 logger = logging.getLogger(__name__)
 
@@ -17,10 +18,10 @@ class HandleModal(ui.Modal, title="Register as player"):
 
         await interaction.response.defer(ephemeral=True)
         handle = self.handle.value
-        member = await interaction.guild.fetch_member(interaction.user.id)
-        if member is None:
-            await interaction.followup.send("Failed: member not found.", ephemeral=True)
-        elif handle is None or handle == "handle" or handle == "<handle>":
+        member = cast(
+            Member, interaction.user
+        )  # Safe because can only be reached from guild chat
+        if handle == "handle" or handle == "<handle>":
             await interaction.followup.send(
                 'You must say which handle is yours! Example: "shadow_weaver"',
                 ephemeral=True,
@@ -32,7 +33,10 @@ class HandleModal(ui.Modal, title="Register as player"):
                 report = await players.create_player(member, handle_id)
             if report is not None:
                 await interaction.followup.send(
-                    f'Failed: invalid starting handle "{handle_id}" (or handle is already taken).',
+                    (
+                        f'Failed: invalid starting handle "{handle_id}" '
+                        "(or handle is already taken)."
+                    ),
                     ephemeral=True,
                 )
             else:

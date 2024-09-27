@@ -38,8 +38,8 @@ async def start_bot():
         "talesbot.ext.register",
         "talesbot.chats",
         "talesbot.shops",
-        "talesbot.gm",
-        "talesbot.artifacts",
+        "talesbot.ext.gm",
+        "talesbot.ext.artifacts",
     ]
 
     intents = discord.Intents.default()

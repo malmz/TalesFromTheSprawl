@@ -8,7 +8,9 @@ from configobj import ConfigObj
 from discord import Interaction, app_commands
 from discord.ext import commands
 
-from . import actors, channels, game, gm, handles, players, posting
+from talesbot import checks, gm
+
+from . import actors, channels, game, handles, players, posting
 from .common import (
     emoji_cancel,
     emoji_green,
@@ -73,7 +75,7 @@ class ChatsCog(commands.Cog, name="chats"):
         name="chat_other",
         description="Admin only. Open a chat session for someone else.",
     )
-    @app_commands.checks.has_role("gm")
+    @checks.is_gm
     async def chat_other_command(
         self, interaction: Interaction, from_handle: str, to_handle: str
     ):
@@ -102,7 +104,7 @@ class ChatsCog(commands.Cog, name="chats"):
         name="gm_chat",
         description="GM only. Open a chat session from the shared GM account.",
     )
-    @app_commands.checks.has_role("gm")
+    @checks.is_gm
     async def gm_chat_command(self, interaction: Interaction, other_handle: str):
         if other_handle is None:
             report = "Error: you must give the handle to chat with."
@@ -149,7 +151,7 @@ class ChatsCog(commands.Cog, name="chats"):
         name="close_chat_other",
         description="Admin-only. Close a chat session for someone else.",
     )
-    @app_commands.checks.has_role("gm")
+    @checks.is_gm
     async def close_chat_other_command(
         self, interaction: Interaction, my_handle: str, other_handle: str
     ):
@@ -168,7 +170,7 @@ class ChatsCog(commands.Cog, name="chats"):
         name="clear_all_chats",
         description="Admin-only. Delete all chats and chat channels for all users.",
     )
-    @app_commands.checks.has_role("gm")
+    @checks.is_gm
     async def clear_all_chats_command(self, interaction: Interaction):
         await interaction.response.defer(ephemeral=True)
         await init(clear_all=True)

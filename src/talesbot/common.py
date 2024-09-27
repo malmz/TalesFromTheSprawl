@@ -3,7 +3,6 @@ import itertools
 highest_ever_index = "___highest_ever"
 system_role_name = "system"
 admin_role_name = "admin"
-gm_role_name = "gm"
 new_player_role_name = "new_player"
 
 type_player = "player"
