@@ -27,7 +27,6 @@ from talesbot import (
 from .errors import ReportError
 from .ui.register import RegisterView
 
-guild_name = os.getenv("GUILD_NAME")
 clear_all = os.getenv("CLEAR_ALL") == "true"
 destroy_all = os.getenv("DESTROY_ALL") == "true"
 
