@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from .api import app
 from .bot import TalesBot
 from .config import config_dir
+from .database import create_tables
 from .logger import init_loggers
 
 config_folders = [
@@ -74,6 +75,7 @@ def main() -> int:
         os.makedirs(config_dir / folder, exist_ok=True)
 
     init_loggers()
+    create_tables()
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     with contextlib.suppress(KeyboardInterrupt):
         return asyncio.run(start())
