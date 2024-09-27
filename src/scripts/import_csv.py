@@ -27,7 +27,7 @@ def parse_keyval(val: str) -> tuple[str, int]:
     return key, int(val)
 
 
-def parse_dict(vals: list[str]):
+def parse_dict(vals: str):
     return {k: v for k, v in map(parse_keyval, parse_list(vals))}
 
 
