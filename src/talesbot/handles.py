@@ -409,7 +409,7 @@ async def process_remove_handle_command(handle_id: str):
 
 def current_handle_report(actor_id: str):
     # import gm
-    is_gm_actor = gm.gm_actor_id == actor_id
+    is_gm_actor = gm.actor_id == actor_id
     cmd = "/handle" if not is_gm_actor else "/gm_handle"
     current_handle: Handle = get_active_handle(actor_id)
     if current_handle.handle_type == HandleTypes.Burner:
@@ -549,7 +549,7 @@ async def process_handle_command(
     npc: bool = False,
     use_gm_actor: bool = False,
 ):
-    actor_id = gm.gm_actor_id if use_gm_actor else players.get_player_id(str(user_id))
+    actor_id = gm.actor_id if use_gm_actor else players.get_player_id(str(user_id))
 
     if new_handle_id is None:
         response = current_handle_report(actor_id)
