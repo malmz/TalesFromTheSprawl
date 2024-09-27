@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from .api import app
 from .bot import TalesBot
 from .config import config_dir
-from .database import create_tables
+from .database import create_tables, models  # noqa: F401 "models" module needed here
 from .logger import init_loggers
 
 config_folders = [
