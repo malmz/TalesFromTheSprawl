@@ -29,10 +29,13 @@ config_folders = [
 
 async def start_bot():
     TOKEN = os.getenv("DISCORD_TOKEN")
+    if TOKEN is None:
+        raise Exception("DISCORD_TOKEN env variable is required")
     exts = [
         "talesbot.handles",
         "talesbot.finances",
-        "talesbot.admin",
+        "talesbot.ext.admin",
+        "talesbot.ext.register",
         "talesbot.chats",
         "talesbot.shops",
         "talesbot.gm",
@@ -61,6 +64,7 @@ async def start() -> int:
     async with asyncio.TaskGroup() as tg:
         tg.create_task(start_bot())
         tg.create_task(start_api())
+    return 0
 
 
 def main() -> int:
@@ -73,3 +77,5 @@ def main() -> int:
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     with contextlib.suppress(KeyboardInterrupt):
         return asyncio.run(start())
+
+    return 0

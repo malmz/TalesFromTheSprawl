@@ -3,9 +3,7 @@ import logging
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from talesbot import finances
-
-from .custom_types import Transaction
+from talesbot import finances, utils
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +26,8 @@ class Transfer(BaseModel):
 @app.post("/api/transfer")
 async def transfer(data: Transfer):
     logger.info(
-        f"Transfering {finances.fmt_money(data.amount)} from "
-        f"{finances.fmt_handle(data.sender)} to {finances.fmt_handle(data.sender)}"
+        f"Transfering {utils.fmt_money(data.amount)} from "
+        f"{utils.fmt_handle(data.sender)} to {utils.fmt_handle(data.receiver)}"
     )
     try:
         transaction = await finances.transfer_funds(
@@ -43,7 +41,7 @@ async def transfer(data: Transfer):
         }
     except Exception as e:
         logger.exception(
-            f"Failed transfering {finances.fmt_money(data.amount)} from "
-            f"{finances.fmt_handle(data.sender)} to {finances.fmt_handle(data.sender)}"
+            f"Failed transfering {utils.fmt_money(data.amount)} from "
+            f"{utils.fmt_handle(data.sender)} to {utils.fmt_handle(data.sender)}"
         )
         return {"status": "error", "msg": str(e)}

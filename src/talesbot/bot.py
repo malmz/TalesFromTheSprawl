@@ -96,7 +96,8 @@ class TalesBot(commands.Bot):
         await handles.init(clear_all)
         await actors.init(clear_all=clear_all)
         await players.init(clear_all=clear_all)
-        await channels.init(self)
+        if os.getenv("SKIP_CHANNELS") is None:
+            await channels.init(self)
         finances.init_finances()
         await chats.init(clear_all=clear_all)
         await shops.init(clear_all=clear_all)
@@ -118,9 +119,10 @@ class TalesBot(commands.Bot):
             return
 
         try:
-            player_name = players.get_player_id(message.author.id, False)
+            player_name = players.get_player_id(str(message.author.id), False)
             cmd_logger.info(
-                f"{message.author.id} : {player_name} : {message.channel.name} : {message.content}"
+                f"{message.author.id} : {player_name} : "
+                f"{message.channel.name} : {message.content}"
             )
         except Exception:
             logger.exception("Failed to log command to file")
@@ -194,10 +196,9 @@ class TalesBot(commands.Bot):
     async def on_member_join(self, member: discord.Member):
         await server.set_user_as_new_player(member)
 
-    @override
     async def on_command_error(
         self,
-        context: commands.Context["TalesBot"],
+        context: commands.Context,
         exception: commands.errors.CommandError,
     ):
         match exception:
@@ -217,7 +218,7 @@ class TalesBot(commands.Bot):
                 await context.send(
                     "Error: unknown system error. Contact administrator."
                 )
-                super().on_command_error(context, exception)
+                await super().on_command_error(context, exception)
 
     async def destroy_all(self):
         for guild in self.guilds:

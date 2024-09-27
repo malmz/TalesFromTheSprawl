@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import List
+from typing import List, cast
 
 import discord
 from configobj import ConfigObj
@@ -100,7 +100,7 @@ def get_all_players():
             user_id_mappings_index,
             guild_to_user_count_index,
         ]:
-            yield player
+            yield cast(str, player)
 
 
 def player_exists(player_id: str):
@@ -152,7 +152,7 @@ def get_next_player_index():
     return player_index
 
 
-async def create_player(member, handle_id: str = None):
+async def create_player(member: discord.Member, handle_id: str):
     if not player_setup.can_setup_new_player_with_handle(handle_id):
         return f'Failed: invalid starting handle "{handle_id}" (or handle is already taken).'
     user_id = str(member.id)

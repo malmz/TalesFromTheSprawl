@@ -1,7 +1,6 @@
 import asyncio
 import re
 from enum import Enum
-from typing import List
 
 from configobj import ConfigObj
 from discord import Interaction, app_commands
@@ -43,18 +42,16 @@ class HandlesCog(commands.Cog, name="handles"):
     async def switch_handle_command(self, interaction: Interaction, handle_name: str):
         await self.handle_command_internal(interaction, handle_name, burner=False)
 
-    @app_commands.command(
-        name="show_gm_handle", description="Show current handle for the gm user"
-    )
+    @app_commands.command(description="Show current handle for the gm user")
     @app_commands.checks.has_role("gm")
-    async def handle_command_gm(self, interaction: Interaction):
+    async def show_gm_handle(self, interaction: Interaction):
         await self.handle_command_internal(
             interaction, None, burner=False, use_gm_actor=True
         )
 
-    @app_commands.command(name="gm_handle", description="Switch handle for gm user")
+    @app_commands.command(description="Switch handle for gm user")
     @app_commands.checks.has_role("gm")
-    async def handle_command_gm(self, interaction: Interaction, handle_name: str):
+    async def gm_handle(self, interaction: Interaction, handle_name: str):
         await self.handle_command_internal(
             interaction, handle_name, burner=False, use_gm_actor=True
         )
@@ -69,7 +66,7 @@ class HandlesCog(commands.Cog, name="handles"):
     async def handle_command_internal(
         self,
         interaction: Interaction,
-        new_handle: str = None,
+        new_handle: str | None = None,
         burner: bool = False,
         use_gm_actor: bool = False,
     ):
@@ -378,7 +375,7 @@ def get_handles_for_actor(
     return get_handles_for_actor_of_types(actor_id, types_list)
 
 
-def get_handles_for_actor_of_types(actor_id: str, types_list: List[HandleTypes]):
+def get_handles_for_actor_of_types(actor_id: str, types_list: list[HandleTypes]):
     file_name = str(config_dir / handles_conf_dir / f"{actor_id}.conf")
     actor_handles_conf = ConfigObj(file_name)
     for handle_id in actor_handles_conf[handles_index]:
@@ -511,13 +508,15 @@ async def create_handle_and_switch(
     elif handle.handle_type == HandleTypes.Reserved:
         result.report = (
             f"Error: cannot create handle {handle.handle_id}. "
-            + "That name is used by the system or reserved for a user who has not connected their main handle yet."
+            "That name is used by the system or reserved for a user who "
+            "has not connected their main handle yet."
         )
     elif handle.handle_type == handle_type and handle.is_active():
         switch_to_handle(handle)
         # report = await player_setup.player_setup_for_new_handle(handle)
         # if report is not None:
-        # If something happened in player_setup_for_new_handle(), that report will be enough
+        # If something happened in player_setup_for_new_handle(),
+        # that report will be enough
         #    return report
         result.success = True
         if handle_type == HandleTypes.Burner:
@@ -529,7 +528,8 @@ async def create_handle_and_switch(
         elif handle_type == HandleTypes.NPC:
             result.report = (
                 f"Switched to new handle **{handle.handle_id}** (created now). "
-                + "[OFF: it's an NPC handle, meaning it cannot be linked to your regular handles unless it interacts with them.]"
+                "[OFF: it's an NPC handle, meaning it cannot be linked to your "
+                "regular handles unless it interacts with them.]"
             )
         else:
             result.report = (
@@ -542,17 +542,12 @@ async def create_handle_and_switch(
 
 async def process_handle_command(
     user_id: int,
-    new_handle_id: str = None,
+    new_handle_id: str | None = None,
     burner: bool = False,
     npc: bool = False,
     use_gm_actor: bool = False,
 ):
-    if use_gm_actor:
-        # import gm
-
-        actor_id = gm.gm_actor_id
-    else:
-        actor_id = players.get_player_id(str(user_id))
+    actor_id = gm.gm_actor_id if use_gm_actor else players.get_player_id(str(user_id))
 
     if new_handle_id is None:
         response = current_handle_report(actor_id)

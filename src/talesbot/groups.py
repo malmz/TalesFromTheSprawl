@@ -9,7 +9,7 @@
 
 import asyncio
 import logging
-from typing import Dict, List
+from typing import Dict, List, cast
 
 import discord
 import simplejson
@@ -170,7 +170,7 @@ def get_all_group_ids():
     groups = ConfigObj(groups_file_name)
     for group_id in groups:
         if group_id != highest_ever_index:
-            yield group_id
+            yield cast(str, group_id)
 
 
 def any_groups():

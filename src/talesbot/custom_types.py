@@ -68,20 +68,21 @@ class TransTypes(str, Enum):
 class Transaction:
     def __init__(
         self,
-        payer: str,  # handle ID
-        recip: str,  # handle ID
-        payer_actor: str,
-        recip_actor: str,
+        payer: str | None,  # handle ID
+        recip: str | None,  # handle ID
+        payer_actor: str | None,
+        recip_actor: str | None,
         amount: int,
         cause: TransTypes = TransTypes.Transfer,
-        report: str = None,
-        timestamp: PostTimestamp = None,  # TODO: add timestamp for regular payments
+        report: str | None = None,
+        timestamp: PostTimestamp
+        | None = None,  # TODO: add timestamp for regular payments
         success: bool = False,
         last_in_sequence: bool = True,
-        payer_msg_id: str = None,
-        recip_msg_id: str = None,
-        data: str = None,
-        emoji: str = None,
+        payer_msg_id: str | None = None,
+        recip_msg_id: str | None = None,
+        data: str | None = None,
+        emoji: str | None = None,
     ):
         self.payer = payer
         self.recip = recip
@@ -103,9 +104,7 @@ class Transaction:
         obj = Transaction(None, None, None, None, 0)
         loaded_dict = simplejson.loads(string)
         obj.__dict__.update(loaded_dict)
-        obj.timestamp: PostTimestamp = PostTimestamp.from_string(
-            loaded_dict["timestamp"]
-        )
+        obj.timestamp = PostTimestamp.from_string(loaded_dict["timestamp"])
         return obj
 
     def to_string(self):
@@ -202,17 +201,17 @@ class Handle:
         self,
         handle_id: str,
         handle_type: HandleTypes = HandleTypes.Unused,
-        actor_id: str = None,
+        actor_id: str | None = None,
         auto_respond_message=None,
     ):
-        self.handle_id = handle_id.lower() if handle_id is not None else None
+        self.handle_id = handle_id.lower()
         self.handle_type = handle_type
         self.actor_id = actor_id
         self.auto_respond_message = auto_respond_message
 
     @staticmethod
     def from_string(string: str):
-        obj = Handle(None)
+        obj = Handle("")
         obj.__dict__.update(simplejson.loads(string))
         return obj
 

@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from typing import cast
 
 import discord
 from configobj import ConfigObj
@@ -100,7 +101,7 @@ def get_all_actor_ids():
     actors = get_actors_confobj()
     for actor_id in actors:
         if actor_id != finance_channel_mapping_index:
-            yield actor_id
+            yield cast(str, actor_id)
 
 
 def actor_exists(actor_id: str):
