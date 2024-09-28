@@ -79,8 +79,8 @@ def main(input: IO, output: IO):
             (v, alt_balance.get(v, 0)) for v in alt_handles
         ]
 
-        all_groups = (
-            ["tacoma"] if tacoma else [] + [v for v in groups if v != "trinity_taskbar"]
+        all_groups = (["tacoma"] if tacoma else []) + (
+            [v for v in groups if v != "trinity_taskbar"]
         )
 
         shops_owner = ["trinity_taskbar"] if handle == "njal" else []
