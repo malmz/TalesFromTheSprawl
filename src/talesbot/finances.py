@@ -7,14 +7,12 @@ from discord.ext import commands
 
 from talesbot import checks
 
-from .errors import InsufficientBalanceError, InvalidAmountError, InvalidPartiesError
-
-from .utils import fmt_handle, fmt_money
-
 from . import actors, handles, players
 from .common import coin, transaction_collected, transaction_collector
 from .config import config_dir
 from .custom_types import Handle, HandleTypes, PostTimestamp, Transaction, TransTypes
+from .errors import InsufficientBalanceError, InvalidAmountError, InvalidPartiesError
+from .utils import fmt_handle, fmt_money
 
 ### Module finances.py
 # This module tracks and handles money and transactions between handles

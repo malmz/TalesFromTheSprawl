@@ -300,13 +300,13 @@ def read_handle(actor_handles, handle_id: str):
     return Handle.from_string(actor_handles[handles_index][handle_id])
 
 
-def get_active_handle_id(actor_id: str):
+def get_active_handle_id(actor_id: str) -> str | None:
     handles = get_handles_confobj()
     if actor_id in handles[actors_index]:
         file_name = str(config_dir / handles_conf_dir / f"{actor_id}.conf")
         actor_handles_conf = ConfigObj(file_name)
         if active_index in actor_handles_conf:
-            return actor_handles_conf[active_index]
+            return actor_handles_conf[active_index]  # type: ignore
 
 
 def get_active_handle(actor_id: str):

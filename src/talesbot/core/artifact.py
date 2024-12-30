@@ -1,18 +1,19 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
-from .models import Artifact, ArtifactContent
+from .database.models import Artifact, ArtifactContent
 
 
-def create(
-    session: Session,
+async def create(
+    session: AsyncSession,
     name: str,
     content: str,
     password: str | None = None,
     announcement: str | None = None,
     page: int = 0,
 ):
-    artifact = session.scalar(
+    artifact = await session.scalar(
         select(Artifact)
         .where(Artifact.name == name)
         .where(Artifact.password == password)
@@ -31,22 +32,23 @@ def create(
         artifact.content.append(content_page)
 
     session.add(artifact)
-    session.commit()
+    await session.commit()
 
 
-def access(session: Session, name: str, password: str | None = None):
-    return session.scalar(
+async def access(session: AsyncSession, name: str, password: str | None = None):
+    return await session.scalar(
         select(Artifact)
         .where(Artifact.name == name)
         .where(Artifact.password == password)
+        .options(joinedload(Artifact.content))
     )
 
 
-def remove(session: Session, name: str, password: str | None = None):
+async def remove(session: AsyncSession, name: str, password: str | None = None):
     a = session.scalar(
         select(Artifact)
         .where(Artifact.name == name)
         .where(Artifact.password == password)
     )
-    session.delete(a)
-    session.commit()
+    await session.delete(a)
+    await session.commit()

@@ -15,6 +15,7 @@ from .common import (
 )
 from .config import config_dir
 from .custom_types import Handle, PlayerData
+from .errors import AlreadyRegisterdError, InvalidStartingHandleError, NotRegisterdError
 from .groups import Group
 
 players_conf_dir = "players"
@@ -124,14 +125,18 @@ def read_player_data(player_id: str):
         return PlayerData.from_string(players[player_id])
 
 
+def fetch_player_id(user_id: str) -> str:
+    players = get_players_confobj()
+    if user_id not in players[user_id_mappings_index]:
+        raise NotRegisterdError(user_id)
+    return players[user_id_mappings_index][user_id]  # type: ignore
+
+
 def get_player_id(user_id: str, expect_to_find=True) -> str | None:
     players = get_players_confobj()
     if user_id not in players[user_id_mappings_index]:
         if expect_to_find:
-            logger.warning(f"User {user_id} has not been initialized as a player")
-            raise RuntimeError(
-                "User has not been initialized as a player. Did you run /join?"
-            )
+            raise NotRegisterdError(user_id)
         return None
     return players[user_id_mappings_index][user_id]  # type: ignore
 
@@ -155,11 +160,12 @@ def get_next_player_index():
 
 async def create_player(member: discord.Member, handle_id: str):
     if not player_setup.can_setup_new_player_with_handle(handle_id):
-        return f'Failed: invalid starting handle "{handle_id}" (or handle is already taken).'
+        raise InvalidStartingHandleError(handle_id)
     user_id = str(member.id)
     existing_player_id = get_player_id(user_id, expect_to_find=False)
     if existing_player_id is not None:
-        return f"Error: Could not create player for member {user_id}, since they already have player_id {existing_player_id}."
+        raise AlreadyRegisterdError(member, existing_player_id)
+        # return f"Error: Could not create player for member {user_id}, since they already have player_id {existing_player_id}."
 
     new_player_index = get_next_player_index()
     new_player_id = "u" + new_player_index

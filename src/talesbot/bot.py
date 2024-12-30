@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import re
+from typing import cast
 
 import discord
 from discord.app_commands import BotMissingPermissions
@@ -23,12 +24,12 @@ from talesbot import (
     server,
     shops,
 )
+from talesbot.config import config
 
 from .errors import ReportError
-from .ui.register import RegisterView
 
-clear_all = os.getenv("CLEAR_ALL") == "true"
-destroy_all = os.getenv("DESTROY_ALL") == "true"
+clear_all = config.CLEAR_ALL
+destroy_all = config.DESTROY_ALL
 
 logger = logging.getLogger(__name__)
 cmd_logger = logging.getLogger("talesbot.messages")
@@ -41,7 +42,12 @@ class TalesCommandTree(discord.app_commands.CommandTree):
         logger.error("Command error", exc_info=error)
         match error:
             case ReportError() as e:
-                await interaction.response.send_message(str(e), ephemeral=True)
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        ephemeral=True, embed=e.to_embed()
+                    )
+                else:
+                    await interaction.followup.send(ephemeral=True, embed=e.to_embed())
             case BotMissingPermissions():
                 await interaction.response.send_message(error, ephemeral=True)
             case MissingRole():
@@ -49,30 +55,21 @@ class TalesCommandTree(discord.app_commands.CommandTree):
                     "You are not allowed to run this command.", ephemeral=True
                 )
             case CommandInvokeError(__cause__=ReportError()) as e:
+                report_err = cast(ReportError, e.__cause__)
                 if not interaction.response.is_done():
                     await interaction.response.send_message(
-                        f"Error: {str(error.__cause__)}", ephemeral=True
+                        ephemeral=True, embed=report_err.to_embed()
                     )
                 else:
                     await interaction.followup.send(
-                        f"Error: {str(error.__cause__)}", ephemeral=True
-                    )
-
-            case CommandInvokeError(__cause__=RuntimeError()):
-                try:
-                    await interaction.response.send_message(
-                        f"Error: {error.__cause__}", ephemeral=True
-                    )
-                except discord.errors.InteractionResponded:
-                    await interaction.followup.send(
-                        f"Error: {error.__cause__}", ephemeral=True
+                        ephemeral=True, embed=report_err.to_embed()
                     )
             case _:
-                try:
+                if not interaction.response.is_done():
                     await interaction.response.send_message(
                         "Failed command. Contact system administrator.", ephemeral=True
                     )
-                except discord.errors.InteractionResponded:
+                else:
                     await interaction.followup.send(
                         "Failed command. Contact system administrator.", ephemeral=True
                     )
@@ -85,8 +82,6 @@ class TalesBot(commands.Bot):
         self.inital_extensions = inital_extensions
 
     async def setup_hook(self) -> None:
-        self.add_view(RegisterView())
-
         for ext in self.inital_extensions:
             await self.load_extension(ext)
 

@@ -3,7 +3,10 @@ from typing import cast
 
 from discord import Interaction, Member, app_commands
 from discord.ext import commands
+
 from talesbot import common, handles, players
+
+from ..ui.register import RegisterView
 
 logger = logging.getLogger(__name__)
 
@@ -49,4 +52,5 @@ class RegisterCog(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
+    bot.add_view(RegisterView())
     await bot.add_cog(RegisterCog(bot))

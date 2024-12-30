@@ -4,6 +4,7 @@ from typing import cast
 
 from discord import Interaction, Member, app_commands
 from discord.ext import commands
+
 from talesbot import common, handles, players, server
 from talesbot.database import SessionM, artifact
 
@@ -46,8 +47,8 @@ class ArtifactsCog(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
         member = cast(Member, interaction.user)
-        with SessionM() as session:
-            a = artifact.access(session, name, password)
+        async with SessionM() as session:
+            a = await artifact.access(session, name, password)
 
             if a is None:
                 await self.log_connect_attempt(member, name, password)

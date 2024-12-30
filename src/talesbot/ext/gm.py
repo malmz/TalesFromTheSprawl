@@ -4,6 +4,7 @@ import discord
 from discord import Interaction, app_commands, utils
 from discord.app_commands.errors import MissingRole, NoPrivateMessage
 from discord.ext import commands
+
 from talesbot import (
     gm,
     handles,
@@ -77,9 +78,9 @@ class GmCog(commands.GroupCog, group_name="gm"):
         announcment: str | None = None,
         page: int = 0,
     ):
-        with SessionM() as session:
+        async with SessionM() as session:
             try:
-                artifact.create(
+                await artifact.create(
                     session,
                     name,
                     content,

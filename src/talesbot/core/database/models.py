@@ -5,6 +5,56 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from . import Base
 
+player_groups = Table(
+    "player_groups",
+    Base.metadata,
+    Column("player_id", ForeignKey("player.id"), primary_key=True),
+    Column("group_id", ForeignKey("group.id"), primary_key=True),
+)
+
+player_shops = Table(
+    "player_shops",
+    Base.metadata,
+    Column("player_id", ForeignKey("player.id"), primary_key=True),
+    Column("shop_id", ForeignKey("shop.id"), primary_key=True),
+)
+
+
+class Player(Base):
+    __tablename__ = "player"
+    id: Mapped[int] = mapped_column(init=False, primary_key=True)
+    discord_id: Mapped[int]
+    guild_id: Mapped[int]
+    cmd_channel_id: Mapped[int]
+    shops: Mapped[set["Shop"]] = relationship(
+        init=False, back_populates="employees", secondary=player_shops
+    )
+    groups: Mapped[set["Group"]] = relationship(
+        init=False, back_populates="members", secondary=player_groups
+    )
+
+
+class Actor(Base):
+    __tablename__ = "actor"
+    id: Mapped[int] = mapped_column(init=False, primary_key=True)
+    name: Mapped[str]
+
+
+class Group(Base):
+    __tablename__ = "group"
+    id: Mapped[int] = mapped_column(init=False, primary_key=True)
+    members: Mapped[set["Player"]] = relationship(
+        init=False, back_populates="groups", secondary=player_groups
+    )
+
+
+class Shop(Base):
+    __tablename__ = "shop"
+    id: Mapped[int] = mapped_column(init=False, primary_key=True)
+    employees: Mapped[set["Player"]] = relationship(
+        init=False, back_populates="shops", secondary=player_groups
+    )
+
 
 class Handle(Base):
     __tablename__ = "handle"
@@ -38,10 +88,10 @@ class Transaction(Base):
         DateTime(timezone=True), init=False, server_default=func.now()
     )
 
-    sender: Mapped["Handle"] = relationship(
+    sender: Mapped["Handle | None"] = relationship(
         back_populates="outgoing_tansfers", foreign_keys=[sender_id]
     )
-    receiver: Mapped["Handle"] = relationship(
+    receiver: Mapped["Handle | None"] = relationship(
         back_populates="incoming_transfers", foreign_keys=[receiver_id]
     )
 

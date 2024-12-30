@@ -6,7 +6,7 @@ import simplejson
 
 
 class ActionResult:
-    def __init__(self, success: bool = False, report: str = None):
+    def __init__(self, success: bool = False, report: str | None = None):
         self.success = success
         self.report = report
 
