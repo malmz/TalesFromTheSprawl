@@ -53,20 +53,34 @@ class ChannelState:
     def increment(self):
         self.post_count += 1
         return self.post_count >= 10
-    
+
     def reset(self):
         self.post_count = 0
 
-    def cmp_timestamp(self, timestamp: datetime.datetime):
-        self.last_full_post_at
+    def timestamp_matches(self, timestamp: datetime.datetime):
+        return (
+            self.last_full_post_at.hour == timestamp.hour
+            and self.last_full_post_at.second == timestamp.second
+        )
 
-    def record_new_post(self, handle_name: str, timestamp = datetime.datetime.now()) -> bool:
+    def record_new_post(
+        self, handle_name: str, timestamp: datetime.datetime | None
+    ) -> bool:
+        if timestamp is None:
+            timestamp = datetime.datetime.now()
+
         counter_limit = self.increment()
-
-        if self.last_poster != handle_name or counter_limit or timestamp.h:
-            self.last_full_post_at
+        if (
+            self.last_poster != handle_name
+            or counter_limit
+            or not self.timestamp_matches(timestamp)
+        ):
+            self.last_full_post_at = timestamp
             self.last_poster = handle_name
             self.reset()
+            return True
+
+        return False
 
 
 class ChannelStateManager:
@@ -75,9 +89,12 @@ class ChannelStateManager:
     def clear(self):
         self.data.clear()
 
+    def init_channel(self, channel_name: str):
+        self.data[channel_name] = ChannelState()
+
     def get_state(self, channel_name: str) -> ChannelState:
         if channel_name not in self.data:
-            self.data[channel_name] = ChannelState()
+            self.init_channel(channel_name)
 
         return self.data[channel_name]
 
@@ -94,12 +111,19 @@ class ChannelStateManager:
         state = self.get_state(channel_name)
         state.post_count = 0
 
-    def record_new_post(self, channel_name: str, handle_name: str, timestamp: datetime.datetime) -> bool:
+    def record_new_post(
+        self, channel_name: str, handle_name: str, timestamp: datetime.datetime
+    ) -> bool:
+        """Returns True if the new post should be a full post
+        (with sender and timestamp header)
+        Returns False if the new post should only include the content itself
+        """
+
         state = self.get_state(channel_name)
-        if state.
+        return state.record_new_post(handle_name, timestamp)
 
 
-channel_states: dict[str, ChannelState] = {}
+channel_states = ChannelStateManager()
 
 
 ### Utilities:
@@ -306,11 +330,13 @@ async def _verify_channel_exists(category: CategoryChannel, channel_name: str):
     return channel
 
 
-async def _init_channel_state(channel: TextChannel):
-    await channel.edit(slowmode_delay=slowmode_delay)
-
-    # TODO: How does this work with guilds joining on-the-fly?
-    channel_states[channel.name] = ChannelState()
+async def _set_slow_mode(channel: GuildChannel):
+    if isinstance(channel, TextChannel):
+        await channel.edit(slowmode_delay=slowmode_delay)
+    else:
+        logger.warning(
+            f"Tried to set slow mode on non text channel {fmt_channel(channel)}"
+        )
 
 
 async def _set_base_permissions(
@@ -328,37 +354,38 @@ async def _set_base_permissions(
     await asyncio.gather(*add_roles_tasks)
 
 
-async def _init_common_read_only_channel(discord_channel, gm_only: bool = False):
+async def _init_common_read_only_channel(channel: GuildChannel, gm_only: bool = False):
     await _set_base_permissions(
-        discord_channel, private=gm_only, read_only=True, gm_extra_access=gm_only
+        channel, private=gm_only, read_only=True, gm_extra_access=gm_only
     )
-    await _init_channel_state(discord_channel)
-    _init_pseudonymous_channel(discord_channel.name)
+    await _set_slow_mode(channel)
+    channel_states.init_channel(channel.name)
 
 
-async def _init_public_open_channel(discord_channel):
-    await _set_base_permissions(discord_channel, private=False, read_only=False)
-    await _init_channel_state(discord_channel)
-    _init_pseudonymous_channel(discord_channel.name)
+async def _init_public_open_channel(channel: GuildChannel):
+    await _set_base_permissions(channel, private=False, read_only=False)
+    await _set_slow_mode(channel)
+    channel_states.init_channel(channel.name)
 
 
-async def _init_private_channel(discord_channel, gm_extra_access: bool = False):
-    read_only = is_read_only_private_channel(discord_channel)
+async def _init_private_channel(channel: GuildChannel, gm_extra_access: bool = False):
+    read_only = is_read_only_private_channel(channel)
     await _set_base_permissions(
-        discord_channel,
+        channel,
         private=True,
         read_only=read_only,
         gm_extra_access=gm_extra_access,
     )
-    await _init_channel_state(discord_channel)
+    await _set_slow_mode(channel)
+    channel_states.init_channel(channel.name)
 
 
-async def _init_group_channel(discord_channel):
+async def _init_group_channel(channel: GuildChannel):
     await _set_base_permissions(
-        discord_channel, private=True, read_only=False, gm_extra_access=True
+        channel, private=True, read_only=False, gm_extra_access=True
     )
-    await _init_channel_state(discord_channel)
-    _init_pseudonymous_channel(discord_channel.name)
+    await _set_slow_mode(channel)
+    channel_states.init_channel(channel.name)
 
 
 async def _init_setup_channel(channel: GuildChannel):
@@ -374,7 +401,8 @@ async def _init_setup_channel(channel: GuildChannel):
         ).items()
     ]
     await asyncio.gather(*add_roles_tasks)
-    await _init_channel_state(channel)
+    await _set_slow_mode(channel)
+    channel_states.init_channel(channel.name)
     await channel.purge()
     await channel.send(generate_setup_channel_welcome_msg(), view=RegisterView())
 
@@ -392,74 +420,13 @@ def get_public_anon_channels():
     return get_discord_channels_from_name(public_anon_channel_name)
 
 
-### Utilities related to pseudonymous channels,
-# i.e. ones where all messages are reposted using handle
-
-
-def _init_pseudonymous_channel(channel_name: str):
-    _set_last_poster(channel_name, "")
-    _set_last_full_post(channel_name, datetime.datetime.now())
-    _reset_post_counter(channel_name)
-
-
-def _set_last_poster(channel_name: str, poster_id: str):
-    channel_states[channel_name].last_poster = poster_id
-
-
-def _get_last_poster(channel_name: str):
-    return channel_states[channel_name].last_poster
-
-
-def _get_last_post_time(channel_name: str):
-    return channel_states[channel_name].last_full_post_at
-
-
-def _set_last_full_post(channel_name: str, timestamp: datetime.datetime):
-    channel_states[channel_name].last_full_post_at = timestamp
-
-
-def _time_has_passed_since_last_full_post(channel_name: str, timestamp):
-    post_time = PostTimestamp(timestamp.hour, timestamp.minute)
-    old_time = _get_last_post_time(channel_name)
-    return post_time != old_time
-
-
-def _increment_post_counter(channel_name: str):
-    count = int(channel_states[channel_name][post_counter_index])
-    count += 1
-    channel_states[channel_name][post_counter_index] = str(count)
-    channel_states.write()
-    return count >= 10
-
-
-def _reset_post_counter(channel_name: str):
-    channel_states[channel_name][post_counter_index] = str(0)
-    channel_states.write()
-
-
-# Returns True if the new post should be a full post (with sender and timestamp header)
-# Returns False if the new post should only include the content itself
-def record_new_post(channel_name: str, poster_id: str, timestamp: PostTimestamp):
-    last_poster = _get_last_poster(channel_name)
-    time_has_passed = _time_has_passed_since_last_full_post(channel_name, timestamp)
-    counter_has_passed_limit = _increment_post_counter(channel_name)
-
-    if last_poster != poster_id or time_has_passed or counter_has_passed_limit:
-        _set_last_poster(channel_name, poster_id)
-        _set_last_full_post(channel_name, timestamp)
-        _reset_post_counter(channel_name)
-        return True
-
-    return False
-
-
 ### Private channels:
 # Only visible to some players
 
 
 async def create_discord_channel(
     guild: Guild, overwrites, channel_name: str, category_name: str
-):
+) -> TextChannel:
     category = await _verify_category_exists(guild, category_name)
     channel = await guild.create_text_channel(
         channel_name,
@@ -467,7 +434,8 @@ async def create_discord_channel(
         category=category,
         slowmode_delay=slowmode_delay,
     )
-    await _init_channel_state(channel)
+    await _set_slow_mode(channel)
+    channel_states.init_channel(channel.name)
     return channel
 
 
@@ -482,18 +450,18 @@ order_flow_base = "orders_"
 # TODO: some sort of dictionary for these, with an enum type
 
 
-async def delete_all_personal_channels(channel_suffix: str = None):
+async def delete_all_personal_channels(channel_suffix: str | None = None):
     channels_list = await get_all_personal_channels(channel_suffix)
     task_list = (asyncio.create_task(c.delete()) for c in channels_list)
     await asyncio.gather(*task_list)
 
 
-async def get_all_personal_channels(channel_suffix: str = None):
+async def get_all_personal_channels(channel_suffix: str | None = None):
     channel_list = await server.get_all_channels()
     return [c for c in channel_list if is_personal_channel(c, channel_suffix)]
 
 
-async def get_all_chat_hub_channels(channel_suffix: str = None):
+async def get_all_chat_hub_channels(channel_suffix: str | None = None):
     channel_list = await server.get_all_channels()
 
     def is_match(channel_name: str):
@@ -577,13 +545,13 @@ def is_read_only_private_channel(channel):
 ### Group channels:
 
 
-async def delete_all_group_channels(channel_suffix: str = None):
+async def delete_all_group_channels(channel_suffix: str | None = None):
     channels_list = await get_all_groups_channels(channel_suffix)
     task_list = (asyncio.create_task(c.delete()) for c in channels_list)
     await asyncio.gather(*task_list)
 
 
-async def get_all_groups_channels(channel_suffix: str = None):
+async def get_all_groups_channels(channel_suffix: str | None = None):
     channel_list = await server.get_all_channels()
     return [c for c in channel_list if is_group_channel(c, channel_suffix)]
 
@@ -594,9 +562,7 @@ async def get_all_groups_channels(channel_suffix: str = None):
 
 
 def init_chat_channel(channel_name: str):
-    channel_states[channel_name] = {}
-    channel_states.write()
-    _init_pseudonymous_channel(channel_name)
+    channel_states.init_channel(channel_name)
 
 
 async def create_chat_session_channel_no_role(
