@@ -6,11 +6,80 @@ from typing import cast
 
 import discord
 from configobj import ConfigObj
+from discord import Guild, TextChannel
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import channels, common, finances, handles, players, server, shops
 from .common import emoji_cancel, emoji_open
 from .config import config_dir
 from .custom_types import Actor, Transaction, TransTypes
+from .database.models import Actor, Player, player_actor_seq
+
+
+async def _next_player_id(session: AsyncSession) -> int:
+    next_id: int = await session.scalar(player_actor_seq)
+    return next_id
+
+
+async def create_player_actor(
+    session: AsyncSession,
+    guild: Guild,
+) -> Actor:
+    player_id = await _next_player_id(session)
+
+    actor_role = str(player_id)
+    actor_id = "u" + actor_role
+
+    player_count = (
+        await session.scalar(
+            select(func.count().label("count"))
+            .select_from(Player)
+            .where(Player.guild_id == guild.id)
+        )
+        or 0
+    )
+
+    actor_index = 1 + player_count // 3
+
+    role = discord.utils.find(lambda r: r.name == actor_role, guild.roles)
+    if role is None:
+        role = await guild.create_role(name=actor_role)
+
+    category_name = f"personal_account_{actor_index}"
+
+    category = discord.utils.find(lambda c: c.name == category_name, guild.categories)
+    if category is None:
+        category = await guild.create_category(name=category_name)
+
+    chat_channel = await guild.create_text_channel(
+        name=f"chat_hub_{actor_id}",
+        category=category,
+    )
+
+    chat_channel = await channels.create_personal_channel(
+        guild, role, channels.get_chat_hub_name(actor_id), actor_id
+    )
+
+    finance_channel = await channels.create_personal_channel(
+        guild, role, channels.get_finance_name(actor_id), actor_id, read_only=True
+    )
+
+    await send_startup_message_chat_hub(chat_channel, actor_id, False)
+    await send_startup_message_finance(finance_channel, actor_id)
+
+    actor = Actor(
+        name="u" + actor_id,
+        role_name=actor_role,
+        guild_id=guild.id,
+        finance_channel_id=finance_channel.id,
+        chat_channel_id=chat_channel.id,
+    )
+
+    session.add(actor)
+
+    return actor
+
 
 actors_conf_dir = "actors"
 finance_channel_mapping_index = "___finance_channels"

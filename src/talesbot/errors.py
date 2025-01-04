@@ -112,3 +112,7 @@ class MissingHandleError(ReportError):
 
     def __init__(self, actor_id: str) -> None:
         super().__init__(report=f"Actor {actor_id} does not have active handle")
+
+
+class UnexpectedChannelTypeError(Exception):
+    pass

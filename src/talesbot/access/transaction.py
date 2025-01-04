@@ -5,7 +5,7 @@ from talesbot import finances
 
 from ..custom_types import TransTypes
 from ..errors import InsufficientBalanceError, InvalidAmountError, InvalidPartiesError
-from .database.models import Handle, Transaction
+from ..database.models import Handle, Transaction
 
 
 async def _get_handle(session: AsyncSession, handle_name: str | None) -> None | Handle:

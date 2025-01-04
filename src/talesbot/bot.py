@@ -13,6 +13,7 @@ from talesbot import (
     actors,
     channels,
     chats,
+    database,
     finances,
     game,
     gm,
@@ -24,6 +25,7 @@ from talesbot import (
     server,
     shops,
 )
+from talesbot.access import player
 from talesbot.config import config
 
 from .errors import ReportError
@@ -116,38 +118,35 @@ class TalesBot(commands.Bot):
         game.start_game()
 
     async def on_message(self, message: discord.Message) -> None:
-        if message.author.bot:
-            # Never react to bot's own message to avoid loops
+        if message.author.bot or channels.is_offline_channel(message.channel):
+            # ignore messages
             return
 
-        if channels.is_offline_channel(message.channel):
-            # No bot shenanigans in the off channel
-            return
+        async with database.SessionM() as session:
+            p = await player.get(session, message.author.id)
 
-        try:
-            player_name = players.get_player_id(str(message.author.id), False)
+            player_name = p.actor.name if p is not None else "[unregistered]"
+
+            channel_name = cast(str, message.channel.name)  # type: ignore
+
             cmd_logger.info(
                 f"{message.author.id} : {player_name} : "
-                f"{message.channel.name} : {message.content}"
+                f"{channel_name} : {message.content}"  # type: ignore
             )
-        except Exception:
-            logger.exception("Failed to log command to file")
 
         # "Off messages" means starting and replying to chats with GM and similar
         only_off_messages = not game.can_process_messages()
         # await server.swallow(message, alert=False)
         # return
 
-        if channels.is_cmd_line(message.channel.name):
+        if channels.is_cmd_line(channel_name):
             if only_off_messages and not has_chat_command(message):
                 await server.swallow(message, alert=False)
                 return
             await self.process_commands(message)
             return
 
-        if channels.is_chat_hub(message.channel.name) or channels.is_landing_page(
-            message.channel.name
-        ):
+        if channels.is_chat_hub(channel_name) or channels.is_landing_page(channel_name):
             if only_off_messages and not has_chat_command(message):
                 await server.swallow(message, alert=False)
                 return
@@ -156,7 +155,7 @@ class TalesBot(commands.Bot):
             # so we must check for it specifically since
             # we want it to work in cmd_line but not in chat_hub
             if has_help_command(message):
-                should_alert = not channels.is_landing_page(message.channel.name)
+                should_alert = not channels.is_landing_page(channel_name)
                 await server.swallow(message, alert=should_alert)
             else:
                 # All our commands know if they are usable in chat hub or not,

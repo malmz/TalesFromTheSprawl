@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from .database.models import Artifact, ArtifactContent
+from ..database.models import Artifact, ArtifactContent
 
 
 async def create(

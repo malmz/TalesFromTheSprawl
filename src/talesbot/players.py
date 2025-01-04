@@ -4,8 +4,12 @@ from typing import List, cast
 
 import discord
 from configobj import ConfigObj
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from talesbot import gm
+from talesbot.access import actor, group
 
 from . import actors, channels, common, player_setup, server, shops
 from .common import (
@@ -15,13 +19,43 @@ from .common import (
 )
 from .config import config_dir
 from .custom_types import Handle, PlayerData
+from .database.models import Player
 from .errors import AlreadyRegisterdError, InvalidStartingHandleError, NotRegisterdError
 from .groups import Group
+from .known_handles import read_known_handles
 
 players_conf_dir = "players"
 user_id_mappings_index = "___user_id_to_player_id"
 guild_to_user_count_index = "__guild_to_user_count"
 logger = logging.getLogger(__name__)
+
+
+async def get_player(session: AsyncSession, discord_id: int) -> Player | None:
+    return await session.scalar(
+        select(Player).where(Player.discord_id == discord_id).options(joinedload())
+    )
+
+
+async def create_player(session: AsyncSession, member: discord.Member, handle: str):
+    known_handles = read_known_handles()
+    if handle not in known_handles:
+        raise InvalidStartingHandleError(handle)
+
+    known_handle = known_handles[handle]
+
+    player_actor = await actor.create_player(session, guild=member.guild)
+
+    groups = [await group.ensure(session, g) for g in known_handle.groups]
+
+    player = Player(
+        discord_id=member.id,
+        guild_id=member.guild.id,
+        actor=player_actor,
+        cmd_channel_id=0,
+    )
+    session.add(player)
+
+    player.groups = groups
 
 
 def get_players_confobj():

@@ -1,6 +1,14 @@
 import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Table, UniqueConstraint, func
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Sequence,
+    Table,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from . import Base
@@ -19,17 +27,21 @@ player_shops = Table(
     Column("shop_id", ForeignKey("shop.id"), primary_key=True),
 )
 
+player_actor_seq = Sequence("player_actor_seq", metadata=Base.metadata, start=200)
+
 
 class Player(Base):
     __tablename__ = "player"
     id: Mapped[int] = mapped_column(init=False, primary_key=True)
-    discord_id: Mapped[int]
+    discord_id: Mapped[int] = mapped_column(unique=True)
     guild_id: Mapped[int]
     cmd_channel_id: Mapped[int]
-    shops: Mapped[set["Shop"]] = relationship(
+    actor_id: Mapped[int] = mapped_column(ForeignKey("actor.id"), init=False)
+    actor: Mapped["Actor"] = relationship()
+    shops: Mapped[list["Shop"]] = relationship(
         init=False, back_populates="employees", secondary=player_shops
     )
-    groups: Mapped[set["Group"]] = relationship(
+    groups: Mapped[list["Group"]] = relationship(
         init=False, back_populates="members", secondary=player_groups
     )
 
@@ -37,13 +49,19 @@ class Player(Base):
 class Actor(Base):
     __tablename__ = "actor"
     id: Mapped[int] = mapped_column(init=False, primary_key=True)
-    name: Mapped[str]
+    name: Mapped[str] = mapped_column(unique=True)
+    role_name: Mapped[str]
+    guild_id: Mapped[int]
+    finance_channel_id: Mapped[int]
+    chat_channel_id: Mapped[int]
+    finance_stmt_msg_id: Mapped[int | None] = mapped_column(default=None)
 
 
 class Group(Base):
     __tablename__ = "group"
     id: Mapped[int] = mapped_column(init=False, primary_key=True)
-    members: Mapped[set["Player"]] = relationship(
+    name: Mapped[str] = mapped_column(unique=True)
+    members: Mapped[list["Player"]] = relationship(
         init=False, back_populates="groups", secondary=player_groups
     )
 
@@ -51,7 +69,8 @@ class Group(Base):
 class Shop(Base):
     __tablename__ = "shop"
     id: Mapped[int] = mapped_column(init=False, primary_key=True)
-    employees: Mapped[set["Player"]] = relationship(
+    name: Mapped[str] = mapped_column(unique=True)
+    employees: Mapped[list["Player"]] = relationship(
         init=False, back_populates="shops", secondary=player_groups
     )
 

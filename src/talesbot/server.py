@@ -3,6 +3,7 @@ import logging
 from typing import List
 
 import discord
+from discord import Guild
 
 from talesbot import gm
 
@@ -15,8 +16,8 @@ from .common import (
 
 logger = logging.getLogger(__name__)
 
-guilds = []
-guild_roles = {}
+guilds: list[Guild] = []
+guild_roles: dict[int, dict] = {}
 
 # TODO: restrict reactions to only the channels where they actually do anything.
 # This is a third category I think:
@@ -48,7 +49,7 @@ public_read_only_base = discord.PermissionOverwrite(
 public_normal_base = super_access
 
 
-async def init(connected_guilds):
+async def init(connected_guilds: list[Guild]):
     for guild in connected_guilds:
         guilds.append(guild)
         guild_roles[guild.id] = {}

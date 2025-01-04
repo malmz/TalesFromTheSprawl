@@ -1,11 +1,16 @@
+"""
+Tracks and handles state related to channels
+"""
+
 import asyncio
 import datetime
 import logging
 import os
-from typing import Optional, Union
+from typing import Optional, TypedDict
 
 import discord
-from configobj import ConfigObj
+from discord import CategoryChannel, Guild, Role, TextChannel
+from discord.abc import GuildChannel
 from discord.ext import commands
 
 from . import players, server
@@ -23,113 +28,167 @@ from .common import (
     shops_category_name,
     testing_category_name,
 )
-from .config import config_dir
 from .custom_types import PostTimestamp
+from .errors import UnexpectedChannelTypeError
 from .ui.register import RegisterView
 
-### Module channels.py
-# This module tracks and handles state related to channels
-
-public_anon_channel_name = "anon"
-
-last_poster_index = "___last_poster"
-last_full_post_index = "___last_full_post_time"
-post_counter_index = "___post_counter"
-
-slowmode_delay: int = 2
-
-# Channel state: this is the state of the channel, independent of the handles used in it.
-
-channel_states = ConfigObj(str(config_dir / "channel_states.conf"))
 logger = logging.getLogger(__name__)
 
-type VocalGuildChannel = Union[discord.VoiceChannel, discord.StageChannel]
-type GuildChannel = Union[
-    VocalGuildChannel,
-    discord.ForumChannel,
-    discord.TextChannel,
-    discord.CategoryChannel,
-]
+public_anon_channel_name = "anon"
+slowmode_delay: int = 2
+
+
+class ChannelState:
+    """Channel state used for message grouping"""
+
+    last_poster: str
+    last_full_post_at: datetime.datetime
+    post_count: int
+
+    def __init__(self) -> None:
+        self.last_poster = ""
+        self.last_full_post_at = datetime.datetime.now()
+        self.post_count = 0
+
+    def increment(self):
+        self.post_count += 1
+        return self.post_count >= 10
+    
+    def reset(self):
+        self.post_count = 0
+
+    def cmp_timestamp(self, timestamp: datetime.datetime):
+        self.last_full_post_at
+
+    def record_new_post(self, handle_name: str, timestamp = datetime.datetime.now()) -> bool:
+        counter_limit = self.increment()
+
+        if self.last_poster != handle_name or counter_limit or timestamp.h:
+            self.last_full_post_at
+            self.last_poster = handle_name
+            self.reset()
+
+
+class ChannelStateManager:
+    data: dict[str, ChannelState] = {}
+
+    def clear(self):
+        self.data.clear()
+
+    def get_state(self, channel_name: str) -> ChannelState:
+        if channel_name not in self.data:
+            self.data[channel_name] = ChannelState()
+
+        return self.data[channel_name]
+
+    def set_last_poster(self, channel_name: str, handle_name: str):
+        state = self.get_state(channel_name)
+        state.last_poster = handle_name
+
+    def increment_post_count(self, channel_name: str) -> bool:
+        state = self.get_state(channel_name)
+        state.post_count += 1
+        return state.post_count >= 10
+
+    def reset_post_count(self, channel_name: str):
+        state = self.get_state(channel_name)
+        state.post_count = 0
+
+    def record_new_post(self, channel_name: str, handle_name: str, timestamp: datetime.datetime) -> bool:
+        state = self.get_state(channel_name)
+        if state.
+
+
+channel_states: dict[str, ChannelState] = {}
 
 
 ### Utilities:
 
 
-def clickable_channel_ref(discord_channel):
-    return clickable_channel_id_ref(discord_channel.id)
+def fmt_channel(channel: GuildChannel, with_type=False) -> str:
+    type_str = f" ({channel.type})" if with_type else ""
+    if channel.category is not None:
+        return f"{channel.guild.name}:{channel.category.name}:{channel.name}{type_str}"
+    else:
+        return f"{channel.guild.name}:{channel.name}{type_str}"
 
 
-def clickable_channel_id_ref(channel_id: str):
+def clickable_channel_ref(channel: GuildChannel):
+    return clickable_channel_id_ref(channel.id)
+
+
+def clickable_channel_id_ref(channel_id: str | int):
     return f"<#{channel_id}>"
 
 
-def _category_name(discord_channel):
-    return None if discord_channel.category is None else discord_channel.category.name
+def _category_name(channel: GuildChannel):
+    return None if channel.category is None else channel.category.name
 
 
-def is_offline_channel(discord_channel):
-    return _category_name(discord_channel) == off_category_name
+def is_offline_channel(channel: GuildChannel):
+    return _category_name(channel) == off_category_name
 
 
-def is_public_channel(discord_channel):
+def is_public_channel(channel: GuildChannel):
     return (
-        _category_name(discord_channel) == public_open_category_name
-        or _category_name(discord_channel) == shadowlands_category_name
+        _category_name(channel) == public_open_category_name
+        or _category_name(channel) == shadowlands_category_name
     )
 
 
-def is_announcement_channel(discord_channel):
-    return _category_name(discord_channel) == announcements_category_name
+def is_announcement_channel(channel: GuildChannel):
+    return _category_name(channel) == announcements_category_name
 
 
-def is_chat_channel(discord_channel):
-    if discord_channel.category is None:
+def is_chat_channel(channel: GuildChannel):
+    if channel.category is None:
         return False
     else:
-        return discord_channel.category.name.startswith(chats_category_base)
+        return channel.category.name.startswith(chats_category_base)
 
 
-def is_personal_channel(discord_channel, channel_suffix: str = None):
-    return is_category_channel(discord_channel, personal_category_base, channel_suffix)
+def is_personal_channel(channel: GuildChannel, channel_suffix: str | None = None):
+    return is_category_channel(channel, personal_category_base, channel_suffix)
 
 
-def is_group_channel(discord_channel, channel_suffix: str = None):
-    return is_category_channel(discord_channel, groups_category_name, channel_suffix)
+def is_group_channel(channel: GuildChannel, channel_suffix: str | None = None):
+    return is_category_channel(channel, groups_category_name, channel_suffix)
 
 
 def is_category_channel(
-    discord_channel, category_name: str, channel_suffix: str = None
+    channel: GuildChannel, category_name: str, channel_suffix: str | None = None
 ):
-    if discord_channel.category is None:
+    if channel.category is None:
         return False
     else:
-        if discord_channel.category.name.startswith(category_name):
+        if channel.category.name.startswith(category_name):
             if channel_suffix is None:
                 return True
             else:
-                return discord_channel.name.endswith(channel_suffix)
+                return channel.name.endswith(channel_suffix)
 
 
 # TODO: allow for "manual shops",
-# e.g. channels under shops_category_name that are nonetheless handled just like public_open_category_name
+# e.g. channels under shops_category_name that are
+# nonetheless handled just like public_open_category_name
 
 
-def is_shop_channel(discord_channel):
-    return _category_name(
-        discord_channel
-    ) == shops_category_name or discord_channel.name == os.getenv("MAIN_SHOP_NAME")
+def is_shop_channel(channel: GuildChannel):
+    return _category_name(channel) == shops_category_name or channel.name == os.getenv(
+        "MAIN_SHOP_NAME"
+    )
 
 
-def is_pseudonymous_channel(discord_channel):
-    return _category_name(discord_channel) in [
+def is_pseudonymous_channel(channel: GuildChannel):
+    return _category_name(channel) in [
         public_open_category_name,
         shadowlands_category_name,
         groups_category_name,
     ]
 
 
-def is_anonymous_channel(discord_channel):
-    return discord_channel.name == public_anon_channel_name
+def is_anonymous_channel(channel: GuildChannel):
+    return channel.name == public_anon_channel_name
 
 
 def get_discord_channels_from_name(channel_name: str):
@@ -141,7 +200,7 @@ def get_discord_channels_from_name(channel_name: str):
     ]
 
 
-def get_discord_channel(channel_id: str, guild_id: Optional[int] = None):
+def get_discord_channel(channel_id: str, guild_id: int | None = None):
     # We should make sure the channel is in the correct guild here, but leaving
     # that for the future. Channel IDs shouldnt overlap between guilds unless a
     # really unusual match appears. Let's pray to the RNG gods. Or make guild_id
@@ -153,22 +212,21 @@ def get_discord_channel(channel_id: str, guild_id: Optional[int] = None):
                 return ch
 
 
-async def delete_discord_channel(channel_id: str, guild_id: Optional[int] = None):
+async def delete_discord_channel(channel_id: str, guild_id: int | None = None):
     channel = get_discord_channel(channel_id, guild_id)
     if channel is not None:
         await channel.delete()
 
 
-# TODO: idea: a "do actions muted" function, that would remove all non-system permissions, do action (callable?) and then re-add them
-# To avoid notifications
+# TODO: idea: a "do actions muted" function, that would remove
+# all non-system permissions, do action (callable?) and then re-add
+# them to avoid notifications
 
 ### Common init functions:
 
 
 async def init(bot: commands.Bot):
-    for elem in channel_states:
-        del channel_states[elem]
-    channel_states.write()
+    channel_states.clear()
 
     logger.debug(f"Init channels for {len(bot.guilds)} guilds")
     for guild in bot.guilds:
@@ -176,9 +234,11 @@ async def init(bot: commands.Bot):
         await init_channels_and_categories(guild)
 
 
-async def init_channels_and_categories(guild: discord.Guild):
-    for cat, channels in get_all_categories():
-        await _verify_category_exists(guild, cat, channels)
+async def init_channels_and_categories(guild: Guild):
+    for category_name, channel_names in get_all_categories():
+        category = await _verify_category_exists(guild, category_name)
+        for channel_name in channel_names:
+            await _verify_channel_exists(category, channel_name)
 
     for c in guild.channels:
         logging.debug(f"Setting roles for {c.name}")
@@ -221,40 +281,36 @@ async def _init_discord_channel(discord_channel: GuildChannel):
 
     else:
         logger.debug(
-            f"Will not create channel state for channel {discord_channel.name} which has no category"
+            f"Will not create channel state for channel {discord_channel.name}"
+            " which has no category"
         )
 
 
-async def _verify_category_exists(
-    guild: discord.Guild, category_name: str, channels: list
-):
-    if category_name not in [cat.name for cat in guild.categories]:
-        logger.debug(f"Did not find category {category_name}, will create it")
-        await guild.create_category(category_name)
-    else:
-        logger.debug(f"Category already exists {guild.name}:{category_name}")
-
-    category = next(
-        (cat for cat in guild.categories if cat.name == category_name), None
-    )
-    for channel in channels:
-        await _verify_channel_exists(category, channel)
+async def _verify_category_exists(guild: Guild, category_name: str) -> CategoryChannel:
+    category = discord.utils.find(lambda c: c.name == category_name, guild.categories)
+    if category is None:
+        category = await guild.create_category(category_name)
+        logger.debug(f"Created {fmt_channel(category, with_type=True)}")
+    return category
 
 
-async def _verify_channel_exists(category: discord.CategoryChannel, channel_name: str):
-    if channel_name not in [ch.name for ch in category.channels]:
-        await category.create_text_channel(channel_name)
-    else:
-        logger.debug(f"Channel already exists {category.guild.name}:{channel_name}")
+async def _verify_channel_exists(category: CategoryChannel, channel_name: str):
+    channel = discord.utils.find(lambda c: c.name == channel_name, category.channels)
+    if channel is None:
+        channel = await category.create_text_channel(channel_name)
+        logger.debug(f"Created {fmt_channel(channel, with_type=True)}")
+
+    if not isinstance(channel, TextChannel):
+        logger.warning(f"{fmt_channel(channel, with_type=True)} is not a text channel")
+
+    return channel
 
 
-async def _init_channel_state(discord_channel: GuildChannel):
-    await discord_channel.edit(slowmode_delay=slowmode_delay)
-    channel_name = discord_channel.name
-    channel_states[
-        channel_name
-    ] = {}  # TODO: How does this work with guilds joining on-the-fly?
-    channel_states.write()
+async def _init_channel_state(channel: TextChannel):
+    await channel.edit(slowmode_delay=slowmode_delay)
+
+    # TODO: How does this work with guilds joining on-the-fly?
+    channel_states[channel.name] = ChannelState()
 
 
 async def _set_base_permissions(
@@ -305,24 +361,28 @@ async def _init_group_channel(discord_channel):
     _init_pseudonymous_channel(discord_channel.name)
 
 
-async def _init_setup_channel(discord_channel: GuildChannel):
+async def _init_setup_channel(channel: GuildChannel):
+    if not isinstance(channel, TextChannel):
+        raise UnexpectedChannelTypeError(
+            f"Expected text channel {fmt_channel(channel)}"
+        )
+
     add_roles_tasks = [
-        asyncio.create_task(discord_channel.set_permissions(role, overwrite=overwrites))
+        asyncio.create_task(channel.set_permissions(role, overwrite=overwrites))
         for (role, overwrites) in server.generate_setup_channel_overwrites(
-            discord_channel.guild
+            channel.guild
         ).items()
     ]
     await asyncio.gather(*add_roles_tasks)
-    await _init_channel_state(discord_channel)
-    await discord_channel.purge()
-    await discord_channel.send(
-        generate_setup_channel_welcome_msg(), view=RegisterView()
-    )
+    await _init_channel_state(channel)
+    await channel.purge()
+    await channel.send(generate_setup_channel_welcome_msg(), view=RegisterView())
 
 
-async def make_read_only(channel_id: str, guild_id: Optional[int] = None):
+async def make_read_only(channel_id: str, guild_id: int | None = None):
     channel = get_discord_channel(channel_id, guild_id)
-    await _set_base_permissions(channel, private=True, read_only=True)
+    if channel is not None and isinstance(channel, TextChannel):
+        await _set_base_permissions(channel, private=True, read_only=True)
 
 
 ### Anonymous channels:
@@ -332,35 +392,30 @@ def get_public_anon_channels():
     return get_discord_channels_from_name(public_anon_channel_name)
 
 
-### Utilities related to pseudonymous channels, i.e. ones where all messages are reposted using handle
+### Utilities related to pseudonymous channels,
+# i.e. ones where all messages are reposted using handle
 
 
 def _init_pseudonymous_channel(channel_name: str):
     _set_last_poster(channel_name, "")
-    timestamp: PostTimestamp = PostTimestamp.from_datetime(datetime.datetime.today())
-    _set_last_full_post(channel_name, timestamp)
+    _set_last_full_post(channel_name, datetime.datetime.now())
     _reset_post_counter(channel_name)
 
 
 def _set_last_poster(channel_name: str, poster_id: str):
-    channel_states[channel_name][last_poster_index] = poster_id
-    channel_states.write()
+    channel_states[channel_name].last_poster = poster_id
 
 
 def _get_last_poster(channel_name: str):
-    if last_poster_index not in channel_states[channel_name]:
-        return ""
-    else:
-        return channel_states[channel_name][last_poster_index]
+    return channel_states[channel_name].last_poster
 
 
 def _get_last_post_time(channel_name: str):
-    return PostTimestamp.from_string(channel_states[channel_name][last_full_post_index])
+    return channel_states[channel_name].last_full_post_at
 
 
-def _set_last_full_post(channel_name: str, timestamp: PostTimestamp):
-    channel_states[channel_name][last_full_post_index] = timestamp.to_string()
-    channel_states.write()
+def _set_last_full_post(channel_name: str, timestamp: datetime.datetime):
+    channel_states[channel_name].last_full_post_at = timestamp
 
 
 def _time_has_passed_since_last_full_post(channel_name: str, timestamp):
@@ -403,11 +458,9 @@ def record_new_post(channel_name: str, poster_id: str, timestamp: PostTimestamp)
 
 
 async def create_discord_channel(
-    guild, overwrites, channel_name: str, category_name: str
+    guild: Guild, overwrites, channel_name: str, category_name: str
 ):
-    category = discord.utils.find(
-        lambda cat: cat.name == category_name, guild.categories
-    )
+    category = await _verify_category_exists(guild, category_name)
     channel = await guild.create_text_channel(
         channel_name,
         overwrites=overwrites,
@@ -452,20 +505,17 @@ async def get_all_chat_hub_channels(channel_suffix: str = None):
 
 
 async def create_personal_channel(
-    guild,
-    role,
+    guild: Guild,
+    role: Role,
     channel_name: str,
     actor_id: str,
-    category_index: Optional[int] = None,
+    category_index: int | None = None,
     read_only: bool = False,
 ):
+    if category_index is None:
+        category_index = players.get_player_category_index(actor_id)
     overwrites = server.generate_overwrites_own_new_private_channel(role, read_only)
-    real_category_index = (
-        category_index
-        if category_index is not None
-        else players.get_player_category_index(actor_id)
-    )
-    category_name = "%s%d" % (personal_category_base, real_category_index)
+    category_name = f"{personal_category_base}{category_index}"
     return await create_discord_channel(guild, overwrites, channel_name, category_name)
 
 
