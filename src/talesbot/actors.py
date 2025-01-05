@@ -69,8 +69,8 @@ async def create_player_actor(
     await send_startup_message_finance(finance_channel, actor_id)
 
     actor = Actor(
-        name="u" + actor_id,
-        role_name=actor_role,
+        name=actor_id,
+        role_name=role.name,
         guild_id=guild.id,
         finance_channel_id=finance_channel.id,
         chat_channel_id=chat_channel.id,

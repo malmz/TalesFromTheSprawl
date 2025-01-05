@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from talesbot import gm
-from talesbot.access import actor, group
+from talesbot.access import group
 
 from . import actors, channels, common, player_setup, server, shops
 from .common import (
@@ -43,9 +43,12 @@ async def create_player(session: AsyncSession, member: discord.Member, handle: s
 
     known_handle = known_handles[handle]
 
-    player_actor = await actor.create_player(session, guild=member.guild)
+    player_actor = await actors.create_player_actor(session, guild=member.guild)
+    role = discord.utils.find(None, member.guild.)
 
     groups = [await group.ensure(session, g) for g in known_handle.groups]
+
+    cmd_channel = await channels.create_personal_channel(member.guild, )
 
     player = Player(
         discord_id=member.id,
@@ -192,7 +195,7 @@ def get_next_player_index():
     return player_index
 
 
-async def create_player(member: discord.Member, handle_id: str):
+async def create_player_old(member: discord.Member, handle_id: str):
     if not player_setup.can_setup_new_player_with_handle(handle_id):
         raise InvalidStartingHandleError(handle_id)
     user_id = str(member.id)
