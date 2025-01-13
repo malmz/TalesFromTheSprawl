@@ -179,7 +179,7 @@ def any_groups():
     return next(iter(groups), weird_default_val) != weird_default_val
 
 
-def get_main_channel(guild, group_name: str):
+def get_main_channel(guild: discord.Guild, group_name: str):
     if group_name is not None:
         group_id = group_name.lower()
         group: Group = Group.read(group_id)

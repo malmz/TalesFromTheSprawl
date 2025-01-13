@@ -3,7 +3,7 @@ import logging
 from typing import List
 
 import discord
-from discord import Guild
+from discord import Guild, Role
 
 from talesbot import gm
 
@@ -17,7 +17,7 @@ from .common import (
 logger = logging.getLogger(__name__)
 
 guilds: list[Guild] = []
-guild_roles: dict[int, dict] = {}
+guild_roles: dict[int, dict[str, Role]] = {}
 
 # TODO: restrict reactions to only the channels where they actually do anything.
 # This is a third category I think:
@@ -63,7 +63,7 @@ async def init(connected_guilds: list[Guild]):
             guild_roles[guild.id][role_name] = await _init_role(guild, role_name)
 
 
-async def _init_role(guild, role_name: str):
+async def _init_role(guild: Guild, role_name: str):
     role = discord.utils.find(lambda role: role.name == role_name, guild.roles)
     if role is None:
         logger.debug(f"Creating role with name {role_name}")
@@ -120,7 +120,7 @@ async def set_user_as_new_player(member):
     await give_member_role(member, new_player_role)
 
 
-def get_all_players_role(guild):
+def get_all_players_role(guild: Guild):
     return guild_roles[guild.id][all_players_role_name]
 
 
@@ -136,7 +136,7 @@ def get_gm_role(guild):
     return guild_roles[guild.id][gm.role_name]
 
 
-def get_new_player_role(guild):
+def get_new_player_role(guild: Guild):
     return guild_roles[guild.id][new_player_role_name]
 
 

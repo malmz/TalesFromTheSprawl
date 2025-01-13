@@ -14,7 +14,8 @@ from . import channels, common, finances, handles, players, server, shops
 from .common import emoji_cancel, emoji_open
 from .config import config_dir
 from .custom_types import Actor, Transaction, TransTypes
-from .database.models import Actor, Player, player_actor_seq
+from .database.models import Actor, Handle, Player, player_actor_seq
+from .known_handles import KnownHandle
 
 
 async def _next_player_id(session: AsyncSession) -> int:
@@ -23,8 +24,7 @@ async def _next_player_id(session: AsyncSession) -> int:
 
 
 async def create_player_actor(
-    session: AsyncSession,
-    guild: Guild,
+    session: AsyncSession, guild: Guild, handle_info: KnownHandle
 ) -> Actor:
     player_id = await _next_player_id(session)
 
@@ -40,13 +40,13 @@ async def create_player_actor(
         or 0
     )
 
-    actor_index = 1 + player_count // 3
+    channel_index = 1 + player_count // 3
 
     role = discord.utils.find(lambda r: r.name == actor_role, guild.roles)
     if role is None:
         role = await guild.create_role(name=actor_role)
 
-    category_name = f"personal_account_{actor_index}"
+    category_name = f"personal_account_{channel_index}"
 
     category = discord.utils.find(lambda c: c.name == category_name, guild.categories)
     if category is None:
@@ -72,12 +72,26 @@ async def create_player_actor(
         name=actor_id,
         role_name=role.name,
         guild_id=guild.id,
+        channel_index=channel_index,
         finance_channel_id=finance_channel.id,
         chat_channel_id=chat_channel.id,
     )
-
     session.add(actor)
 
+    handle = Handle(
+        actor=actor,
+        name=handle_info.handle,
+        balance=handle_info.balance,
+        is_main=True,
+        is_active=True,
+    )
+    session.add(handle)
+
+    alt_handles = [
+        Handle(actor=actor, name=h, balance=handle_info.alt_balance[h])
+        for h in handle_info.alt_handles
+    ]
+    session.add_all(alt_handles)
     return actor
 
 

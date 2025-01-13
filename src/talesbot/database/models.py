@@ -1,15 +1,19 @@
 import datetime
+from enum import Enum
 
 from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Sequence,
     Table,
     UniqueConstraint,
+    event,
     func,
+    text,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, with_loader_criteria
 
 from . import Base
 
@@ -52,9 +56,15 @@ class Actor(Base):
     name: Mapped[str] = mapped_column(unique=True)
     role_name: Mapped[str]
     guild_id: Mapped[int]
+    channel_index: Mapped[int]
     finance_channel_id: Mapped[int]
     chat_channel_id: Mapped[int]
     finance_stmt_msg_id: Mapped[int | None] = mapped_column(default=None)
+    active_handle: Mapped["Handle"] = relationship(
+        init=False,
+        primaryjoin="and_(Actor.id==Handle.actor_id, Handle.is_active==True)",
+    )
+    handles: Mapped[list["Handle"]] = relationship(init=False, back_populates="actor")
 
 
 class Group(Base):
@@ -75,12 +85,25 @@ class Shop(Base):
     )
 
 
+class HandleType(Enum):
+    REGULAR = "regular"
+    BURNER = "burner"
+    CLOSED = "closed"
+    NPC = "npc"
+
+
 class Handle(Base):
     __tablename__ = "handle"
-
     id: Mapped[int] = mapped_column(init=False, primary_key=True)
-    name: Mapped[str]
-    balance: Mapped[int]
+    actor_id: Mapped[int] = mapped_column(ForeignKey("actor.id"), init=False)
+    name: Mapped[str] = mapped_column(unique=True)
+    actor: Mapped["Actor"] = relationship(back_populates="handles")
+    balance: Mapped[int] = mapped_column(default=0)
+    kind: Mapped[HandleType] = mapped_column(default=HandleType.REGULAR)
+    auto_response: Mapped[str | None] = mapped_column(default=None)
+    is_main: Mapped[bool] = mapped_column(default=False)
+    is_active: Mapped[bool] = mapped_column(default=False)
+
     outgoing_tansfers: Mapped[list["Transaction"]] = relationship(
         init=False,
         back_populates="sender",
@@ -90,6 +113,16 @@ class Handle(Base):
         init=False,
         back_populates="receiver",
         primaryjoin="Handle.id==Transaction.receiver_id",
+    )
+
+    __table_args__ = (
+        Index(
+            "single_active_handle",
+            actor_id,
+            is_active,
+            unique=True,
+            postgresql_where=is_active,
+        ),
     )
 
 

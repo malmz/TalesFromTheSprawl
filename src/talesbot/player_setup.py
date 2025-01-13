@@ -64,7 +64,7 @@ def remove_examples(entries: List[str]):
             yield entry
 
 
-def remove_examples_from_firsts(entries: List):
+def remove_examples_from_firsts(entries: list):
     for entry in entries:
         if double_underscore not in entry[0]:
             yield entry

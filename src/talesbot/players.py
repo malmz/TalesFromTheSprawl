@@ -19,10 +19,17 @@ from .common import (
 )
 from .config import config_dir
 from .custom_types import Handle, PlayerData
-from .database.models import Player
-from .errors import AlreadyRegisterdError, InvalidStartingHandleError, NotRegisterdError
+from .database.models import HandleType, Player
+from .errors import (
+    AlreadyRegisterdError,
+    InvalidStartingHandleError,
+    NotRegisterdError,
+    ReportError,
+)
 from .groups import Group
+from .handles import HandleAllowedResult, is_forbidden_handle
 from .known_handles import read_known_handles
+from .utils import fmt_handle, fmt_money
 
 players_conf_dir = "players"
 user_id_mappings_index = "___user_id_to_player_id"
@@ -43,22 +50,127 @@ async def create_player(session: AsyncSession, member: discord.Member, handle: s
 
     known_handle = known_handles[handle]
 
-    player_actor = await actors.create_player_actor(session, guild=member.guild)
-    role = discord.utils.find(None, member.guild.)
+    guild = member.guild
+
+    player_actor = await actors.create_player_actor(
+        session, guild=guild, handle_info=known_handle
+    )
+    actor_role = discord.utils.find(
+        lambda r: r.name == player_actor.role_name, guild.roles
+    )
+    if actor_role is None:
+        raise RuntimeError(f"Missing actor role {player_actor.role_name}")
 
     groups = [await group.ensure(session, g) for g in known_handle.groups]
 
-    cmd_channel = await channels.create_personal_channel(member.guild, )
+    cmd_channel = await channels.create_personal_channel(
+        guild=guild,
+        role=actor_role,
+        channel_name=channels.get_chat_hub_name(player_actor.name),
+        actor_id=player_actor.name,
+        category_index=player_actor.channel_index,
+    )
 
     player = Player(
         discord_id=member.id,
-        guild_id=member.guild.id,
+        guild_id=guild.id,
         actor=player_actor,
-        cmd_channel_id=0,
+        cmd_channel_id=cmd_channel.id,
     )
     session.add(player)
 
     player.groups = groups
+
+    player_role = server.get_all_players_role(guild)
+    new_player_role = server.get_new_player_role(guild)
+
+    await member.add_roles(actor_role, player_role)
+    await member.remove_roles(new_player_role)
+
+    try:
+        await member.edit(nick=player_actor.name)
+    except discord.Forbidden:
+        logger.error(
+            f"Could not edit nickname for user {member.name}, "
+            f"should manually be set to {player_actor.name}."
+        )
+
+    welcome_message = f"""# Welcome to the matrix network
+    This is your personal command line where you can run commands, \
+    you can issue commands everywhere but here is safe from accidentally \
+    sending to other players.
+
+    Your account ID is {player.actor.name}. All channels ending with \
+    {player.actor.name} are only visible to you.
+    In all other channels, your posts will be shown under your current \
+    **handle** ({handle})."""
+
+    await cmd_channel.send(welcome_message)
+
+    handles_message = """## Handles 
+    You can create and switch handles freely using the following commands:
+
+    >>> **/handle** *new_handle*
+    Switch to handle - if it does not already exist, it will be created for you.
+    Regular handles cannot be deleted, but you can just abandon it if you don't need it.
+
+    >>> **/show_handle** / **/handles**
+    Show you what your current handle is / show all your handles.
+
+    >>> **/burner** *new_handle*
+    Switch to a burner handle - \
+    if it does not already exist, it will be created for you.
+
+    >>> **/burn** *burner_handle*
+    Destroy a burner handle forever.
+    While a burner handle is active, it can possibly be traced.
+    After burning it, its ownership cannot be traced.
+    """
+
+    await cmd_channel.send(handles_message)
+
+    current_handles_message = "You currently have the following handles:\n"
+
+    for h in player.actor.handles:
+        main_msg = "(main)" if h.is_main else ""
+        active_msg = "(active)" if h.is_active else ""
+        burner_msg = "(burner)" if h.kind == HandleType.BURNER else ""
+        closed_msg = "(closed)" if h.kind == HandleType.CLOSED else ""
+        npc_msg = "(npc)" if h.kind == HandleType.NPC else ""
+        current_handles_message += (
+            f"- {fmt_handle(h.name)} with {fmt_money(h.balance)} "
+            f"{main_msg} {active_msg} {burner_msg} {closed_msg} {npc_msg} \n"
+        )
+
+    await cmd_channel.send(current_handles_message)
+
+    money_message = """## Money
+    Each handle has its own balance (money). Commands related to money:
+    
+    >>> **/balance**
+    Show the current balance of all handles you control.
+    
+    >>> **/collect**
+    Transfer all money from all handles you control to the one you are currently using.
+    
+    >>> **/pay** *recipient* *amount*
+    Transfer money from your current handle to the recipient.
+    You can of course use this to transfer money to another handle that you also own.
+
+    Note: when a burner handle is destroyed, any money on it will be transferred \
+    to your active handle.
+    Money transfer can be traced, even from burners."""
+
+    await cmd_channel.send(money_message)
+
+    groups_message = """## Communities
+    Each community has a private chat room that is invisible to outsiders:\n"""
+
+    for g in player.groups:
+        groups_message += f"- **{g.name}**: {channels.clickable_channel_ref()}"
+
+    groups_message += "Keep in mind that you can access these channels "
+    "using any of your handles!"
 
 
 def get_players_confobj():
@@ -101,10 +213,9 @@ async def _delete_all_player_roles(spare_used: bool):
     await asyncio.gather(*task_list)
 
 
-async def delete_if_player_role(role, spare_used: bool):
-    if common.is_player_role(role.name):
-        if not spare_used or len(role.members) == 0:
-            await role.delete()
+async def delete_if_player_role(role: discord.Role, spare_used: bool):
+    if common.is_player_role(role.name) and (not spare_used or len(role.members) == 0):
+        await role.delete()
 
 
 async def _clear_player(player_id: str):

@@ -1,6 +1,6 @@
 import asyncio
 import re
-from enum import Enum
+from enum import Enum, StrEnum
 
 from configobj import ConfigObj
 from discord import Interaction, app_commands
@@ -168,13 +168,13 @@ alphanumeric_regex = re.compile("^[a-zA-Z0-9][a-zA-Z0-9_]*$")
 double_underscore = "__"
 
 
-class HandleAllowedResult(str, Enum):
+class HandleAllowedResult(StrEnum):
     Allowed = "a"
     Invalid = "i"
     Reserved = "r"
 
 
-def is_forbidden_handle(new_handle: str):
+def is_forbidden_handle(new_handle: str) -> HandleAllowedResult:
     handle_to_check = new_handle.lower()
     matches = re.search(alphanumeric_regex, handle_to_check)
     if matches is None or (
