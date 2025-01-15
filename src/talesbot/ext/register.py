@@ -6,13 +6,15 @@ from discord.ext import commands
 
 from talesbot import common, handles, players
 
+from ..bot import TalesBot
+from ..database import SessionM
 from ..ui.register import RegisterView
 
 logger = logging.getLogger(__name__)
 
 
 class RegisterCog(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: TalesBot):
         self.bot = bot
 
     @app_commands.command(
@@ -26,31 +28,28 @@ class RegisterCog(commands.Cog):
     async def join(self, interaction: Interaction, handle: str):
         await interaction.response.defer(ephemeral=True)
         member = cast(Member, interaction.user)  # Safe because of "guild_only"
+
         if handle == "handle" or handle == "<handle>":
             await interaction.followup.send(
                 'You must say which handle is yours! Example: "/join shadow_weaver"',
                 ephemeral=True,
             )
-        else:
-            async with handles.semaphore():
-                # TODO give player some sort of warning about using lower-case only
-                handle_id = handle.lower()
-                report = await players.create_player(member, handle_id)
-            if report is not None:
-                await interaction.followup.send(
-                    (
-                        f'Failed: invalid starting handle "{handle_id}" '
-                        "(or handle is already taken)."
-                    ),
-                    ephemeral=True,
-                )
-            else:
-                await interaction.followup.send(
-                    "Success! Now have a look at all your new channels 🥳",
-                    ephemeral=True,
-                )
+            return
+
+        if handle != handle.lower():
+            handle = handle.lower()
+            await interaction.followup.send(
+                f"Handles are always lowercase, using {handle}", ephemeral=True
+            )
+
+        async with SessionM() as session:
+            _player = await self.bot.players.create_player(session, member, handle)
+            await interaction.followup.send(
+                "Success! Now have a look at all your new channels 🥳",
+                ephemeral=True,
+            )
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: TalesBot):
     bot.add_view(RegisterView())
     await bot.add_cog(RegisterCog(bot))

@@ -170,3 +170,12 @@ class Artifact(Base):
     )
     password: Mapped[str | None] = mapped_column(default=None)
     announcement: Mapped[str | None] = mapped_column(default=None)
+
+
+class Message(Base):
+    __tablename__ = "message"
+
+    id: Mapped[int] = mapped_column(init=False, primary_key=True)
+    sender_id: Mapped[int] = mapped_column(ForeignKey("handle.id"), init=False)
+
+    content: Mapped[str]
