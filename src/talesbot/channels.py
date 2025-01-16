@@ -6,6 +6,7 @@ import asyncio
 import datetime
 import logging
 import os
+from enum import Enum
 from typing import Optional, TypedDict
 
 import discord
@@ -195,6 +196,20 @@ def is_category_channel(
 # TODO: allow for "manual shops",
 # e.g. channels under shops_category_name that are
 # nonetheless handled just like public_open_category_name
+
+
+class ChannelType(Enum):
+    OFF = "off"
+    ANON = "anon"
+    OPEN = "open"
+    SHOP = "shop"
+
+
+def channel_type(channel: GuildChannel) -> ChannelType:
+    if is_anonymous_channel(channel):
+        return ChannelType.ANON
+    # TODO: fill in rest
+    return ChannelType.OFF
 
 
 def is_shop_channel(channel: GuildChannel):

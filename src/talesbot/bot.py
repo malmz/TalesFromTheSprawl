@@ -82,6 +82,7 @@ class TalesBot(commands.Bot):
     def __init__(self, *args, inital_extensions: list[str], **kwargs):
         super().__init__(*args, tree_cls=TalesCommandTree, **kwargs)
         self.inital_extensions = inital_extensions
+        self.players = players.PlayerService
 
     async def setup_hook(self) -> None:
         for ext in self.inital_extensions:

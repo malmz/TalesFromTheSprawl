@@ -172,10 +172,36 @@ class Artifact(Base):
     announcement: Mapped[str | None] = mapped_column(default=None)
 
 
-class Message(Base):
-    __tablename__ = "message"
+class Chat(Base):
+    __tablename__ = "chat"
 
     id: Mapped[int] = mapped_column(init=False, primary_key=True)
-    sender_id: Mapped[int] = mapped_column(ForeignKey("handle.id"), init=False)
+    name: Mapped[str]
+    is_active: Mapped[bool]
 
+    members: Mapped[list["ChatMember"]] = relationship(back_populates="chat")
+    messages: Mapped[list["ChatMessage"]] = relationship(back_populates="chat")
+
+
+class ChatMember(Base):
+    __tablename__ = "chat_member"
+
+    id: Mapped[int] = mapped_column(init=False, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(ForeignKey("chat.id"), init=False)
+    handle_id: Mapped[int] = mapped_column(ForeignKey("handle.id"), init=False)
+    channel_name: Mapped[str]
+
+    handle: Mapped["Handle"] = relationship()
+    chat: Mapped["Chat"] = relationship(back_populates="members")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_message"
+
+    id: Mapped[int] = mapped_column(init=False, primary_key=True)
+    chat_id: Mapped[int] = mapped_column(ForeignKey("chat.id"), init=False)
+    sender_id: Mapped[int] = mapped_column(ForeignKey("handle.id"), init=False)
     content: Mapped[str]
+
+    chat: Mapped["Chat"] = relationship(back_populates="messages")
+    sender: Mapped["Handle"] = relationship()

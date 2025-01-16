@@ -5,7 +5,7 @@ from enum import Enum
 import discord
 import simplejson
 from configobj import ConfigObj
-from discord import Interaction, app_commands
+from discord import Interaction, Message, app_commands
 from discord.ext import commands
 
 from talesbot import checks, gm
@@ -1289,7 +1289,7 @@ def create_reposting_tasks(
         )
 
 
-async def process_message(message):
+async def process_message(message: Message):
     await message.delete()
 
     sender_channel = message.channel
