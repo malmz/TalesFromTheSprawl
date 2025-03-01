@@ -31,57 +31,74 @@ player_shops = Table(
     Column("shop_id", ForeignKey("shop.id"), primary_key=True),
 )
 
-player_actor_seq = Sequence("player_actor_seq", metadata=Base.metadata, start=200)
-
-
-class Player(Base):
-    __tablename__ = "player"
-    id: Mapped[int] = mapped_column(init=False, primary_key=True)
-    discord_id: Mapped[int] = mapped_column(unique=True)
-    guild_id: Mapped[int]
-    cmd_channel_id: Mapped[int]
-    actor_id: Mapped[int] = mapped_column(ForeignKey("actor.id"), init=False)
-    actor: Mapped["Actor"] = relationship()
-    shops: Mapped[list["Shop"]] = relationship(
-        init=False, back_populates="employees", secondary=player_shops
-    )
-    groups: Mapped[list["Group"]] = relationship(
-        init=False, back_populates="members", secondary=player_groups
-    )
+role_seq = Sequence("actor_role_seq", metadata=Base.metadata, start=2000)
 
 
 class Actor(Base):
     __tablename__ = "actor"
     id: Mapped[int] = mapped_column(init=False, primary_key=True)
+    kind: Mapped[str] = mapped_column(init=False)
     name: Mapped[str] = mapped_column(unique=True)
-    role_name: Mapped[str]
+    role_name: Mapped[str] = mapped_column(
+        init=False, server_default=role_seq.next_value()
+    )
     guild_id: Mapped[int]
-    channel_index: Mapped[int]
-    finance_channel_id: Mapped[int]
-    chat_channel_id: Mapped[int]
-    finance_stmt_msg_id: Mapped[int | None] = mapped_column(default=None)
+    channel_id: Mapped[int]
+
     active_handle: Mapped["Handle"] = relationship(
         init=False,
         primaryjoin="and_(Actor.id==Handle.actor_id, Handle.is_active==True)",
     )
     handles: Mapped[list["Handle"]] = relationship(init=False, back_populates="actor")
 
+    __mapper_args__ = {
+        "polymorphic_identity": "generic",
+        "polymorphic_on": "type",
+    }
+
+
+class Player(Actor):
+    __tablename__ = "player"
+    id: Mapped[int] = mapped_column(
+        ForeignKey("actor.id"), init=False, primary_key=True
+    )
+    discord_id: Mapped[int] = mapped_column(unique=True)
+
+    shops: Mapped[list["Shop"]] = relationship(
+        default=[], back_populates="employees", secondary=player_shops
+    )
+    groups: Mapped[list["Group"]] = relationship(
+        default=[], back_populates="members", secondary=player_groups
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "player",
+    }
+
+
+class Shop(Actor):
+    __tablename__ = "shop"
+    id: Mapped[int] = mapped_column(
+        ForeignKey("actor.id"), init=False, primary_key=True
+    )
+    employees: Mapped[list["Player"]] = relationship(
+        init=False, back_populates="shops", secondary=player_groups
+    )
+
+    __mapper_args__ = {
+        "polymorphic_identity": "shop",
+    }
+
 
 class Group(Base):
     __tablename__ = "group"
     id: Mapped[int] = mapped_column(init=False, primary_key=True)
     name: Mapped[str] = mapped_column(unique=True)
+    role_name: Mapped[str] = mapped_column(
+        init=False, server_default=role_seq.next_value()
+    )
     members: Mapped[list["Player"]] = relationship(
         init=False, back_populates="groups", secondary=player_groups
-    )
-
-
-class Shop(Base):
-    __tablename__ = "shop"
-    id: Mapped[int] = mapped_column(init=False, primary_key=True)
-    name: Mapped[str] = mapped_column(unique=True)
-    employees: Mapped[list["Player"]] = relationship(
-        init=False, back_populates="shops", secondary=player_groups
     )
 
 
@@ -122,6 +139,13 @@ class Handle(Base):
             is_active,
             unique=True,
             postgresql_where=is_active,
+        ),
+        Index(
+            "single_main_handle",
+            actor_id,
+            is_main,
+            unique=True,
+            postgresql_where=is_main,
         ),
     )
 
@@ -177,10 +201,14 @@ class Chat(Base):
 
     id: Mapped[int] = mapped_column(init=False, primary_key=True)
     name: Mapped[str]
-    is_active: Mapped[bool]
+    is_active: Mapped[bool] = mapped_column(default=True)
 
-    members: Mapped[list["ChatMember"]] = relationship(back_populates="chat")
-    messages: Mapped[list["ChatMessage"]] = relationship(back_populates="chat")
+    members: Mapped[list["ChatMember"]] = relationship(
+        back_populates="chat", default=[]
+    )
+    messages: Mapped[list["ChatMessage"]] = relationship(
+        back_populates="chat", default=[]
+    )
 
 
 class ChatMember(Base):
@@ -192,7 +220,7 @@ class ChatMember(Base):
     channel_name: Mapped[str]
 
     handle: Mapped["Handle"] = relationship()
-    chat: Mapped["Chat"] = relationship(back_populates="members")
+    chat: Mapped["Chat"] = relationship(init=False, back_populates="members")
 
 
 class ChatMessage(Base):

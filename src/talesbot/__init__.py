@@ -38,7 +38,7 @@ async def start_bot():
         "talesbot.handles",
         "talesbot.finances",
         "talesbot.ext.admin",
-        "talesbot.ext.register",
+        "talesbot.ext.player",
         "talesbot.chats",
         "talesbot.shops",
         "talesbot.ext.gm",

@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from talesbot.access import actor, group
+from talesbot.access import group
 
 from ..database.models import Player
 from ..errors import InvalidStartingHandleError
@@ -23,18 +23,13 @@ async def create(session: AsyncSession, member: discord.Member, handle: str):
 
     known_handle = known_handles[handle]
 
-    player_actor = await actor.create_player(
-        session, guild=member.guild, finance_channel=None, chat_channel=None
-    )
-
     groups = [await group.ensure(session, g) for g in known_handle.groups]
 
     player = Player(
-        discord_id=member.id,
+        name=handle,
         guild_id=member.guild.id,
-        actor=player_actor,
-        cmd_channel_id=0,
+        discord_id=member.id,
+        channel_id=0,
+        groups=groups,
     )
     session.add(player)
-
-    player.groups = groups

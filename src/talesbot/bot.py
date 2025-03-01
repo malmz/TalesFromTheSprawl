@@ -82,7 +82,6 @@ class TalesBot(commands.Bot):
     def __init__(self, *args, inital_extensions: list[str], **kwargs):
         super().__init__(*args, tree_cls=TalesCommandTree, **kwargs)
         self.inital_extensions = inital_extensions
-        self.players = players.PlayerService
 
     async def setup_hook(self) -> None:
         for ext in self.inital_extensions:
@@ -102,7 +101,7 @@ class TalesBot(commands.Bot):
             return
 
         # TODO: move some of the initialisation to the cogs instead
-        await server.init(self.guilds)
+        await server.init(list(self.guilds))
         await handles.init(clear_all)
         await actors.init(clear_all=clear_all)
         await players.init(clear_all=clear_all)
@@ -119,14 +118,14 @@ class TalesBot(commands.Bot):
         game.start_game()
 
     async def on_message(self, message: discord.Message) -> None:
-        if message.author.bot or channels.is_offline_channel(message.channel):
+        if message.author.bot or channels.is_offline_channel(message.channel):  # type: ignore
             # ignore messages
             return
 
         async with database.SessionM() as session:
             p = await player.get(session, message.author.id)
 
-            player_name = p.actor.name if p is not None else "[unregistered]"
+            player_name = p.name if p is not None else "[unregistered]"
 
             channel_name = cast(str, message.channel.name)  # type: ignore
 
@@ -173,7 +172,7 @@ class TalesBot(commands.Bot):
         if only_off_messages:
             # Only chats with certain handles are okay
             allowed = channels.is_chat_channel(
-                message.channel
+                message.channel  # type: ignore
             ) and game.is_out_of_game_chat(message.channel)
             if not allowed:
                 await server.swallow(message, alert=False)
@@ -191,7 +190,7 @@ class TalesBot(commands.Bot):
             return
 
         channel = await self.fetch_channel(payload.channel_id)
-        if channels.is_offline_channel(channel):
+        if channels.is_offline_channel(channel):  # type: ignore
             # No bot shenanigans in the off channels
             return
 

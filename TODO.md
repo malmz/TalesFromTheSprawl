@@ -1,0 +1,1 @@
+- [ ] Limit på handle namn längd. 40 är rimlig max. discord channels kan vara 100 (101?) täcken långa. dms har format {handle}\_to\_{handle}
