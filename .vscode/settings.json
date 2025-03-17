@@ -4,5 +4,6 @@
         "editor.codeActionsOnSave": {
             "source.organizeImports.ruff": "explicit"
         }
-    }
+    },
+    "python.analysis.autoImportCompletions": true
 }

@@ -2,7 +2,7 @@ import asyncio
 from collections.abc import Generator
 from typing import Any
 
-from discord import Message, TextChannel
+from discord import Guild, Message, TextChannel
 
 
 class Broadcaster:
@@ -19,6 +19,10 @@ class Broadcaster:
         topic_store = self.store.get(topic)
         if topic_store is not None:
             del topic_store[channel.id]
+
+    def remove_guild(self, guild: Guild):
+        for t, ts in self.store.items():
+            self.store[t] = {cid: c for cid, c in ts.items() if c.guild.id != guild.id}
 
     def get_channel_topics(self, channel: TextChannel) -> Generator[str, Any]:
         for topic, topic_store in self.store.items():
