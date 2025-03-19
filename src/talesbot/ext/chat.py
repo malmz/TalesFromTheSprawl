@@ -2,13 +2,14 @@ import asyncio
 from collections.abc import Generator
 from typing import cast
 
-from discord import Interaction, Member, Message, TextChannel, app_commands
+from discord import Guild, Interaction, Member, Message, TextChannel, app_commands
 from discord.abc import GuildChannel
 from discord.ext.commands import Bot, Cog
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from talesbot import channels, players
+from talesbot import channels, common, players
+from ..broadcaster import Broadcaster
 
 from ..database import SessionM
 from ..database.models import Chat, ChatMember, ChatMessage, Handle
@@ -17,8 +18,13 @@ from ..game import is_2party_chat_possible
 
 
 class ChatCog(Cog):
+
+    bot: Bot
+    broadcaster: Broadcaster
+
     def __init__(self, bot: Bot) -> None:
         self.bot = bot
+        self.broadcaster = Broadcaster()
 
     @app_commands.command()
     async def chat(self, interaction: Interaction, handle: str):
@@ -60,6 +66,12 @@ class ChatCog(Cog):
                     name=chat_name, is_active=True, members=[init_member, other_member]
                 )
                 session.add(chat)
+
+    @Cog.listener()
+    async def on_ready(self):
+        for chan in self.chat_channels():
+            if isinstance(chan, TextChannel):
+
 
     @Cog.listener()
     async def on_message(self, message: Message):
@@ -107,6 +119,17 @@ class ChatCog(Cog):
                     content=message.content, chat=chat, sender=chat_member.handle
                 )
                 session.add(chat_message)
+
+    def chat_channels(self, guild: Guild | None = None):
+        if guild is None:
+            for guild in self.bot.guilds:
+                for cat in guild.categories:
+                    if cat.name == channels.is_chat_channel(cat):
+                        yield from cat.channels
+        else:
+            for cat in guild.categories:
+                if cat.name == common.chats_categories:
+                    yield from cat.channels
 
     async def broadcast_message(
         self,

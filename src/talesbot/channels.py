@@ -165,6 +165,10 @@ def is_announcement_channel(channel: GuildChannel):
     return _category_name(channel) == announcements_category_name
 
 
+def is_chat_category(channel: CategoryChannel):
+    return channel.name.startswith(chats_category_base)
+
+
 def is_chat_channel(channel: GuildChannel):
     if channel.category is None:
         return False

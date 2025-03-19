@@ -1,7 +1,6 @@
 import logging
 
-import discord
-from discord import Guild, Message, Permissions, TextChannel
+from discord import Guild, Message, TextChannel
 from discord.abc import GuildChannel
 from discord.ext.commands import Bot, Cog
 from sqlalchemy import select
@@ -27,6 +26,7 @@ class GroupCog(Cog):
 
     def __init__(self, bot: Bot) -> None:
         self.bot = bot
+        self.broadcaster = Broadcaster()
 
     @Cog.listener()
     async def on_ready(self):
@@ -126,3 +126,7 @@ class GroupCog(Cog):
             for cat in guild.categories:
                 if cat.name == common.groups_category_name:
                     yield from cat.channels
+
+
+async def setup(bot: Bot):
+    await bot.add_cog(GroupCog(bot))
