@@ -196,6 +196,22 @@ class Artifact(Base):
     announcement: Mapped[str | None] = mapped_column(default=None)
 
 
+class MessageType(Enum):
+    DM = "dm"
+    GROUP = "group"
+
+
+class ChatLog(Base):
+    __tablename__ = "chat_log"
+    id: Mapped[int] = mapped_column(init=False, primary_key=True)
+    kind: Mapped[MessageType]
+    sender: Mapped[str]
+    receiver: Mapped[str]
+    content: Mapped[str]
+    sent_at: Mapped[datetime.datetime]
+    had_attachment: Mapped[bool]
+
+
 class Chat(Base):
     __tablename__ = "chat"
 

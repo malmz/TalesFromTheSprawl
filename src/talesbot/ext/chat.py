@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import re
 from collections.abc import Generator
 from typing import cast
 
@@ -6,19 +8,27 @@ from discord import Guild, Interaction, Member, Message, TextChannel, app_comman
 from discord.abc import GuildChannel
 from discord.ext.commands import Bot, Cog
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
-from talesbot import channels, common, players
+from talesbot import channels, players
+
 from ..broadcaster import Broadcaster
-
 from ..database import SessionM
-from ..database.models import Chat, ChatMember, ChatMessage, Handle
+from ..database.models import (
+    Chat,
+    ChatLog,
+    ChatMember,
+    Handle,
+    MessageType,
+)
 from ..errors import NotRegisterdError, ReportError
 from ..game import is_2party_chat_possible
 
+logger = logging.getLogger(__name__)
+
+channel_pattern = re.compile(r"(?P<sender>\w+)_to_(?P<receiver>\w+)")
+
 
 class ChatCog(Cog):
-
     bot: Bot
     broadcaster: Broadcaster
 
@@ -71,11 +81,57 @@ class ChatCog(Cog):
     async def on_ready(self):
         for chan in self.chat_channels():
             if isinstance(chan, TextChannel):
+                chat_name = _chat_name_from_channel(chan.name)
+                if chat_name is not None:
+                    self.broadcaster.add_channel(chat_name, chan)
 
+    @Cog.listener()
+    async def on_guild_channel_create(self, channel: GuildChannel):
+        if isinstance(channel, TextChannel) and channels.is_chat_channel(channel):
+            chat_name = _chat_name_from_channel(channel.name)
+            if chat_name is not None:
+                self.broadcaster.add_channel(chat_name, channel)
+
+    @Cog.listener()
+    async def on_guild_channel_delete(self, channel: GuildChannel):
+        if isinstance(channel, TextChannel) and channels.is_chat_channel(channel):
+            chat_name = _chat_name_from_channel(channel.name)
+            if chat_name is not None:
+                self.broadcaster.remove_channel(chat_name, channel)
+
+    @Cog.listener()
+    async def on_guild_channel_update(self, before: GuildChannel, after: GuildChannel):
+        # If channel is renamed
+        if before.name == after.name and before.category_id == after.category_id:
+            pass
+
+        if isinstance(before, TextChannel) and channels.is_chat_channel(before):
+            chat_name = _chat_name_from_channel(before.name)
+            if chat_name is not None:
+                self.broadcaster.remove_channel(chat_name, before)
+
+        if isinstance(after, TextChannel) and channels.is_chat_channel(after):
+            chat_name = _chat_name_from_channel(after.name)
+            if chat_name is not None:
+                self.broadcaster.add_channel(after.name, after)
+
+    @Cog.listener()
+    async def on_guild_available(self, guild: Guild):
+        logger.info(f"Scanning guild {guild.name} for chat channels")
+        for chan in self.chat_channels(guild):
+            if isinstance(chan, TextChannel):
+                chat_name = _chat_name_from_channel(chan.name)
+                if chat_name is not None:
+                    self.broadcaster.add_channel(chan.name, chan)
+
+    @Cog.listener()
+    async def on_guild_unavailable(self, guild: Guild):
+        logger.info(f"Disconnecting group channels for guild {guild.name}")
+        self.broadcaster.remove_guild(guild)
 
     @Cog.listener()
     async def on_message(self, message: Message):
-        channel = cast(GuildChannel, message.channel)
+        """channel = cast(GuildChannel, message.channel)
         if message.author.bot or channels.is_offline_channel(channel):
             return
 
@@ -90,45 +146,45 @@ class ChatCog(Cog):
                 sender_name = (
                     player.active_handle.name if player is not None else "anon"
                 )
-                await self.broadcast_message(channel.name, sender_name, message)
+                await self.broadcast_message(channel.name, sender_name, message)"""
 
-        elif channels.is_chat_channel(channel):
+        if (
+            not message.author.bot
+            and isinstance(message.channel, TextChannel)
+            and channels.is_chat_channel(message.channel)
+        ):
             await message.delete()
+
+            m = channel_pattern.fullmatch(message.channel.name)
+            if m is None:
+                raise RuntimeError(
+                    f"chat channel {message.channel.name} doesn't match channel pattern"
+                )
+
+            sender, receiver = m.groups()
+
+            chat_name = _chat_name([sender, receiver])
+            await self.broadcaster.broadcast(chat_name, sender, message)
+
             async with SessionM() as session, session.begin():
-                chat_member = await session.scalar(
-                    select(ChatMember)
-                    .where(ChatMember.channel_name == channel.name)
-                    .options(
-                        selectinload(ChatMember.handle, ChatMember.chat).selectinload(
-                            Chat.members
-                        )
-                    )
+                chat_log = ChatLog(
+                    kind=MessageType.DM,
+                    sender=sender,
+                    receiver=receiver,
+                    content=message.content,
+                    had_attachment=len(message.attachments) > 0,
                 )
-                if chat_member is None:
-                    raise RuntimeError(f"chat channel {channel.name} not db")
-
-                chat = chat_member.chat
-
-                chan_names = [m.channel_name for m in chat.members]
-
-                await self.broadcast_message(
-                    chan_names, chat_member.handle.name, message
-                )
-
-                chat_message = ChatMessage(
-                    content=message.content, chat=chat, sender=chat_member.handle
-                )
-                session.add(chat_message)
+                session.add(chat_log)
 
     def chat_channels(self, guild: Guild | None = None):
         if guild is None:
             for guild in self.bot.guilds:
                 for cat in guild.categories:
-                    if cat.name == channels.is_chat_channel(cat):
+                    if cat.name == channels.is_chat_category(cat):
                         yield from cat.channels
         else:
             for cat in guild.categories:
-                if cat.name == common.chats_categories:
+                if channels.is_chat_category(cat):
                     yield from cat.channels
 
     async def broadcast_message(
@@ -169,6 +225,13 @@ class ChatCog(Cog):
             for ca in guild.categories:
                 if ca.name == category_name:
                     yield from ca.channels
+
+
+def _chat_name_from_channel(channel_name: str) -> str | None:
+    m = channel_pattern.fullmatch(channel_name)
+    if m is not None:
+        sender, receiver = m.groups()
+        return _chat_name([sender, receiver])
 
 
 def _chat_name(handles: list[str]) -> str:
