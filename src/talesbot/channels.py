@@ -170,18 +170,23 @@ def is_chat_category(channel: CategoryChannel):
 
 
 def is_chat_channel(channel: GuildChannel):
-    if channel.category is None:
-        return False
-    else:
-        return channel.category.name.startswith(chats_category_base)
+    return channel.category is not None and is_chat_category(channel.category)
+
+
+def is_personal_category(channel: CategoryChannel):
+    return channel.name.startswith(personal_category_base)
 
 
 def is_personal_channel(channel: GuildChannel, channel_suffix: str | None = None):
-    return is_category_channel(channel, personal_category_base, channel_suffix)
+    return channel.category is not None and is_personal_category(channel.category)
 
 
-def is_group_channel(channel: GuildChannel, channel_suffix: str | None = None):
-    return is_category_channel(channel, groups_category_name, channel_suffix)
+def is_group_category(channel: CategoryChannel):
+    return channel.name == groups_category_name
+
+
+def is_group_channel(channel: GuildChannel):
+    return channel.category is not None and is_group_category(channel.category)
 
 
 def is_category_channel(
@@ -453,7 +458,7 @@ async def create_discord_channel(
         category=category,
         slowmode_delay=slowmode_delay,
     )
-    await _set_slow_mode(channel)
+    # await _set_slow_mode(channel)
     channel_states.init_channel(channel.name)
     return channel
 
@@ -572,7 +577,7 @@ async def delete_all_group_channels(channel_suffix: str | None = None):
 
 async def get_all_groups_channels(channel_suffix: str | None = None):
     channel_list = await server.get_all_channels()
-    return [c for c in channel_list if is_group_channel(c, channel_suffix)]
+    return [c for c in channel_list if is_group_channel(c)]
 
 
 ### Chat channels:

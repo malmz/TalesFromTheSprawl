@@ -1,7 +1,5 @@
-import asyncio
 import logging
 import re
-from collections.abc import Generator
 from typing import cast
 
 from discord import Guild, Interaction, Member, Message, TextChannel, app_commands
@@ -131,23 +129,6 @@ class ChatCog(Cog):
 
     @Cog.listener()
     async def on_message(self, message: Message):
-        """channel = cast(GuildChannel, message.channel)
-        if message.author.bot or channels.is_offline_channel(channel):
-            return
-
-        if channels.is_anonymous_channel(channel):
-            await message.delete()
-            await self.broadcast_message(channel.name, "anon", message)
-
-        elif channels.is_pseudonymous_channel(channel):
-            await message.delete()
-            async with SessionM() as session:
-                player = await players.get_player(session, message.author.id)
-                sender_name = (
-                    player.active_handle.name if player is not None else "anon"
-                )
-                await self.broadcast_message(channel.name, sender_name, message)"""
-
         if (
             not message.author.bot
             and isinstance(message.channel, TextChannel)
@@ -173,6 +154,7 @@ class ChatCog(Cog):
                     receiver=receiver,
                     content=message.content,
                     had_attachment=len(message.attachments) > 0,
+                    sent_at=message.interaction_metadata.created_at,  # type: ignore
                 )
                 session.add(chat_log)
 
@@ -186,45 +168,6 @@ class ChatCog(Cog):
             for cat in guild.categories:
                 if channels.is_chat_category(cat):
                     yield from cat.channels
-
-    async def broadcast_message(
-        self,
-        channel_names: str | list[str],
-        sender_name: str,
-        message: Message,
-        category_name: str | None = None,
-    ):
-        if isinstance(channel_names, str):
-            channel_names = [channel_names]
-
-        chans = self._find_channels(channel_names, category_name)
-        files = [await a.to_file() for a in message.attachments]
-        async with asyncio.TaskGroup() as tg:
-            for c in chans:
-                tg.create_task(
-                    c.send(
-                        f"<{sender_name}> {message.content}",
-                        files=files,
-                    )
-                )
-
-    def _find_channels(
-        self, channel_names: list[str], category_name: str | None = None
-    ) -> Generator[TextChannel]:
-        source = (
-            self._get_all_category_channels(category_name)
-            if category_name is not None
-            else self.bot.get_all_channels()
-        )
-        for c in source:
-            if isinstance(c, TextChannel) and c.name in channel_names:
-                yield c
-
-    def _get_all_category_channels(self, category_name: str) -> Generator[GuildChannel]:
-        for guild in self.bot.guilds:
-            for ca in guild.categories:
-                if ca.name == category_name:
-                    yield from ca.channels
 
 
 def _chat_name_from_channel(channel_name: str) -> str | None:

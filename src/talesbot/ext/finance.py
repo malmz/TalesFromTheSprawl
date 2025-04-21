@@ -4,7 +4,8 @@ from discord import Interaction, app_commands
 from discord.ext import commands
 
 from talesbot import handles, players
-from talesbot.database import SessionM, transaction
+from talesbot.access import transaction
+from talesbot.database import SessionM
 
 from ..errors import MissingHandleError
 from ..utils import fmt_handle, fmt_money

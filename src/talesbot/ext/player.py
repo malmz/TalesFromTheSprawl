@@ -74,7 +74,7 @@ class PlayerCog(commands.Cog):
             ephemeral=True,
         )
 
-    async def create_player(self, session: AsyncSession, member: Member, handle: str):
+    async def __create_player(self, session: AsyncSession, member: Member, handle: str):
         known_handles = read_known_handles()
         if handle not in known_handles:
             raise InvalidStartingHandleError(handle)
@@ -95,7 +95,7 @@ class PlayerCog(commands.Cog):
         )
         session.add(player)
 
-    async def create_group(self, session: AsyncSession, name: str):
+    async def __create_group(self, session: AsyncSession, name: str):
         group = await session.scalar(select(Group).where(Group.name == name))
         if group is None:
             group = Group(name=name)

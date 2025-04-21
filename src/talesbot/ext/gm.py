@@ -11,7 +11,8 @@ from talesbot import (
     player_setup,
     scenarios,
 )
-from talesbot.database import SessionM, artifact
+from talesbot.access import artifact
+from talesbot.database import SessionM
 
 from ..errors import ReportError
 

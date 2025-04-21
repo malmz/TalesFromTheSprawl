@@ -4,10 +4,14 @@ from typing import cast
 
 from discord import Interaction, Member, app_commands
 from discord.ext import commands
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
 from talesbot import common, handles, players, server
-from talesbot.database import SessionM, artifact
+from talesbot.access import artifact
+from talesbot.database import SessionM
 
+from ..database.models import Player
 from ..errors import ArtifactNotFoundError
 from ..ui.artifact import ArtifactView
 
@@ -68,12 +72,16 @@ class ArtifactsCog(commands.Cog):
         password: str | None,
         announcement: str | None = None,
     ):
-        player_id = players.get_player_id(str(user.id))
-        handle = (
-            handles.get_active_handle(player_id).handle_id
-            if player_id is not None
-            else f"{user.name}(unregisterd)"
-        )
+        async with SessionM() as session:
+            player = await session.scalar(
+                select(Player).where(Player.discord_id == user.id).options(joinedload())
+            )
+            handle = (
+                player.active_handle.name
+                if player is not None
+                else f"{user.name}(unregistered)"
+            )
+
         password_info = f"password {password}" if password else "no password"
         log_report = f"**{handle}** requested {name} using {password_info}"
         if announcement:
