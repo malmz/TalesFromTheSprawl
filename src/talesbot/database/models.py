@@ -38,10 +38,10 @@ class Transaction(Base):
         DateTime(timezone=True), init=False, server_default=func.now()
     )
 
-    sender: Mapped["Handle"] = relationship(
+    sender: Mapped["Handle | None"] = relationship(
         back_populates="outgoing_tansfers", foreign_keys=[sender_id]
     )
-    receiver: Mapped["Handle"] = relationship(
+    receiver: Mapped["Handle | None"] = relationship(
         back_populates="incoming_transfers", foreign_keys=[receiver_id]
     )
 
