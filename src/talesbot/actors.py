@@ -13,27 +13,14 @@ from .config import config_dir
 from .custom_types import Actor, Transaction, TransTypes
 
 actors_conf_dir = "actors"
-
-actors_section = "actors"
-finance_channels_section = "finance_channels"
-
+finance_channel_mapping_index = "___finance_channels"
 logger = logging.getLogger(__name__)
 
 
-def init_sections(config: ConfigObj):
-    dirty = False
-    if actors_section not in config:
-        config[actors_section] = {}
-        dirty = True
-    if finance_channels_section not in config:
-        config[finance_channels_section] = {}
-        dirty = True
-    return dirty
-
-
-def get_actors_confobj() -> ConfigObj:
+def get_actors_confobj():
     actors = ConfigObj(str(config_dir / actors_conf_dir / "__actors.conf"))
-    if init_sections(actors):
+    if finance_channel_mapping_index not in actors:
+        actors[finance_channel_mapping_index] = {}
         actors.write()
     return actors
 
@@ -60,8 +47,8 @@ async def clear_actor(actor_id: str):
         actor = read_actor(actor_id)
         finance_channel_id = str(actor.finance_channel_id)
         actors = get_actors_confobj()
-        if finance_channel_id in actors[finance_channels_section]:
-            del actors[finance_channels_section][finance_channel_id]
+        if finance_channel_id in actors[finance_channel_mapping_index]:
+            del actors[finance_channel_mapping_index][finance_channel_id]
         del actors[actor_id]
         actors.write()
         clear_trans_memory(actor_id)
@@ -107,18 +94,19 @@ def get_actor_role(actor_id: str):
 
 def get_all_actors():
     for actor_id in get_all_actor_ids():
-        yield cast(Actor, read_actor(actor_id))
+        yield read_actor(actor_id)
 
 
 def get_all_actor_ids():
     actors = get_actors_confobj()
-    for actor_id in actors[actors_section]:
-        yield cast(str, actor_id)
+    for actor_id in actors:
+        if actor_id != finance_channel_mapping_index:
+            yield cast(str, actor_id)
 
 
 def actor_exists(actor_id: str):
     actors = get_actors_confobj()
-    return actor_id in actors[actors_section]
+    return actor_id in actors
 
 
 def actor_index_in_use(actor_index: str):
@@ -127,9 +115,10 @@ def actor_index_in_use(actor_index: str):
 
 def store_actor(actor: Actor):
     actors = get_actors_confobj()
-    t = actors[actors_section]
-    actors[actors_section][actor.actor_id] = actor.to_string()
-    actors[finance_channels_section][str(actor.finance_channel_id)] = actor.actor_id
+    actors[actor.actor_id] = actor.to_string()
+    actors[finance_channel_mapping_index][str(actor.finance_channel_id)] = (
+        actor.actor_id
+    )
     actors.write()
 
 
@@ -141,8 +130,8 @@ def read_actor(actor_id: str):
 
 def get_owner_of_finance_channel(channel_id: str):
     actors = get_actors_confobj()
-    if channel_id in actors[finance_channels_section]:
-        return actors[finance_channels_section][channel_id]
+    if channel_id in actors[finance_channel_mapping_index]:
+        return actors[finance_channel_mapping_index][channel_id]
 
 
 recent_transactions_suffix = "_recent_trans.conf"
