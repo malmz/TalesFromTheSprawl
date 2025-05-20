@@ -1,12 +1,11 @@
 from copy import deepcopy
 from enum import Enum
-from typing import List
 
 import simplejson
 
 
 class ActionResult:
-    def __init__(self, success: bool = False, report: str = None):
+    def __init__(self, success: bool = False, report: str | None = None):
         self.success = success
         self.report = report
 
@@ -109,7 +108,8 @@ class Transaction:
 
     def to_string(self):
         dict_to_save = deepcopy(self.__dict__)
-        dict_to_save["timestamp"] = PostTimestamp.to_string(self.timestamp)
+        if self.timestamp is not None:
+            dict_to_save["timestamp"] = PostTimestamp.to_string(self.timestamp)
         return simplejson.dumps(dict_to_save)
 
     def get_undo_hooks_list(self):
@@ -153,7 +153,7 @@ class Actor:
 
     @staticmethod
     def from_string(string: str):
-        obj = Actor(None, None, 0, 0, 0, 0)
+        obj = Actor(None, None, 0, 0, 0, 0)  # type: ignore
         obj.__dict__.update(simplejson.loads(string))
         return obj
 
@@ -164,11 +164,11 @@ class Actor:
 class PlayerData:
     def __init__(
         self,
-        player_id: str,
+        player_id: str | None,
         category_index: int,
         cmd_line_channel_id: int,
-        shops: List[str] = None,
-        groups: List[str] = None,
+        shops: list[str] | None = None,
+        groups: list[str] | None = None,
     ):
         self.player_id = player_id
         self.category_index = category_index
