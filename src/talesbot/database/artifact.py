@@ -1,52 +1,48 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Artifact, ArtifactContent
 
 
-def create(
-    session: Session,
+async def create(
+    session: AsyncSession,
     name: str,
     content: str,
     password: str | None = None,
     announcement: str | None = None,
     page: int = 0,
 ):
-    artifact = session.scalar(
+    artifact = await session.scalar(
         select(Artifact)
         .where(Artifact.name == name)
         .where(Artifact.password == password)
     )
-
-    content_page = ArtifactContent(content=content, page=page)
 
     if artifact is None:
         artifact = Artifact(
-            name=name,
-            password=password,
-            announcement=announcement,
-            content=[content_page],
+            name=name, password=password, announcement=announcement, content=[]
         )
-    else:
-        artifact.content.append(content_page)
+
+    content_page = ArtifactContent(content=content, page=page)
+    artifact.content.append(content_page)
 
     session.add(artifact)
-    session.commit()
+    await session.commit()
 
 
-def access(session: Session, name: str, password: str | None = None):
-    return session.scalar(
+async def access(session: AsyncSession, name: str, password: str | None = None):
+    return await session.scalar(
         select(Artifact)
         .where(Artifact.name == name)
         .where(Artifact.password == password)
     )
 
 
-def remove(session: Session, name: str, password: str | None = None):
-    a = session.scalar(
+async def remove(session: AsyncSession, name: str, password: str | None = None):
+    a = await session.scalar(
         select(Artifact)
         .where(Artifact.name == name)
         .where(Artifact.password == password)
     )
-    session.delete(a)
-    session.commit()
+    await session.delete(a)
+    await session.commit()
