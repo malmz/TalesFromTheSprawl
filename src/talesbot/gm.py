@@ -1,10 +1,11 @@
 import logging
-import os
+
+from talesbot.config import config
 
 logger = logging.getLogger(__name__)
 
 
-role_name = os.getenv("GM_ROLE_NAME", "gm")
+role_name = config.GM_ROLE_NAME
 actor_id = role_name
 
 

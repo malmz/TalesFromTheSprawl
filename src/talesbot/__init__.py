@@ -10,8 +10,8 @@ from dotenv import load_dotenv
 
 from .api import app
 from .bot import TalesBot
-from .config import config_dir
-from .database import create_tables, models  # noqa: F401 "models" module needed here
+from .config import config, config_dir
+from .database import create_tables
 from .logger import init_loggers
 
 config_folders = [
@@ -29,9 +29,7 @@ config_folders = [
 
 
 async def start_bot():
-    TOKEN = os.getenv("DISCORD_TOKEN")
-    if TOKEN is None:
-        raise Exception("DISCORD_TOKEN env variable is required")
+    TOKEN = config.DISCORD_TOKEN
     exts = [
         "talesbot.handles",
         "talesbot.finances",
@@ -54,10 +52,10 @@ async def start_bot():
 
 
 async def start_api():
-    host = os.getenv("HOST") or "127.0.0.1"
-    port = int(os.getenv("PORT") or "5000")
-    config = uvicorn.Config(app=app, host=host, port=port, log_level="info")
-    server = uvicorn.Server(config)
+    host = config.HOST
+    port = config.PORT
+    conf = uvicorn.Config(app=app, host=host, port=port, log_level="info")
+    server = uvicorn.Server(conf)
     await server.serve()
 
 

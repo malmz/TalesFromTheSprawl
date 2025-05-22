@@ -3,20 +3,17 @@
 import asyncio
 import datetime
 import logging
-import os
 from copy import deepcopy
 from enum import Enum
-from typing import Dict, List, Tuple, Union, cast
+from typing import Dict, List, cast
 
 import discord
 import simplejson
 from configobj import ConfigObj
-from discord import Interaction, Member, app_commands
+from discord import Interaction, app_commands
 from discord.ext import commands
-from dotenv import load_dotenv
 
-from talesbot import checks, gm
-from .errors import NotRegisterdError
+from talesbot import checks
 
 # Custom imports
 from . import actors, channels, common, finances, handles, players, server
@@ -29,7 +26,7 @@ from .common import (
     number_emojis,
     shop_role_start,
 )
-from .config import config_dir
+from .config import config, config_dir
 from .custom_types import (
     ActionResult,
     Handle,
@@ -38,21 +35,22 @@ from .custom_types import (
     Transaction,
     TransTypes,
 )
+from .errors import NotRegisterdError
 
 logger = logging.getLogger(__name__)
 
 # Note: for the .table command to work, you must manually set up
 # the in-game bar/restaurant as a shop, using .create_shop etc.
-main_shop = os.getenv("MAIN_SHOP_NAME")
+main_shop = config.MAIN_SHOP_NAME
 
 
 type VocalGuildChannel = discord.VoiceChannel | discord.StageChannel
-type GuildChannel = Union[
-    VocalGuildChannel,
-    discord.ForumChannel,
-    discord.TextChannel,
-    discord.CategoryChannel,
-]
+type GuildChannel = (
+    VocalGuildChannel
+    | discord.ForumChannel
+    | discord.TextChannel
+    | discord.CategoryChannel
+)
 
 # TODO: add role check: GMs can do anything to any shop
 # TODO: change so that a shop does not have to have an owner to function

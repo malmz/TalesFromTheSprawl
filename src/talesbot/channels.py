@@ -2,7 +2,7 @@ import asyncio
 import datetime
 import logging
 import os
-from typing import Optional, Union
+from typing import Optional
 
 import discord
 from configobj import ConfigObj
@@ -23,7 +23,7 @@ from .common import (
     shops_category_name,
     testing_category_name,
 )
-from .config import config_dir
+from .config import config, config_dir
 from .custom_types import PostTimestamp
 from .ui.register import RegisterView
 
@@ -43,13 +43,13 @@ slowmode_delay: int = 2
 channel_states = ConfigObj(str(config_dir / "channel_states.conf"))
 logger = logging.getLogger(__name__)
 
-type VocalGuildChannel = Union[discord.VoiceChannel, discord.StageChannel]
-type GuildChannel = Union[
-    VocalGuildChannel,
-    discord.ForumChannel,
-    discord.TextChannel,
-    discord.CategoryChannel,
-]
+type VocalGuildChannel = discord.VoiceChannel | discord.StageChannel
+type GuildChannel = (
+    VocalGuildChannel
+    | discord.ForumChannel
+    | discord.TextChannel
+    | discord.CategoryChannel
+)
 
 
 ### Utilities:
@@ -115,9 +115,10 @@ def is_category_channel(
 
 
 def is_shop_channel(discord_channel):
-    return _category_name(
-        discord_channel
-    ) == shops_category_name or discord_channel.name == os.getenv("MAIN_SHOP_NAME")
+    return (
+        _category_name(discord_channel) == shops_category_name
+        or discord_channel.name == config.MAIN_SHOP_NAME
+    )
 
 
 def is_pseudonymous_channel(discord_channel):
@@ -200,7 +201,7 @@ async def _init_discord_channel(discord_channel: GuildChannel):
             discord_channel.category.name == public_open_category_name
             or discord_channel.category.name == shadowlands_category_name
         ):
-            if discord_channel.name == os.getenv("MAIN_SHOP_NAME"):
+            if discord_channel.name == config.MAIN_SHOP_NAME:
                 # Special case: If shop is in a public open category
                 await _init_common_read_only_channel(discord_channel)
             else:
@@ -583,7 +584,7 @@ async def create_shop_channel(guild, channel_name: str):
     overwrites = server.generate_base_overwrites(guild, private=False, read_only=True)
     category_name = (
         public_open_category_name
-        if channel_name == os.getenv("MAIN_SHOP_NAME")
+        if channel_name == config.MAIN_SHOP_NAME
         else shops_category_name
     )
     return await create_discord_channel(guild, overwrites, channel_name, category_name)
