@@ -1,5 +1,8 @@
+from collections.abc import Sequence
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from .models import Artifact, ArtifactContent
 
@@ -10,12 +13,13 @@ async def create(
     content: str,
     password: str | None = None,
     announcement: str | None = None,
-    page: int = 0,
+    page: int | None = None,
 ):
     artifact = await session.scalar(
         select(Artifact)
         .where(Artifact.name == name)
         .where(Artifact.password == password)
+        .options(joinedload(Artifact.content))
     )
 
     if artifact is None:
@@ -23,11 +27,15 @@ async def create(
             name=name, password=password, announcement=announcement, content=[]
         )
 
+    if page is None:
+        page = len(artifact.content)
+
     content_page = ArtifactContent(content=content, page=page)
-    artifact.content.append(content_page)
+    artifact.content.insert(page, content_page)
 
     session.add(artifact)
     await session.commit()
+    return artifact
 
 
 async def access(session: AsyncSession, name: str, password: str | None = None):
@@ -35,7 +43,13 @@ async def access(session: AsyncSession, name: str, password: str | None = None):
         select(Artifact)
         .where(Artifact.name == name)
         .where(Artifact.password == password)
+        .options(joinedload(Artifact.content))
     )
+
+
+async def list(session: AsyncSession) -> Sequence[Artifact]:
+    res = await session.scalars(select(Artifact))
+    return res.all()
 
 
 async def remove(session: AsyncSession, name: str, password: str | None = None):

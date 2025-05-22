@@ -76,11 +76,11 @@ class GmCog(commands.GroupCog, group_name="gm"):
         content: str,
         password: str | None = None,
         announcment: str | None = None,
-        page: int = 0,
+        page: int | None = None,
     ):
         async with SessionM() as session:
             try:
-                await artifact.create(
+                a = await artifact.create(
                     session,
                     name,
                     content,
@@ -92,7 +92,19 @@ class GmCog(commands.GroupCog, group_name="gm"):
                 raise ReportError("Failed to create artifact") from e
 
             await interaction.response.send_message(
-                f"Created artifact {name}", ephemeral=True
+                f"Created page {len(a.content)} on artifact {name}", ephemeral=True
+            )
+
+    @artifact_g.command(
+        name="list",
+        description="List all artifacts.",
+    )
+    async def list_artifact(self, interaction: Interaction):
+        async with SessionM() as session:
+            artifact_list = await artifact.list(session)
+            body = "\n".join([a.name for a in artifact_list])
+            await interaction.response.send_message(
+                f"Registerd artifacts\n```{body}```", ephemeral=True
             )
 
     @app_commands.command(description="Reinitialise the GM context and handles.")
