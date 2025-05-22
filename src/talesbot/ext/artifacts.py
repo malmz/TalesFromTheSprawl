@@ -54,12 +54,17 @@ class ArtifactsCog(commands.Cog):
                 await self.log_connect_attempt(member, name, password)
                 raise ArtifactNotFoundError(name)
 
-            await asyncio.gather(
-                self.log_connect_attempt(member, name, password, a.announcement),
-                interaction.followup.send(
-                    content=a.content[0].content, view=ArtifactView(a), ephemeral=True
-                ),
-            )
+            async with asyncio.TaskGroup() as tg:
+                tg.create_task(
+                    self.log_connect_attempt(member, name, password, a.announcement)
+                )
+                tg.create_task(
+                    interaction.followup.send(
+                        content=a.content[0].content,
+                        view=ArtifactView(a),
+                        ephemeral=True,
+                    )
+                )
 
     async def log_connect_attempt(
         self,
