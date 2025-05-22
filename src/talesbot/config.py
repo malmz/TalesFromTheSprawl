@@ -22,6 +22,7 @@ class Config(BaseSettings):
     FILE_LOGGING: bool
     CLEAR_ALL: bool = False
     DESTROY_ALL: bool = False
+    SKIP_CHANNELS: bool = False
 
 
 config = Config()  # type: ignore
