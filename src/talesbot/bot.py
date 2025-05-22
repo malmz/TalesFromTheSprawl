@@ -4,6 +4,7 @@ import os
 import re
 
 import discord
+from discord.abc import GuildChannel
 from discord.app_commands import BotMissingPermissions
 from discord.app_commands.errors import AppCommandError, CommandInvokeError, MissingRole
 from discord.ext import commands
@@ -23,9 +24,9 @@ from talesbot import (
     server,
     shops,
 )
-
-from .errors import ReportError
-from .ui.register import RegisterView
+from talesbot.config import config
+from talesbot.errors import ReportError
+from talesbot.ui.register import RegisterView
 
 clear_all = os.getenv("CLEAR_ALL") == "true"
 destroy_all = os.getenv("DESTROY_ALL") == "true"
@@ -108,7 +109,7 @@ class TalesBot(commands.Bot):
         await handles.init(clear_all)
         await actors.init(clear_all=clear_all)
         await players.init(clear_all=clear_all)
-        if os.getenv("SKIP_CHANNELS") is None:
+        if not config.SKIP_CHANNELS:
             await channels.init(self)
         finances.init_finances()
         await chats.init(clear_all=clear_all)
@@ -125,7 +126,11 @@ class TalesBot(commands.Bot):
             # Never react to bot's own message to avoid loops
             return
 
-        if channels.is_offline_channel(message.channel):
+        channel = message.channel
+        if not isinstance(channel, GuildChannel):
+            return
+
+        if channels.is_offline_channel(channel):
             # No bot shenanigans in the off channel
             return
 
@@ -133,7 +138,7 @@ class TalesBot(commands.Bot):
             player_name = players.get_player_id(str(message.author.id), False)
             cmd_logger.info(
                 f"{message.author.id} : {player_name} : "
-                f"{message.channel.name} : {message.content}"
+                f"{channel.name} : {message.content}"
             )
         except Exception:
             logger.exception("Failed to log command to file")
@@ -143,16 +148,14 @@ class TalesBot(commands.Bot):
         # await server.swallow(message, alert=False)
         # return
 
-        if channels.is_cmd_line(message.channel.name):
+        if channels.is_cmd_line(channel.name):
             if only_off_messages and not has_chat_command(message):
                 await server.swallow(message, alert=False)
                 return
             await self.process_commands(message)
             return
 
-        if channels.is_chat_hub(message.channel.name) or channels.is_landing_page(
-            message.channel.name
-        ):
+        if channels.is_chat_hub(channel.name) or channels.is_landing_page(channel.name):
             if only_off_messages and not has_chat_command(message):
                 await server.swallow(message, alert=False)
                 return
@@ -161,7 +164,7 @@ class TalesBot(commands.Bot):
             # so we must check for it specifically since
             # we want it to work in cmd_line but not in chat_hub
             if has_help_command(message):
-                should_alert = not channels.is_landing_page(message.channel.name)
+                should_alert = not channels.is_landing_page(channel.name)
                 await server.swallow(message, alert=should_alert)
             else:
                 # All our commands know if they are usable in chat hub or not,
@@ -191,6 +194,7 @@ class TalesBot(commands.Bot):
         await asyncio.gather(alert_checking, processing)
 
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
+        assert self.user is not None
         if payload.user_id == self.user.id:
             # Don't act on bot's own reactions to avoid loops
             return
