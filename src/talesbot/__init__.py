@@ -62,6 +62,13 @@ async def start_api():
 
 
 async def start() -> int:
+    load_dotenv()
+
+    for folder in config_folders:
+        os.makedirs(config_dir / folder, exist_ok=True)
+
+    init_loggers()
+    await create_tables()
     async with asyncio.TaskGroup() as tg:
         tg.create_task(start_bot())
         tg.create_task(start_api())
@@ -69,13 +76,6 @@ async def start() -> int:
 
 
 def main() -> int:
-    load_dotenv()
-
-    for folder in config_folders:
-        os.makedirs(config_dir / folder, exist_ok=True)
-
-    init_loggers()
-    create_tables()
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     with contextlib.suppress(KeyboardInterrupt):
         return asyncio.run(start())
