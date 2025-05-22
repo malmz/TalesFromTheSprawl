@@ -80,7 +80,7 @@ class GmCog(commands.GroupCog, group_name="gm"):
     ):
         async with SessionM() as session:
             try:
-                a = await artifact.create(
+                _a, page = await artifact.create(
                     session,
                     name,
                     content,
@@ -92,7 +92,7 @@ class GmCog(commands.GroupCog, group_name="gm"):
                 raise ReportError("Failed to create artifact") from e
 
             await interaction.response.send_message(
-                f"Created page {len(a.content)} on artifact {name}", ephemeral=True
+                f"Set page {page} on artifact {name}", ephemeral=True
             )
 
     @artifact_g.command(

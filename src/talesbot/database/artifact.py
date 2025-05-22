@@ -26,16 +26,22 @@ async def create(
         artifact = Artifact(
             name=name, password=password, announcement=announcement, content=[]
         )
+        session.add(artifact)
+
+    artifact.announcement = announcement
 
     if page is None:
         page = len(artifact.content)
 
-    content_page = ArtifactContent(content=content, page=page)
-    artifact.content.insert(page, content_page)
+    content_page = next((p for p in artifact.content if p.page == page), None)
+    if content_page is None:
+        content_page = ArtifactContent(content=content, page=page)
+        artifact.content.append(content_page)
+    else:
+        content_page.content = content
 
-    session.add(artifact)
     await session.commit()
-    return artifact
+    return artifact, page
 
 
 async def access(session: AsyncSession, name: str, password: str | None = None):

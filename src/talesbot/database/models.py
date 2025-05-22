@@ -53,6 +53,7 @@ class ArtifactContent(Base):
     id: Mapped[int] = mapped_column(init=False, primary_key=True)
     artifact_id: Mapped[int] = mapped_column(ForeignKey("artifact.id"), init=False)
 
+    artifact: Mapped["Artifact"] = relationship(back_populates="content", init=False)
     content: Mapped[str]
     page: Mapped[int] = mapped_column(default=0)
 
