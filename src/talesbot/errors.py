@@ -1,27 +1,31 @@
+import discord
 from discord import Member
+
 from .utils import fmt_handle, fmt_money
 
 
 class ReportError(Exception):
     """User facing error with safe printable message"""
 
-    def __init__(self, message: str | None) -> None:
-        self.message = message if message is not None else "Oops! Something when wrong!"
-        super().__init__(message)
+    report: str | None
 
-    def __str__(self) -> str:
-        messages = [
-            self.message if self.message is not None else "Oops! Something when wrong!"
+    def __init__(self, report: str | None, *args: object) -> None:
+        self.report = report
+        super().__init__(report, *args)
+
+    def to_embed(self) -> discord.Embed:
+        reports = [
+            self.report if self.report is not None else "Oops! Something when wrong!"
         ]
         inner = self.__cause__
         while inner is not None:
-            match inner:
-                case ReportError() as r:
-                    if r.message is not None:
-                        messages.append(r.message)
+            if isinstance(inner, ReportError) and inner.report is not None:
+                reports.append(inner.report)
 
             inner = inner.__cause__
-        return "\n".join(messages)
+        body = "\n- ".join(reports)
+
+        return discord.Embed(color=discord.Color.red(), description=body)
 
 
 class InsufficientBalanceError(ReportError):
