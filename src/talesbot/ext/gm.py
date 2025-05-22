@@ -21,7 +21,9 @@ logger = logging.getLogger(__name__)
 class ArtifactCreateModal(ui.Modal, title="Create Artifact"):
     name = ui.TextInput(label="Code name", required=True)
     password = ui.TextInput(label="Password", required=False)
-    content = ui.TextInput(label="Body", style=TextStyle.long, required=True)
+    content = ui.TextInput(
+        label="Body", style=TextStyle.long, required=True, max_length=2000
+    )
     announcment = ui.TextInput(label="GM Announcment", required=False)
     page = ui.TextInput(label="Page (overwrite)", required=False)
 
