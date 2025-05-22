@@ -1,7 +1,7 @@
 import logging
 
 import discord
-from discord import Interaction, app_commands, utils
+from discord import Interaction, TextStyle, app_commands, ui, utils
 from discord.app_commands.errors import MissingRole, NoPrivateMessage
 from discord.ext import commands
 
@@ -16,6 +16,41 @@ from talesbot.database import SessionM, artifact
 from ..errors import ReportError
 
 logger = logging.getLogger(__name__)
+
+
+class ArtifactCreateModal(ui.Modal, title="Create Artifact"):
+    name = ui.TextInput(label="Code name", required=True)
+    password = ui.TextInput(label="Password", required=False)
+    content = ui.TextInput(label="Body", style=TextStyle.long, required=True)
+    announcment = ui.TextInput(label="GM Announcment", required=False)
+    page = ui.TextInput(label="Page (overwrite)", required=False)
+
+    async def on_submit(self, interaction: Interaction) -> None:
+        password = self.password.value if self.password.value != "" else None
+        announcment = self.announcment.value if self.announcment.value != "" else None
+        page = int(self.page.value) if self.page.value != "" else None
+        async with SessionM() as session:
+            try:
+                _a, page = await artifact.create(
+                    session,
+                    self.name.value,
+                    self.content.value,
+                    password=password,
+                    announcement=announcment,
+                    page=page,
+                )
+            except Exception as e:
+                raise ReportError("Failed to create artifact") from e
+
+            await interaction.response.send_message(
+                f"Set page {page} on artifact {self.name.value}", ephemeral=True
+            )
+
+    async def on_error(self, interaction: Interaction, error: Exception) -> None:
+        logger.error("Failed to create artifact", exc_info=error)
+        await interaction.response.send_message(
+            "Failed to create artifact", ephemeral=True
+        )
 
 
 @app_commands.guild_only()
@@ -94,6 +129,10 @@ class GmCog(commands.GroupCog, group_name="gm"):
             await interaction.response.send_message(
                 f"Set page {page} on artifact {name}", ephemeral=True
             )
+
+    @artifact_g.command(name="create_big", description="Create a artifact interactivly")
+    async def create_artifact_interactive(self, interaction: Interaction):
+        await interaction.response.send_modal(ArtifactCreateModal())
 
     @artifact_g.command(
         name="list",
